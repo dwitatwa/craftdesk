@@ -104,10 +104,10 @@ function CraftdeskApp() {
     <AppShell>
       <div className="flex-1 flex flex-col min-h-0">
         {/* Workspace Header Info */}
-        <div className="px-6 py-4 flex items-center justify-between border-b bg-background/30 backdrop-blur-sm">
-          <div>
+        <div className="h-20 px-6 flex items-center justify-between border-b bg-background/30 backdrop-blur-sm">
+          <div className="flex flex-col justify-center">
             <h1 className="text-xl font-bold tracking-tight">Project Alpha</h1>
-            <p className="text-xs text-muted-foreground font-mono">~/projects/side/alpha</p>
+            <p className="text-xs text-muted-foreground font-mono leading-none mt-1">~/projects/side/alpha</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="flex -space-x-2">

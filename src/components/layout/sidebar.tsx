@@ -12,8 +12,8 @@ export function Sidebar({ className }: SidebarProps) {
   return (
     <aside className={cn("flex flex-col border-r bg-sidebar h-screen w-64", className)}>
       {/* App Header */}
-      <div className="p-4 border-b">
-        <div className="flex items-center gap-2 px-3 py-2">
+      <div className="h-20 flex items-center px-4 border-b">
+        <div className="flex items-center gap-2 px-3">
           <div className="flex items-center justify-center w-6 h-6 rounded bg-primary text-primary-foreground font-bold text-[10px]">
             C
           </div>

@@ -37,14 +37,14 @@ function TaskDetailView() {
         {/* Left Side: Details */}
         <div className="flex flex-col w-1/2 border-r bg-background overflow-y-auto">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
-            <div className="flex items-center gap-3">
+          <div className="h-20 flex items-center justify-between p-4 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
+            <div className="flex items-center gap-3 px-2">
               <Link to="/" className="p-2 hover:bg-muted rounded-md transition-colors">
                 <ArrowLeft className="size-4" />
               </Link>
               <div className="flex flex-col">
-                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest leading-tight">{task.id}</span>
-                <h1 className="text-sm font-bold truncate max-w-[300px]">{task.title}</h1>
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest leading-none">{task.id}</span>
+                <h1 className="text-sm font-bold truncate max-w-[300px] mt-1 leading-none">{task.title}</h1>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ function TaskDetailView() {
 
         {/* Right Side: Terminal */}
         <div className="flex-1 flex flex-col bg-[#09090B]">
-          <div className="flex h-10 items-center justify-between px-4 border-b border-white/5 bg-white/[0.02]">
+          <div className="h-20 flex items-center justify-between px-4 border-b border-white/5 bg-white/[0.02]">
             <div className="flex items-center gap-3">
               <TerminalIcon className="size-3.5 text-primary" />
               <div className="flex items-center gap-2">
