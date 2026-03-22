@@ -18,8 +18,8 @@ import { setProjectActiveSessions } from "#/server/db";
 
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
-const MAX_BUFFER_LENGTH = 200_000;
-const MAX_CHUNKS = 2_000;
+const MAX_BUFFER_LENGTH = 2_000_000;
+const MAX_CHUNKS = 20_000;
 const DEFAULT_POLL_TIMEOUT_MS = 25_000;
 const MAX_POLL_TIMEOUT_MS = 30_000;
 
