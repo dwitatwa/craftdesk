@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Skill Best Practices"
+  short_description: "Create skills with strong scope and evals"
+  default_prompt: "Use $create-skill-best-practices to draft a new skill with a precise description, lean SKILL.md, references, and an eval plan."
