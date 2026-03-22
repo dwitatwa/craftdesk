@@ -16,6 +16,7 @@ export interface BoardTask {
 	position: number;
 	createdAt: string;
 	doneAt: string | null;
+	isRunning?: boolean;
 }
 
 export interface BoardColumn {
@@ -41,6 +42,7 @@ export interface TaskDetail {
 	columnTitle: string;
 	createdAt: string;
 	doneAt: string | null;
+	isRunning?: boolean;
 }
 
 export interface SaveProjectInput {

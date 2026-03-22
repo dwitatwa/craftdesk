@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { AlignLeft, ArrowLeft, Calendar, CheckCircle2, Folder, Info } from "lucide-react";
 import { AppShell } from "#/components/layout/app-shell";
 import { Terminal } from "#/components/workspace/terminal";
 import { useAddProject } from "#/components/workspace/use-add-project";
@@ -52,90 +52,102 @@ function TaskDetailView() {
 				{task ? (
 					<>
 						{/* Left Side: Details */}
-						<div className="flex flex-col w-1/2 border-r bg-background overflow-y-auto">
-							{/* Header */}
-							<div className="h-20 flex items-center justify-between p-4 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
-								<div className="flex items-center gap-3 px-2">
+						<div className="flex flex-col w-1/2 border-r bg-background overflow-y-auto custom-scrollbar">
+							{/* Header - Consistent with Sidebar and Terminal */}
+							<div className="h-20 flex items-center justify-between px-6 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
+								<div className="flex items-center gap-4 min-w-0">
 									<Link
 										to="/projects/$projectId"
 										params={{ projectId: task.projectId }}
-										className="p-2 hover:bg-muted rounded-md transition-colors"
+										className="inline-flex items-center justify-center size-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
 									>
 										<ArrowLeft className="size-4" />
 									</Link>
-									<div className="flex flex-col">
-										<span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest leading-none">
-											{task.id}
-										</span>
-										<h1 className="text-sm font-bold truncate max-w-[300px] mt-1 leading-none">
+									<div className="flex flex-col min-w-0">
+										<div className="flex items-center gap-2">
+											<span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest leading-none">
+												{task.id}
+											</span>
+											{task.isRunning && (
+												<div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-green-500/10 border border-green-500/20 leading-none">
+													<span className="relative flex size-1.5">
+														<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+														<span className="relative inline-flex rounded-full size-1.5 bg-green-500" />
+													</span>
+													<span className="text-[8px] font-mono font-bold text-green-500 uppercase tracking-widest">Running</span>
+												</div>
+											)}
+										</div>
+										<h1 className="text-sm font-bold truncate mt-1 leading-none text-foreground">
 											{task.title}
 										</h1>
 									</div>
 								</div>
-								<div className="px-2 text-right">
-									<div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+								<div className="px-2 text-right shrink-0">
+									<div className="text-[10px] font-mono uppercase tracking-widest text-primary font-bold">
 										{task.columnTitle}
 									</div>
-									<div className="mt-1 text-xs text-muted-foreground">
+									<div className="mt-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
 										{task.projectName}
 									</div>
 								</div>
 							</div>
 
-							{/* Content */}
-							<div className="p-6 space-y-8">
-								<div className="space-y-3">
-									<h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-										Timeline
-									</h2>
-									<div className="grid gap-3 sm:grid-cols-2">
-										<div className="rounded-xl border bg-muted/20 p-4">
-											<div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-												Created
-											</div>
-											<div className="mt-2 text-sm font-medium">
-												{formatTimestamp(task.createdAt)}
-											</div>
+							{/* Main Content Area - Modular Dashboard Layout */}
+							<div className="flex-1 p-6 space-y-6 flex flex-col min-h-0">
+								{/* Stats/Meta Cards */}
+								<div className="grid grid-cols-2 gap-4 shrink-0">
+									<div className="group relative overflow-hidden rounded-xl border border-white/5 bg-white/[0.01] p-4 transition-all hover:border-white/10 hover:bg-white/[0.02]">
+										<div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-3">
+											<Calendar className="size-3" />
+											Created Date
 										</div>
-										<div className="rounded-xl border bg-muted/20 p-4">
-											<div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-												Done
-											</div>
-											<div className="mt-2 text-sm font-medium">
-												{task.doneAt
-													? formatTimestamp(task.doneAt)
-													: "Not completed yet"}
-											</div>
+										<div className="text-sm font-medium text-foreground/90">
+											{formatTimestamp(task.createdAt)}
+										</div>
+										<div className="absolute -right-2 -bottom-2 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity">
+											<Calendar className="size-16" />
+										</div>
+									</div>
+
+									<div className="group relative overflow-hidden rounded-xl border border-white/5 bg-white/[0.01] p-4 transition-all hover:border-white/10 hover:bg-white/[0.02]">
+										<div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-3">
+											<CheckCircle2 className="size-3" />
+											Done Date
+										</div>
+										<div className="text-sm font-medium text-foreground/90">
+											{task.doneAt ? formatTimestamp(task.doneAt) : "In Progress Session"}
+										</div>
+										<div className="absolute -right-2 -bottom-2 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity">
+											<CheckCircle2 className="size-16" />
 										</div>
 									</div>
 								</div>
 
-								<div className="space-y-3">
-									<h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-										Workspace
-									</h2>
-									<div className="rounded-xl border bg-muted/20 p-4">
-										<div className="font-medium">{task.projectName}</div>
-										<div className="mt-1 text-xs font-mono text-muted-foreground">
-											{task.projectPath}
+								{/* Description Panel - Flexible height */}
+								<div className="flex-1 flex flex-col min-h-[280px] rounded-xl border border-white/5 bg-white/[0.01] overflow-hidden">
+									<div className="px-4 py-2 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+										<div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+											<AlignLeft className="size-3.5" />
+											Notes
 										</div>
 									</div>
-								</div>
-
-								<div className="space-y-3">
-									<h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-										Description
-									</h2>
-									<p className="text-sm leading-relaxed text-foreground/90 bg-muted/30 p-4 rounded-xl border">
-										{task.description || "No description yet."}
-									</p>
+									<div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+										<div className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap">
+											{task.description || (
+												<span className="italic text-muted-foreground/40">
+													No description provided for this task. Use the dashboard to add technical requirements.
+												</span>
+											)}
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>
 						<Terminal
 							className="flex-1"
 							headerHeight="h-20"
-							title="Task Terminal"
+							title="Terminal"
 							scope={{
 								scopeType: "task",
 								scopeId: task.id,

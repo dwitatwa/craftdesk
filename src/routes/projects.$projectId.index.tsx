@@ -197,7 +197,7 @@ function ProjectDetailView() {
 							)}
 						>
 							<Terminal
-								title="Project Terminal"
+								title="Terminal"
 								className="h-full"
 								isCollapsed={isTerminalCollapsed}
 								onToggleCollapse={() =>

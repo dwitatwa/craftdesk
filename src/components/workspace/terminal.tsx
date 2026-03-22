@@ -118,24 +118,27 @@ export function Terminal({
 			>
 				<div className="flex items-center gap-3 min-w-0">
 					<TerminalIcon className="size-3.5 text-primary shrink-0" />
-					<div className="flex items-center gap-2 min-w-0">
+					<div className="flex items-center gap-1.5 min-w-0">
 						<span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest truncate">
 							{title}
 						</span>
-						<span className="text-[10px] font-mono text-green-500/80 bg-green-500/5 px-1.5 rounded border border-green-500/10 uppercase">
-							{scopeLabel}
+						<span className="text-[10px] font-mono text-zinc-500 uppercase">
+							[{scopeLabel}]
 						</span>
 						<span
 							className={cn(
-								"text-[10px] font-mono px-1.5 rounded border uppercase",
+								"text-[10px] font-mono uppercase",
 								session?.status === "running"
-									? "text-green-400 bg-green-500/5 border-green-500/10"
+									? "text-green-400"
 									: session?.status === "exited"
-										? "text-amber-300 bg-amber-500/5 border-amber-500/10"
-										: "text-zinc-400 bg-white/5 border-white/10",
+										? "text-amber-300"
+										: "text-zinc-400",
 							)}
 						>
-							{statusLabel}
+							[{statusLabel}]
+							{session?.exitCode !== null && session?.status === "exited" && (
+								<span className="ml-1 opacity-70">({session.exitCode})</span>
+							)}
 						</span>
 					</div>
 				</div>
@@ -180,23 +183,10 @@ export function Terminal({
 			</div>
 
 			{!isCollapsed && (
-				<>
-					<div className="flex items-center gap-3 px-4 py-2 border-b border-white/5 bg-black/20 text-[10px] font-mono text-zinc-400 uppercase tracking-[0.18em]">
-						<span className="truncate">
-							{session?.resolvedCwd ?? scope.cwd ?? "Resolving workspace"}
-						</span>
-						{session?.shell && (
-							<span className="text-zinc-500 truncate">{session.shell}</span>
-						)}
-						{session?.exitCode !== null && session?.status === "exited" && (
-							<span className="text-amber-300">exit {session.exitCode}</span>
-						)}
-					</div>
+				<div className="relative flex-1 min-h-0 terminal-surface">
+					<div ref={hostRef} className="h-full w-full" />
 
-					<div className="relative flex-1 min-h-0 terminal-surface">
-						<div ref={hostRef} className="h-full w-full" />
-
-						{(isConnecting || error || session?.warnings.length) && (
+					{(isConnecting || error || session?.warnings.length) && (
 							<div className="absolute right-4 top-4 z-10 flex max-w-[min(32rem,calc(100%-2rem))] flex-col gap-2">
 								{isConnecting && (
 									<div className="rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs font-mono text-zinc-300 shadow-lg backdrop-blur-sm">
@@ -222,8 +212,7 @@ export function Terminal({
 							</div>
 						)}
 					</div>
-				</>
-			)}
+				)}
 		</div>
 	);
 }

@@ -317,6 +317,20 @@ function createSession(input: ConnectTerminalInput) {
 	return session;
 }
 
+export function isScopeRunning(
+	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
+) {
+	const scopeKey = getScopeKey(input);
+	const sessionId = sessionIdByScopeKey.get(scopeKey);
+
+	if (!sessionId) {
+		return false;
+	}
+
+	const session = sessionsById.get(sessionId);
+	return session?.status === "running";
+}
+
 export function connectTerminal(input: ConnectTerminalInput) {
 	const scopeKey = getScopeKey(input);
 	const existingSessionId = sessionIdByScopeKey.get(scopeKey);

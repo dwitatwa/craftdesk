@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import {
 	type BoardColumn,
+	type BoardTask,
 	type CreateColumnInput,
 	type CreateTaskInput,
 	type DeleteColumnInput,
@@ -19,6 +20,7 @@ import {
 	slugifyProjectId,
 	type TaskDetail,
 } from "#/lib/craftdesk";
+import { isScopeRunning } from "#/server/terminal-manager";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "craftdesk.sqlite");
@@ -676,6 +678,7 @@ export function getProjectWorkspace(
 			position: task.position,
 			createdAt: task.created_at,
 			doneAt: task.done_at,
+			isRunning: isScopeRunning({ scopeType: "task", scopeId: task.id }),
 		});
 		tasksByColumnId.set(task.column_id, existingTasks);
 	}
@@ -959,5 +962,6 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 		columnTitle: row.column_title,
 		createdAt: row.created_at,
 		doneAt: row.done_at,
+		isRunning: isScopeRunning({ scopeType: "task", scopeId: row.id }),
 	};
 }

@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Trash2 } from "lucide-react";
+import { Terminal, Trash2 } from "lucide-react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import {
@@ -22,6 +22,7 @@ interface TaskCardProps {
 	className?: string;
 	draggable?: boolean;
 	isDragging?: boolean;
+	isRunning?: boolean;
 	onDragStart?: (event: DragEvent<HTMLElement>) => void;
 	onDragEnd?: () => void;
 	onDelete: (taskId: string) => Promise<void> | void;
@@ -35,6 +36,7 @@ export function TaskCard({
 	className,
 	draggable,
 	isDragging,
+	isRunning,
 	onDragStart,
 	onDragEnd,
 	onDelete,
@@ -116,9 +118,17 @@ export function TaskCard({
 					<div className="p-3 space-y-3">
 						{/* Top Row: ID and Delete */}
 						<div className="flex items-center justify-between">
-							<span className="inline-flex items-center rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[9px] leading-none font-mono font-bold tracking-tight text-muted-foreground/80">
-								{taskLabel}
-							</span>
+							<div className="flex items-center gap-2">
+								<span className="inline-flex items-center rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[9px] leading-none font-mono font-bold tracking-tight text-muted-foreground/80">
+									{taskLabel}
+								</span>
+								{isRunning && (
+									<span className="inline-flex items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/5 px-1.5 py-0.5 text-[8px] font-bold tracking-widest text-green-500 uppercase">
+										<Terminal className="size-2.5" />
+										Running
+									</span>
+								)}
+							</div>
 							<button
 								type="button"
 								onClick={(e) => {
