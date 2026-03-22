@@ -43,7 +43,7 @@ function ProjectDetailView() {
 	const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
 	const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
 	const [isSaveProjectModalOpen, setIsSaveProjectModalOpen] = useState(false);
-	const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
+	const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(true);
 
 	const primaryColumn = workspace?.columns[0];
 
