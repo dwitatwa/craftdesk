@@ -1,4 +1,4 @@
-Welcome to your new TanStack Start app! 
+Welcome to Craftdesk! 
 
 # Getting Started
 

@@ -15,9 +15,9 @@ import { AppShell } from "#/components/layout/app-shell";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { TerminalPanel } from "#/components/workspace/terminal-panel";
 
-export const Route = createFileRoute("/")({ component: CraftApp });
+export const Route = createFileRoute("/")({ component: CraftdeskApp });
 
-function CraftApp() {
+function CraftdeskApp() {
   const [activeView, setActiveView] = useState<'home' | 'board'>('board');
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
 
@@ -46,15 +46,15 @@ function CraftApp() {
               </h2>
               <div className="grid gap-3">
                 <RecentWorkspaceCard 
-                  name="Craft Platform" 
-                  path="~/projects/craft" 
+                  name="Craftdesk Platform" 
+                  path="~/projects/craftdesk" 
                   tasks={12} 
                   activeSessions={2} 
                   onClick={() => setActiveView('board')}
                 />
                 <RecentWorkspaceCard 
-                  name="Web IDE Core" 
-                  path="~/oss/web-ide" 
+                  name="Craftdesk Core" 
+                  path="~/oss/craftdesk" 
                   tasks={45} 
                   activeSessions={0} 
                   onClick={() => setActiveView('board')}
@@ -81,7 +81,7 @@ function CraftApp() {
                   </div>
                   <div>
                     <div className="font-medium group-hover:text-primary transition-colors">Open Local Folder</div>
-                    <p className="text-xs text-muted-foreground">Select a directory to start crafting</p>
+                    <p className="text-xs text-muted-foreground">Select a directory to start craftdesking</p>
                   </div>
                 </button>
                 <div className="grid grid-cols-2 gap-4">

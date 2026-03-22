@@ -13,7 +13,7 @@ export function Topbar() {
     <header className="flex h-12 items-center justify-between border-b bg-background px-4">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-xs font-medium">
-        <span className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">Craft</span>
+        <span className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">Craftdesk</span>
         <ChevronRight className="size-3 text-muted-foreground/50" />
         <span className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors">Workspace</span>
         <ChevronRight className="size-3 text-muted-foreground/50" />

@@ -1,5 +1,5 @@
 import { Plus, MoreHorizontal } from "lucide-react";
-import { TaskCard, TaskPriority, TaskStatus } from "./task-card";
+import { TaskCard, type TaskPriority, type TaskStatus } from "./task-card";
 import { Button } from "#/components/ui/button";
 
 interface ColumnProps {

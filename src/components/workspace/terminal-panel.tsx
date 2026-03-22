@@ -68,8 +68,8 @@ export function TerminalPanel({ taskId, taskTitle, isOpen, onToggle }: TerminalP
       {isOpen && (
         <div className="flex-1 bg-[#09090B] p-4 font-mono text-[11px] leading-relaxed overflow-y-auto selection:bg-primary/30">
           <div className="space-y-1">
-            <div className="text-muted-foreground">dwitatwa@craft:~/workspace $ <span className="text-foreground">npm run dev</span></div>
-            <div className="text-blue-400 mt-2 font-bold tracking-tight">&gt; web-ide-scaffold@0.1.0 dev</div>
+            <div className="text-muted-foreground">dwitatwa@craftdesk:~/workspace $ <span className="text-foreground">npm run dev</span></div>
+            <div className="text-blue-400 mt-2 font-bold tracking-tight">&gt; craftdesk@0.1.0 dev</div>
             <div className="text-blue-400 font-bold tracking-tight">&gt; vite dev --port 3000</div>
             <div className="mt-2 text-green-400/90 flex items-center gap-2">
               <span className="px-1 bg-green-500/10 rounded border border-green-500/20">VITE v5.2.0</span>

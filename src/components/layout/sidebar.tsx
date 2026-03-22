@@ -26,7 +26,7 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="flex items-center justify-center w-6 h-6 rounded bg-primary text-primary-foreground font-bold text-[10px]">
               C
             </div>
-            <span className="truncate">Craft Workspace</span>
+            <span className="truncate">Craftdesk Workspace</span>
           </div>
           <ChevronDown className="size-4 text-muted-foreground group-hover:text-foreground" />
         </button>
@@ -52,7 +52,7 @@ export function Sidebar({ className }: SidebarProps) {
           </div>
           <nav className="space-y-1">
             <SidebarItem icon={Folder} label="Project Alpha" />
-            <SidebarItem icon={Folder} label="Web IDE Core" />
+            <SidebarItem icon={Folder} label="Craftdesk Core" />
             <SidebarItem icon={Folder} label="Design System" />
           </nav>
         </div>

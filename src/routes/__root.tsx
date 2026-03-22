@@ -15,7 +15,7 @@ export const Route = createRootRoute({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "Web IDE",
+				title: "Craftdesk",
 			},
 		],
 		links: [
@@ -33,7 +33,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 		<html lang="en" className="dark">
 			<head>
 				<HeadContent />
-				<title>Craft</title>
+				<title>Craftdesk</title>
 			</head>
 			<body className="bg-background font-sans text-foreground antialiased selection:bg-primary/20">
 				{children}
