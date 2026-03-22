@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
-import { type IPty, spawn } from "node-pty";
 
 import type {
 	ConnectTerminalInput,
@@ -28,6 +28,32 @@ interface Waiter {
 	timer: ReturnType<typeof setTimeout>;
 }
 
+interface PtyExitEvent {
+	exitCode: number;
+}
+
+interface PtyProcess {
+	write(data: string): void;
+	resize(cols: number, rows: number): void;
+	kill(): void;
+	onData(listener: (data: string) => void): void;
+	onExit(listener: (event: PtyExitEvent) => void): void;
+}
+
+interface NodePtyModule {
+	spawn(
+		file: string,
+		args: string[],
+		options: {
+			name: string;
+			cwd: string;
+			cols: number;
+			rows: number;
+			env: NodeJS.ProcessEnv;
+		},
+	): PtyProcess;
+}
+
 interface TerminalSessionRecord {
 	id: string;
 	scopeType: ConnectTerminalInput["scopeType"];
@@ -42,7 +68,7 @@ interface TerminalSessionRecord {
 	buffer: string;
 	chunks: TerminalChunk[];
 	warnings: string[];
-	pty: IPty | null;
+	pty: PtyProcess | null;
 	cols: number;
 	rows: number;
 	waiters: Waiter[];
@@ -50,11 +76,31 @@ interface TerminalSessionRecord {
 
 const sessionsById = new Map<string, TerminalSessionRecord>();
 const sessionIdByScopeKey = new Map<string, string>();
+const runtimeRequire = createRequire(import.meta.url);
+
+let nodePtyModule: NodePtyModule | null = null;
 
 function getScopeKey(
 	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
 ) {
 	return `${input.scopeType}:${input.scopeId}`;
+}
+
+function getNodePtyModule() {
+	if (nodePtyModule) {
+		return nodePtyModule;
+	}
+
+	try {
+		const moduleId = ["node", "pty"].join("-");
+		nodePtyModule = runtimeRequire(moduleId) as NodePtyModule;
+		return nodePtyModule;
+	} catch (cause) {
+		const detail = cause instanceof Error ? cause.message : String(cause);
+		throw new Error(
+			`Terminal backend is unavailable because the runtime dependency "node-pty" could not be loaded. Install production dependencies before starting the server. ${detail}`,
+		);
+	}
 }
 
 function resolveShell() {
@@ -193,7 +239,7 @@ function attachPty(session: TerminalSessionRecord) {
 		session.requestedCwd,
 	);
 	const shellArgs = resolveShellArgs(shell);
-	const pty = spawn(shell, shellArgs, {
+	const pty = getNodePtyModule().spawn(shell, shellArgs, {
 		name: "xterm-256color",
 		cwd: resolvedCwd,
 		cols: session.cols,
