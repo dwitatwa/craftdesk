@@ -17,6 +17,7 @@ import {
 	deleteTask,
 	getProjectWorkspace,
 	listProjects,
+	moveTask,
 } from "#/server/craftdesk";
 
 export const Route = createFileRoute("/projects/$projectId/")({
@@ -108,6 +109,21 @@ function ProjectDetailView() {
 		await refreshData();
 	};
 
+	const handleMoveTask = async (taskId: string, targetColumnId: string) => {
+		if (!workspace) {
+			return;
+		}
+
+		await moveTask({
+			data: {
+				projectId: workspace.project.id,
+				taskId,
+				targetColumnId,
+			},
+		});
+		await refreshData();
+	};
+
 	const handleDeleteProject = async (projectId: string) => {
 		await deleteProject({ data: { projectId } });
 		await router.invalidate();
@@ -120,7 +136,9 @@ function ProjectDetailView() {
 	return (
 		<AppShell
 			projects={projects}
-			onAddProject={addProject}
+			onAddProject={async () => {
+				await addProject();
+			}}
 			isAddingProject={isAddingProject}
 			addProjectError={addProjectError}
 			onDeleteProject={handleDeleteProject}
@@ -167,6 +185,7 @@ function ProjectDetailView() {
 								onCreateTask={handleCreateTask}
 								onDeleteColumn={handleDeleteColumn}
 								onDeleteTask={handleDeleteTask}
+								onMoveTask={handleMoveTask}
 							/>
 						</div>
 

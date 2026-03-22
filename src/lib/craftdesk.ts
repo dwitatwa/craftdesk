@@ -13,6 +13,7 @@ export interface BoardTask {
 	description: string;
 	projectId: string;
 	columnId: string;
+	position: number;
 	createdAt: string;
 	doneAt: string | null;
 }
@@ -70,6 +71,12 @@ export interface CreateTaskInput {
 
 export interface DeleteTaskInput {
 	taskId: string;
+}
+
+export interface MoveTaskInput {
+	projectId: string;
+	taskId: string;
+	targetColumnId: string;
 }
 
 export interface DeleteProjectInput {

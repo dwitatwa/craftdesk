@@ -1,6 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
+import type { DragEvent, KeyboardEvent } from "react";
+import { useRef, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -19,6 +20,10 @@ interface TaskCardProps {
 	title: string;
 	description?: string;
 	className?: string;
+	draggable?: boolean;
+	isDragging?: boolean;
+	onDragStart?: (event: DragEvent<HTMLElement>) => void;
+	onDragEnd?: () => void;
 	onDelete: (taskId: string) => Promise<void> | void;
 }
 
@@ -28,10 +33,18 @@ export function TaskCard({
 	title,
 	description,
 	className,
+	draggable,
+	isDragging,
+	onDragStart,
+	onDragEnd,
 	onDelete,
 }: TaskCardProps) {
+	const navigate = useNavigate();
+	const cardRef = useRef<HTMLDivElement>(null);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
+	const [isClickSuppressed, setIsClickSuppressed] = useState(false);
+	const taskLabel = id.startsWith("TASK-") ? `#${id.slice(5)}` : id.slice(0, 8);
 
 	const handleDelete = async () => {
 		setIsDeleting(true);
@@ -44,26 +57,68 @@ export function TaskCard({
 		}
 	};
 
-	const taskLabel = id.startsWith("TASK-") ? `#${id.slice(5)}` : id.slice(0, 8);
+	const handleOpenTask = () => {
+		if (isClickSuppressed || isDragging) {
+			return;
+		}
+
+		void navigate({
+			to: "/projects/$projectId/tasks/$taskId",
+			params: { projectId, taskId: id },
+		});
+	};
+
+	const handleCardKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+		if (event.key !== "Enter" && event.key !== " ") {
+			return;
+		}
+
+		event.preventDefault();
+		handleOpenTask();
+	};
+
+	const handleTaskDragStart = (event: DragEvent<HTMLElement>) => {
+		setIsClickSuppressed(true);
+
+		if (cardRef.current) {
+			event.dataTransfer.setDragImage(cardRef.current, 24, 24);
+		}
+
+		onDragStart?.(event);
+	};
+
+	const handleTaskDragEnd = () => {
+		onDragEnd?.();
+		window.setTimeout(() => {
+			setIsClickSuppressed(false);
+		}, 0);
+	};
 
 	return (
 		<>
-			<div className={cn("group flex flex-col w-full", className)}>
-				<Link
-					to="/projects/$projectId/tasks/$taskId"
-					params={{ projectId, taskId: id }}
+			<li
+				className={cn(
+					"group list-none flex w-full overflow-hidden rounded-xl",
+					isDragging && "opacity-45",
+					className,
+				)}
+				draggable={draggable}
+				onDragStart={handleTaskDragStart}
+				onDragEnd={handleTaskDragEnd}
+			>
+				<div
+					ref={cardRef}
 					className={cn(
-						"relative flex flex-col bg-card border border-border shadow-sm transition-all duration-150 rounded-md overflow-hidden cursor-pointer",
+						"relative isolate flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card bg-clip-padding shadow-sm transition-all duration-150 cursor-grab active:cursor-grabbing",
 						"hover:border-primary/50 hover:bg-white/[0.02]",
 					)}
 				>
 					<div className="p-3 space-y-3">
 						{/* Top Row: ID and Delete */}
 						<div className="flex items-center justify-between">
-							<span className="text-[9px] font-mono font-bold text-muted-foreground tracking-tighter bg-white/5 px-1 rounded">
+							<span className="inline-flex items-center rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[9px] leading-none font-mono font-bold tracking-tight text-muted-foreground/80">
 								{taskLabel}
 							</span>
-
 							<button
 								type="button"
 								onClick={(e) => {
@@ -71,7 +126,7 @@ export function TaskCard({
 									e.preventDefault();
 									setIsDeleteDialogOpen(true);
 								}}
-								className="flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded border border-transparent hover:border-red-500/20 hover:bg-red-500/5 cursor-pointer uppercase tracking-tighter"
+								className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded hover:border-red-500/20 hover:bg-red-500/5 cursor-pointer uppercase tracking-tighter"
 							>
 								<Trash2 className="size-3" />
 								<span>Delete</span>
@@ -79,7 +134,12 @@ export function TaskCard({
 						</div>
 
 						{/* Title Area */}
-						<div className="space-y-1">
+						<button
+							type="button"
+							onClick={handleOpenTask}
+							onKeyDown={handleCardKeyDown}
+							className="appearance-none border-0 bg-transparent block w-full p-0 space-y-1 text-left cursor-pointer"
+						>
 							<h3 className="text-[12px] font-medium leading-[1.4] text-foreground/90 group-hover:text-foreground transition-colors line-clamp-1">
 								{title}
 							</h3>
@@ -92,10 +152,10 @@ export function TaskCard({
 									No description yet.
 								</p>
 							)}
-						</div>
+						</button>
 					</div>
-				</Link>
-			</div>
+				</div>
+			</li>
 
 			<AlertDialog
 				open={isDeleteDialogOpen}

@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import type { DragEvent } from "react";
+import { useEffect, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -11,7 +12,8 @@ import {
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
-import type { BoardColumn } from "#/lib/craftdesk";
+import type { BoardColumn, BoardTask } from "#/lib/craftdesk";
+import { cn } from "#/lib/utils";
 import { CreateTaskModal } from "./create-task-modal";
 import { TaskCard } from "./task-card";
 
@@ -24,6 +26,17 @@ interface ColumnProps {
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
+	onDragOverColumn: (event: DragEvent<HTMLElement>, columnId: string) => void;
+	onDragLeaveColumn: (event: DragEvent<HTMLElement>, columnId: string) => void;
+	onDropOnColumn: (event: DragEvent<HTMLElement>, columnId: string) => void;
+	onDragStartTask: (
+		event: DragEvent<HTMLElement>,
+		taskId: string,
+		columnId: string,
+	) => void;
+	onDragEndTask: () => void;
+	activeDropColumnId: string | null;
+	draggedTaskId: string | null;
 }
 
 function Column({
@@ -31,6 +44,13 @@ function Column({
 	onCreateTask,
 	onDeleteColumn,
 	onDeleteTask,
+	onDragOverColumn,
+	onDragLeaveColumn,
+	onDropOnColumn,
+	onDragStartTask,
+	onDragEndTask,
+	activeDropColumnId,
+	draggedTaskId,
 }: ColumnProps) {
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -70,19 +90,38 @@ function Column({
 				</div>
 			</div>
 
-			<div className="flex flex-col gap-3 h-full overflow-y-auto pr-1 pb-4 scrollbar-thin scrollbar-thumb-border hover:scrollbar-thumb-muted-foreground/30 transition-colors">
+			<ul
+				className={cn(
+					"m-0 list-none flex flex-col gap-3 h-full overflow-y-auto rounded-xl border border-transparent p-0 pr-1 pb-4 scrollbar-thin scrollbar-thumb-border transition-colors hover:scrollbar-thumb-muted-foreground/30",
+					activeDropColumnId === column.id && "border-primary/40 bg-primary/5",
+				)}
+				aria-label={`${column.title} tasks`}
+				onDragOver={(event) => onDragOverColumn(event, column.id)}
+				onDragLeave={(event) => onDragLeaveColumn(event, column.id)}
+				onDrop={(event) => onDropOnColumn(event, column.id)}
+			>
 				{column.tasks.map((task) => (
-					<TaskCard key={task.id} {...task} onDelete={onDeleteTask} />
+					<TaskCard
+						key={task.id}
+						{...task}
+						draggable
+						isDragging={draggedTaskId === task.id}
+						onDragStart={(event) => onDragStartTask(event, task.id, column.id)}
+						onDragEnd={onDragEndTask}
+						onDelete={onDeleteTask}
+					/>
 				))}
-				<Button
-					variant="ghost"
-					className="w-full h-8 justify-start gap-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-border/50 hover:border-primary/30 mt-1 cursor-pointer"
-					onClick={() => setIsCreateModalOpen(true)}
-				>
-					<Plus className="size-3" />
-					Add Task
-				</Button>
-			</div>
+				<li>
+					<Button
+						variant="ghost"
+						className="w-full h-8 justify-start gap-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-border/50 hover:border-primary/30 mt-1 cursor-pointer"
+						onClick={() => setIsCreateModalOpen(true)}
+					>
+						<Plus className="size-3" />
+						Add Task
+					</Button>
+				</li>
+			</ul>
 
 			<CreateTaskModal
 				isOpen={isCreateModalOpen}
@@ -134,6 +173,71 @@ interface KanbanBoardProps {
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
+	onMoveTask: (taskId: string, targetColumnId: string) => Promise<void> | void;
+}
+
+function moveTaskLocally(
+	columns: BoardColumn[],
+	taskId: string,
+	sourceColumnId: string,
+	targetColumnId: string,
+): BoardColumn[] {
+	if (sourceColumnId === targetColumnId) {
+		return columns;
+	}
+
+	const sourceColumn = columns.find((column) => column.id === sourceColumnId);
+	const originalTask = sourceColumn?.tasks.find((task) => task.id === taskId);
+
+	if (!sourceColumn || !originalTask) {
+		return columns;
+	}
+
+	const movedTaskForTarget: BoardTask = {
+		id: originalTask.id,
+		title: originalTask.title,
+		description: originalTask.description,
+		projectId: originalTask.projectId,
+		columnId: targetColumnId,
+		position: 0,
+		createdAt: originalTask.createdAt,
+		doneAt: originalTask.doneAt,
+	};
+
+	return columns.map((column) => {
+		if (column.id === sourceColumnId) {
+			const nextTasks = column.tasks
+				.filter((task) => task.id !== taskId)
+				.map(
+					(task, index): BoardTask => ({
+						...task,
+						position: index,
+					}),
+				);
+
+			return {
+				...column,
+				tasks: nextTasks,
+			};
+		}
+
+		if (column.id !== targetColumnId) {
+			return column;
+		}
+
+		const nextTasks: BoardTask[] = [
+			...column.tasks,
+			{
+				...movedTaskForTarget,
+				position: column.tasks.length,
+			},
+		];
+
+		return {
+			...column,
+			tasks: nextTasks,
+		};
+	});
 }
 
 export function KanbanBoard({
@@ -141,17 +245,115 @@ export function KanbanBoard({
 	onCreateTask,
 	onDeleteColumn,
 	onDeleteTask,
+	onMoveTask,
 }: KanbanBoardProps) {
+	const [boardColumns, setBoardColumns] = useState(columns);
+	const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+	const [dragSourceColumnId, setDragSourceColumnId] = useState<string | null>(
+		null,
+	);
+	const [activeDropColumnId, setActiveDropColumnId] = useState<string | null>(
+		null,
+	);
+
+	useEffect(() => {
+		setBoardColumns(columns);
+	}, [columns]);
+
+	const handleDragStartTask = (
+		event: DragEvent<HTMLElement>,
+		taskId: string,
+		columnId: string,
+	) => {
+		event.dataTransfer.effectAllowed = "move";
+		event.dataTransfer.setData("text/plain", taskId);
+		setDraggedTaskId(taskId);
+		setDragSourceColumnId(columnId);
+	};
+
+	const resetDragState = () => {
+		setDraggedTaskId(null);
+		setDragSourceColumnId(null);
+		setActiveDropColumnId(null);
+	};
+
+	const handleDragOverColumn = (
+		event: DragEvent<HTMLElement>,
+		columnId: string,
+	) => {
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "move";
+		if (activeDropColumnId !== columnId) {
+			setActiveDropColumnId(columnId);
+		}
+	};
+
+	const handleDragLeaveColumn = (
+		event: DragEvent<HTMLElement>,
+		columnId: string,
+	) => {
+		const nextTarget = event.relatedTarget;
+
+		if (
+			nextTarget instanceof Node &&
+			event.currentTarget.contains(nextTarget)
+		) {
+			return;
+		}
+
+		if (activeDropColumnId === columnId) {
+			setActiveDropColumnId(null);
+		}
+	};
+
+	const handleDropOnColumn = async (
+		event: DragEvent<HTMLElement>,
+		targetColumnId: string,
+	) => {
+		event.preventDefault();
+
+		const taskId = draggedTaskId ?? event.dataTransfer.getData("text/plain");
+		const sourceColumnId = dragSourceColumnId;
+		resetDragState();
+
+		if (!taskId || !sourceColumnId || sourceColumnId === targetColumnId) {
+			return;
+		}
+
+		const previousColumns = boardColumns;
+		const nextColumns = moveTaskLocally(
+			boardColumns,
+			taskId,
+			sourceColumnId,
+			targetColumnId,
+		);
+
+		setBoardColumns(nextColumns);
+
+		try {
+			await onMoveTask(taskId, targetColumnId);
+		} catch {
+			setBoardColumns(previousColumns);
+		}
+	};
+
 	return (
 		<div className="flex flex-1 gap-6 p-6 h-full overflow-x-auto scrollbar-thin scrollbar-thumb-border">
-			{columns.length > 0 ? (
-				columns.map((column) => (
+			{boardColumns.length > 0 ? (
+				boardColumns.map((column) => (
 					<Column
 						key={column.id}
 						column={column}
 						onCreateTask={onCreateTask}
 						onDeleteColumn={onDeleteColumn}
 						onDeleteTask={onDeleteTask}
+						onDragOverColumn={handleDragOverColumn}
+						onDragLeaveColumn={handleDragLeaveColumn}
+						onDropOnColumn={handleDropOnColumn}
+						onDragStartTask={handleDragStartTask}
+						onDragEndTask={resetDragState}
+						activeDropColumnId={activeDropColumnId}
+						draggedTaskId={draggedTaskId}
 					/>
 				))
 			) : (

@@ -12,6 +12,7 @@ import {
 	type DeleteTaskInput,
 	deriveProjectNameFromPath,
 	type ListProjectsInput,
+	type MoveTaskInput,
 	type ProjectSummary,
 	type ProjectWorkspace,
 	type SaveProjectInput,
@@ -101,6 +102,7 @@ function nowIso() {
 
 function getDb() {
 	if (dbInstance) {
+		runMigrations(dbInstance);
 		return dbInstance;
 	}
 
@@ -149,6 +151,7 @@ function initializeSchema(db: DatabaseSync) {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       column_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
@@ -169,6 +172,7 @@ function runMigrations(db: DatabaseSync) {
 	ensureColumnExists(db, "tasks", "created_at", "TEXT");
 	ensureColumnExists(db, "tasks", "done_at", "TEXT");
 	removeStatusColumnIfPresent(db);
+	const didAddTaskPosition = ensureTaskPositionColumnExists(db);
 	db.exec(`
     UPDATE tasks
     SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
@@ -183,6 +187,27 @@ function runMigrations(db: DatabaseSync) {
         WHERE title = 'Done'
       );
   `);
+
+	if (didAddTaskPosition) {
+		db.exec(`
+      WITH ranked_tasks AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (
+            PARTITION BY column_id
+            ORDER BY datetime(created_at) ASC, id ASC
+          ) - 1 AS next_position
+        FROM tasks
+      )
+      UPDATE tasks
+      SET position = (
+        SELECT next_position
+        FROM ranked_tasks
+        WHERE ranked_tasks.id = tasks.id
+      )
+      WHERE id IN (SELECT id FROM ranked_tasks);
+    `);
+	}
 }
 
 function ensureColumnExists(
@@ -254,9 +279,27 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_column_id ON tasks(column_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_column_position ON tasks(column_id, position);
 
     COMMIT;
   `);
+}
+
+function ensureTaskPositionColumnExists(db: DatabaseSync) {
+	const columns = getTableColumns(db, "tasks");
+
+	if (columns.some((column) => column.name === "position")) {
+		db.exec(
+			"CREATE INDEX IF NOT EXISTS idx_tasks_column_position ON tasks(column_id, position);",
+		);
+		return false;
+	}
+
+	db.exec("ALTER TABLE tasks ADD COLUMN position INTEGER NOT NULL DEFAULT 0;");
+	db.exec(
+		"CREATE INDEX IF NOT EXISTS idx_tasks_column_position ON tasks(column_id, position);",
+	);
+	return true;
 }
 
 function getTableColumns(db: DatabaseSync, tableName: string) {
@@ -309,18 +352,20 @@ function seedDefaults(db: DatabaseSync) {
 	const columnByTitle = new Map(
 		alphaColumns.map((column) => [column.title, column.id]),
 	);
+	const nextTaskPositionByColumn = new Map<string, number>();
 
 	const insertTask = db.prepare(`
     INSERT OR IGNORE INTO tasks (
       id,
       project_id,
       column_id,
+      position,
       title,
       description,
       created_at,
       done_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
 	for (const task of DEFAULT_ALPHA_TASKS) {
@@ -331,17 +376,20 @@ function seedDefaults(db: DatabaseSync) {
 		}
 
 		const doneAt = task.columnTitle === "Done" ? timestamp : null;
+		const nextPosition = nextTaskPositionByColumn.get(columnId) ?? 0;
 
 		insertTask.run(
 			task.id,
 			"alpha",
 			columnId,
+			nextPosition,
 			task.title,
 			task.description,
 			timestamp,
 			doneAt,
 			timestamp,
 		);
+		nextTaskPositionByColumn.set(columnId, nextPosition + 1);
 	}
 }
 
@@ -591,10 +639,18 @@ export function getProjectWorkspace(
 
 	const tasks = db
 		.prepare(`
-      SELECT id, title, description, project_id, column_id, created_at, done_at
+      SELECT
+        id,
+        title,
+        description,
+        project_id,
+        column_id,
+        position,
+        created_at,
+        done_at
       FROM tasks
       WHERE project_id = ?
-      ORDER BY created_at DESC, id DESC
+      ORDER BY column_id ASC, position ASC, created_at ASC, id ASC
     `)
 		.all(projectId) as Array<{
 		id: string;
@@ -602,6 +658,7 @@ export function getProjectWorkspace(
 		description: string;
 		project_id: string;
 		column_id: string;
+		position: number;
 		created_at: string;
 		done_at: string | null;
 	}>;
@@ -616,6 +673,7 @@ export function getProjectWorkspace(
 			description: task.description,
 			projectId: task.project_id,
 			columnId: task.column_id,
+			position: task.position,
 			createdAt: task.created_at,
 			doneAt: task.done_at,
 		});
@@ -707,28 +765,125 @@ export function createTask(input: CreateTaskInput) {
 		throw new Error("Column not found.");
 	}
 
+	const positionRow = db
+		.prepare(`
+      SELECT COALESCE(MAX(position), -1) AS position
+      FROM tasks
+      WHERE column_id = ?
+    `)
+		.get(input.columnId) as { position: number };
+
 	const timestamp = nowIso();
 	db.prepare(`
     INSERT INTO tasks (
       id,
       project_id,
       column_id,
+      position,
       title,
       description,
       created_at,
       done_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`).run(
 		nextTaskId(db),
 		input.projectId,
 		input.columnId,
+		positionRow.position + 1,
 		title,
 		description,
 		timestamp,
 		null,
 		timestamp,
 	);
+}
+
+export function moveTask(input: MoveTaskInput) {
+	const db = getDb();
+	const task = db
+		.prepare(`
+      SELECT id, column_id, position
+      FROM tasks
+      WHERE id = ? AND project_id = ?
+    `)
+		.get(input.taskId, input.projectId) as
+		| {
+				id: string;
+				column_id: string;
+				position: number;
+		  }
+		| undefined;
+
+	if (!task) {
+		throw new Error("Task not found.");
+	}
+
+	const targetColumn = db
+		.prepare(`
+      SELECT id, title
+      FROM board_columns
+      WHERE id = ? AND project_id = ?
+    `)
+		.get(input.targetColumnId, input.projectId) as
+		| {
+				id: string;
+				title: string;
+		  }
+		| undefined;
+
+	if (!targetColumn) {
+		throw new Error("Target column not found.");
+	}
+
+	if (task.column_id === targetColumn.id) {
+		return;
+	}
+
+	const timestamp = nowIso();
+	const nextPositionRow = db
+		.prepare(`
+      SELECT COALESCE(MAX(position), -1) AS position
+      FROM tasks
+      WHERE column_id = ?
+    `)
+		.get(targetColumn.id) as { position: number };
+
+	try {
+		db.exec("BEGIN");
+
+		db.prepare(`
+      UPDATE tasks
+      SET position = position - 1
+      WHERE column_id = ?
+        AND position > ?
+    `).run(task.column_id, task.position);
+
+		db.prepare(`
+      UPDATE tasks
+      SET
+        column_id = ?,
+        position = ?,
+        done_at = ?,
+        updated_at = ?
+      WHERE id = ? AND project_id = ?
+    `).run(
+			targetColumn.id,
+			nextPositionRow.position + 1,
+			targetColumn.title === "Done" ? timestamp : null,
+			timestamp,
+			input.taskId,
+			input.projectId,
+		);
+
+		db.exec("COMMIT");
+	} catch (error) {
+		try {
+			db.exec("ROLLBACK");
+		} catch {}
+
+		throw error;
+	}
 }
 
 export function deleteTask(input: DeleteTaskInput) {

@@ -7,6 +7,7 @@ import type {
 	DeleteProjectInput,
 	DeleteTaskInput,
 	ListProjectsInput,
+	MoveTaskInput,
 	ProjectLookupInput,
 	SaveProjectInput,
 	TaskLookupInput,
@@ -68,6 +69,13 @@ export const deleteTask = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const { deleteTask: deleteTaskInDb } = await import("#/server/db");
 		return deleteTaskInDb(data);
+	});
+
+export const moveTask = createServerFn({ method: "POST" })
+	.inputValidator((input: MoveTaskInput) => input)
+	.handler(async ({ data }) => {
+		const { moveTask: moveTaskInDb } = await import("#/server/db");
+		return moveTaskInDb(data);
 	});
 
 export const deleteProject = createServerFn({ method: "POST" })
