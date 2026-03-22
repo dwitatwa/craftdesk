@@ -83,7 +83,6 @@ function ProjectDetailView() {
 	const handleCreateTask = async (input: {
 		columnId: string;
 		title: string;
-		description: string;
 	}) => {
 		if (!workspace) {
 			return;
@@ -94,7 +93,6 @@ function ProjectDetailView() {
 				projectId: workspace.project.id,
 				columnId: input.columnId,
 				title: input.title,
-				description: input.description,
 			},
 		});
 		await refreshData();
@@ -415,7 +413,6 @@ function ProjectDetailView() {
 							? handleCreateTask({
 									columnId: primaryColumn.id,
 									title: input.title,
-									description: input.description,
 								})
 							: Promise.resolve()
 					}

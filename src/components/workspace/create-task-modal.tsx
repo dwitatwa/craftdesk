@@ -10,16 +10,12 @@ import {
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import { Textarea } from "#/components/ui/textarea";
 
 interface CreateTaskModalProps {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
 	columnTitle?: string;
-	onCreate: (input: {
-		title: string;
-		description: string;
-	}) => Promise<void> | void;
+	onCreate: (input: { title: string }) => Promise<void> | void;
 }
 
 export function CreateTaskModal({
@@ -29,12 +25,10 @@ export function CreateTaskModal({
 	onCreate,
 }: CreateTaskModalProps) {
 	const [title, setTitle] = useState("");
-	const [description, setDescription] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	const resetForm = () => {
 		setTitle("");
-		setDescription("");
 	};
 
 	const handleCreate = async () => {
@@ -43,7 +37,6 @@ export function CreateTaskModal({
 		try {
 			await onCreate({
 				title: title.trim(),
-				description: description.trim(),
 			});
 
 			resetForm();
@@ -86,21 +79,6 @@ export function CreateTaskModal({
 							value={title}
 							onChange={(e) => setTitle(e.target.value)}
 							className="bg-muted/30 focus-visible:ring-primary/30"
-						/>
-					</div>
-					<div className="grid gap-2">
-						<Label
-							htmlFor="description"
-							className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70"
-						>
-							Description
-						</Label>
-						<Textarea
-							id="description"
-							placeholder="Detailed description of the task..."
-							value={description}
-							onChange={(e) => setDescription(e.target.value)}
-							className="min-h-[100px] bg-muted/30 focus-visible:ring-primary/30"
 						/>
 					</div>
 				</div>

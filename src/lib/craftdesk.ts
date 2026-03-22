@@ -10,7 +10,7 @@ export interface ProjectSummary {
 export interface BoardTask {
 	id: string;
 	title: string;
-	description: string;
+	notes: string;
 	projectId: string;
 	columnId: string;
 	position: number;
@@ -34,7 +34,7 @@ export interface ProjectWorkspace {
 export interface TaskDetail {
 	id: string;
 	title: string;
-	description: string;
+	notes: string;
 	projectId: string;
 	projectName: string;
 	projectPath: string;
@@ -68,7 +68,6 @@ export interface CreateTaskInput {
 	projectId: string;
 	columnId: string;
 	title: string;
-	description: string;
 }
 
 export interface DeleteTaskInput {
@@ -91,6 +90,11 @@ export interface ProjectLookupInput {
 
 export interface TaskLookupInput {
 	taskId: string;
+}
+
+export interface UpdateTaskNotesInput {
+	taskId: string;
+	notes: string;
 }
 
 const NON_ALPHANUMERIC_REGEX = /[^a-z0-9]+/g;

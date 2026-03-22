@@ -5,7 +5,6 @@ import { DatabaseSync } from "node:sqlite";
 
 import {
 	type BoardColumn,
-	type BoardTask,
 	type CreateColumnInput,
 	type CreateTaskInput,
 	type DeleteColumnInput,
@@ -50,49 +49,49 @@ const DEFAULT_ALPHA_TASKS = [
 		id: "TASK-0001",
 		columnTitle: "Backlog",
 		title: "Implement dark mode persistence",
-		description:
+		notes:
 			"Save user theme preference to local storage and sync with account settings.",
 	},
 	{
 		id: "TASK-0002",
 		columnTitle: "Backlog",
 		title: "Refactor terminal state management",
-		description:
+		notes:
 			"Migrate terminal history to a more performant data structure to support longer sessions.",
 	},
 	{
 		id: "TASK-0003",
 		columnTitle: "To Do",
 		title: "Design new command palette",
-		description:
+		notes:
 			"Create a modern command interface for quick actions and file searching.",
 	},
 	{
 		id: "TASK-0004",
 		columnTitle: "In Progress",
 		title: "Compile production kernel",
-		description:
+		notes:
 			"Running build scripts for the main application engine with optimized flags.",
 	},
 	{
 		id: "TASK-0005",
 		columnTitle: "In Progress",
 		title: "Optimize asset loading pipeline",
-		description:
+		notes:
 			"Implementing lazy loading and progressive image decoding for the workspace.",
 	},
 	{
 		id: "TASK-0006",
 		columnTitle: "Done",
 		title: "Fix layout shift on mobile",
-		description:
+		notes:
 			"Resolved jumpy transitions when switching between board and list views on small screens.",
 	},
 	{
 		id: "TASK-0007",
 		columnTitle: "Done",
 		title: "Update documentation for API",
-		description: "Completed the reference guide for all public REST endpoints.",
+		notes: "Completed the reference guide for all public REST endpoints.",
 	},
 ] as const;
 
@@ -155,7 +154,7 @@ function initializeSchema(db: DatabaseSync) {
       column_id TEXT NOT NULL,
       position INTEGER NOT NULL,
       title TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
       updated_at TEXT NOT NULL,
@@ -175,6 +174,7 @@ function runMigrations(db: DatabaseSync) {
 	ensureColumnExists(db, "tasks", "done_at", "TEXT");
 	removeStatusColumnIfPresent(db);
 	const didAddTaskPosition = ensureTaskPositionColumnExists(db);
+	ensureTaskNotesColumn(db);
 	db.exec(`
     UPDATE tasks
     SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
@@ -233,6 +233,10 @@ function ensureColumnExists(
 
 function removeStatusColumnIfPresent(db: DatabaseSync) {
 	const columns = getTableColumns(db, "tasks");
+	const hasPosition = columns.some((column) => column.name === "position");
+	const hasNotes = columns.some((column) => column.name === "notes");
+	const noteSource = hasNotes ? "notes" : "description";
+	const positionSource = hasPosition ? "position" : "0";
 
 	if (!columns.some((column) => column.name === "status")) {
 		return;
@@ -245,8 +249,9 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       column_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
       title TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
       updated_at TEXT NOT NULL,
@@ -258,8 +263,9 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       id,
       project_id,
       column_id,
+      position,
       title,
-      description,
+      notes,
       created_at,
       done_at,
       updated_at
@@ -268,8 +274,9 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       id,
       project_id,
       column_id,
+      ${positionSource},
       title,
-      description,
+      ${noteSource},
       created_at,
       done_at,
       updated_at
@@ -302,6 +309,75 @@ function ensureTaskPositionColumnExists(db: DatabaseSync) {
 		"CREATE INDEX IF NOT EXISTS idx_tasks_column_position ON tasks(column_id, position);",
 	);
 	return true;
+}
+
+function ensureTaskNotesColumn(db: DatabaseSync) {
+	const columns = getTableColumns(db, "tasks");
+	const hasNotes = columns.some((column) => column.name === "notes");
+	const hasDescription = columns.some(
+		(column) => column.name === "description",
+	);
+
+	if (hasNotes && !hasDescription) {
+		return;
+	}
+
+	const notesSource = hasNotes
+		? "notes"
+		: hasDescription
+			? "description"
+			: "''";
+
+	db.exec(`
+    BEGIN TRANSACTION;
+
+    CREATE TABLE tasks__new (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      column_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      done_at TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
+    );
+
+    INSERT INTO tasks__new (
+      id,
+      project_id,
+      column_id,
+      position,
+      title,
+      notes,
+      created_at,
+      done_at,
+      updated_at
+    )
+    SELECT
+      id,
+      project_id,
+      column_id,
+      position,
+      title,
+      ${notesSource},
+      created_at,
+      done_at,
+      updated_at
+    FROM tasks;
+
+    DROP TABLE tasks;
+
+    ALTER TABLE tasks__new RENAME TO tasks;
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_column_id ON tasks(column_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_column_position ON tasks(column_id, position);
+
+    COMMIT;
+  `);
 }
 
 function getTableColumns(db: DatabaseSync, tableName: string) {
@@ -363,7 +439,7 @@ function seedDefaults(db: DatabaseSync) {
       column_id,
       position,
       title,
-      description,
+      notes,
       created_at,
       done_at,
       updated_at
@@ -386,7 +462,7 @@ function seedDefaults(db: DatabaseSync) {
 			columnId,
 			nextPosition,
 			task.title,
-			task.description,
+			task.notes,
 			timestamp,
 			doneAt,
 			timestamp,
@@ -644,7 +720,7 @@ export function getProjectWorkspace(
       SELECT
         id,
         title,
-        description,
+        notes,
         project_id,
         column_id,
         position,
@@ -657,7 +733,7 @@ export function getProjectWorkspace(
 		.all(projectId) as Array<{
 		id: string;
 		title: string;
-		description: string;
+		notes: string;
 		project_id: string;
 		column_id: string;
 		position: number;
@@ -672,7 +748,7 @@ export function getProjectWorkspace(
 		existingTasks.push({
 			id: task.id,
 			title: task.title,
-			description: task.description,
+			notes: task.notes,
 			projectId: task.project_id,
 			columnId: task.column_id,
 			position: task.position,
@@ -750,7 +826,6 @@ export function deleteColumn(input: DeleteColumnInput) {
 export function createTask(input: CreateTaskInput) {
 	const db = getDb();
 	const title = input.title.trim();
-	const description = input.description.trim();
 
 	if (!title) {
 		throw new Error("Task title is required.");
@@ -784,7 +859,7 @@ export function createTask(input: CreateTaskInput) {
       column_id,
       position,
       title,
-      description,
+      notes,
       created_at,
       done_at,
       updated_at
@@ -795,11 +870,23 @@ export function createTask(input: CreateTaskInput) {
 		input.columnId,
 		positionRow.position + 1,
 		title,
-		description,
+		"",
 		timestamp,
 		null,
 		timestamp,
 	);
+}
+
+export function updateTaskNotes(input: { taskId: string; notes: string }) {
+	const db = getDb();
+	const notes = input.notes.replace(/\r\n/g, "\n");
+	const timestamp = nowIso();
+
+	db.prepare(`
+    UPDATE tasks
+    SET notes = ?, updated_at = ?
+    WHERE id = ?
+  `).run(notes, timestamp, input.taskId);
 }
 
 export function moveTask(input: MoveTaskInput) {
@@ -919,7 +1006,7 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
       SELECT
         t.id,
         t.title,
-        t.description,
+        t.notes,
         t.project_id,
         t.created_at,
         t.done_at,
@@ -936,7 +1023,7 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 		| {
 				id: string;
 				title: string;
-				description: string;
+				notes: string;
 				project_id: string;
 				created_at: string;
 				done_at: string | null;
@@ -954,7 +1041,7 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 	return {
 		id: row.id,
 		title: row.title,
-		description: row.description,
+		notes: row.notes,
 		projectId: row.project_id,
 		projectName: row.project_name,
 		projectPath: row.project_path,

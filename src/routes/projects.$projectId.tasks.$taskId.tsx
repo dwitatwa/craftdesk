@@ -1,7 +1,8 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { AlignLeft, ArrowLeft, Calendar, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Calendar, CheckCircle2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "#/components/layout/app-shell";
+import { TaskNotesEditor } from "#/components/workspace/task-notes-editor";
 import { Terminal } from "#/components/workspace/terminal";
 import { useAddProject } from "#/components/workspace/use-add-project";
 import { deleteProject, getTaskDetail, listProjects } from "#/server/craftdesk";
@@ -301,24 +302,15 @@ function TaskDetailView() {
 									</div>
 								</div>
 
-								{/* Description Panel - Flexible height */}
+								{/* Notes Panel - Flexible height */}
 								<div className="flex-1 flex flex-col min-h-[280px] rounded-xl border border-white/5 bg-white/[0.01] overflow-hidden">
-									<div className="px-4 py-2 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
-										<div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
-											<AlignLeft className="size-3.5" />
-											Notes
-										</div>
-									</div>
-									<div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
-										<div className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap">
-											{task.description || (
-												<span className="italic text-muted-foreground/40">
-													No description provided for this task. Use the
-													dashboard to add technical requirements.
-												</span>
-											)}
-										</div>
-									</div>
+									<TaskNotesEditor
+										taskId={task.id}
+										initialNotes={task.notes}
+										onSaved={async () => {
+											await router.invalidate();
+										}}
+									/>
 								</div>
 							</div>
 						</div>

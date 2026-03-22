@@ -22,7 +22,6 @@ interface ColumnProps {
 	onCreateTask: (input: {
 		columnId: string;
 		title: string;
-		description: string;
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
@@ -169,7 +168,6 @@ interface KanbanBoardProps {
 	onCreateTask: (input: {
 		columnId: string;
 		title: string;
-		description: string;
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
@@ -196,7 +194,7 @@ function moveTaskLocally(
 	const movedTaskForTarget: BoardTask = {
 		id: originalTask.id,
 		title: originalTask.title,
-		description: originalTask.description,
+		notes: originalTask.notes,
 		projectId: originalTask.projectId,
 		columnId: targetColumnId,
 		position: 0,

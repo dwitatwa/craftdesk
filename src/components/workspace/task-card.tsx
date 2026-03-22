@@ -18,7 +18,7 @@ interface TaskCardProps {
 	id: string;
 	projectId: string;
 	title: string;
-	description?: string;
+	notes?: string;
 	className?: string;
 	draggable?: boolean;
 	isDragging?: boolean;
@@ -32,7 +32,7 @@ export function TaskCard({
 	id,
 	projectId,
 	title,
-	description,
+	notes,
 	className,
 	draggable,
 	isDragging,
@@ -47,6 +47,7 @@ export function TaskCard({
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [isClickSuppressed, setIsClickSuppressed] = useState(false);
 	const taskLabel = id.startsWith("TASK-") ? `#${id.slice(5)}` : id.slice(0, 8);
+	const notesPreview = summarizeNotes(notes);
 
 	const handleDelete = async () => {
 		setIsDeleting(true);
@@ -153,13 +154,13 @@ export function TaskCard({
 							<h3 className="text-[12px] font-medium leading-[1.4] text-foreground/90 group-hover:text-foreground transition-colors line-clamp-1">
 								{title}
 							</h3>
-							{description ? (
+							{notesPreview ? (
 								<p className="text-[10px] text-muted-foreground leading-snug line-clamp-2">
-									{description}
+									{notesPreview}
 								</p>
 							) : (
 								<p className="text-[10px] text-muted-foreground/60 leading-snug">
-									No description yet.
+									No notes yet.
 								</p>
 							)}
 						</button>
@@ -194,4 +195,19 @@ export function TaskCard({
 			</AlertDialog>
 		</>
 	);
+}
+
+function summarizeNotes(value?: string) {
+	return (value ?? "")
+		.replace(/```[\s\S]*?```/g, " ")
+		.replace(/`([^`]+)`/g, "$1")
+		.replace(/!\[.*?\]\(.*?\)/g, " ")
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/^#{1,6}\s+/gm, "")
+		.replace(/^\s*[-*+]\s+/gm, "")
+		.replace(/^\s*\d+\.\s+/gm, "")
+		.replace(/[>*_~]/g, "")
+		.replace(/\n+/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
 }
