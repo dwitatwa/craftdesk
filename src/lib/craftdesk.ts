@@ -95,9 +95,10 @@ export function slugifyProjectId(value: string) {
 }
 
 export function deriveProjectNameFromPath(path: string) {
-	const cleanedPath = path.trim().replace(/\/+$/g, "");
+	const cleanedPath = path.trim().replace(/[\\/]+$/g, "");
+	const normalizedSeparators = cleanedPath.replace(/\\/g, "/");
 	const lastSegment =
-		cleanedPath.split("/").filter(Boolean).pop() ?? cleanedPath;
+		normalizedSeparators.split("/").filter(Boolean).pop() ?? cleanedPath;
 
 	return titleizeSegment(lastSegment || "Project");
 }

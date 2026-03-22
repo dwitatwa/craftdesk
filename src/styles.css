@@ -168,5 +168,11 @@
 
   .terminal-surface .xterm-viewport {
     overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .terminal-surface .xterm-viewport::-webkit-scrollbar {
+    display: none;
   }
 }

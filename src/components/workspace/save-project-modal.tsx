@@ -11,7 +11,11 @@ import {
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import type { SaveProjectInput } from "#/lib/craftdesk";
+import {
+	deriveProjectNameFromPath,
+	type SaveProjectInput,
+} from "#/lib/craftdesk";
+import { pickProjectDirectory } from "#/server/craftdesk";
 
 interface SaveProjectModalProps {
 	isOpen: boolean;
@@ -27,10 +31,13 @@ export function SaveProjectModal({
 	const [name, setName] = useState("");
 	const [projectPath, setProjectPath] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isPickingDirectory, setIsPickingDirectory] = useState(false);
+	const [pickerError, setPickerError] = useState("");
 
 	const resetForm = () => {
 		setName("");
 		setProjectPath("");
+		setPickerError("");
 	};
 
 	const handleOpenChange = (open: boolean) => {
@@ -54,6 +61,34 @@ export function SaveProjectModal({
 			onOpenChange(false);
 		} finally {
 			setIsSubmitting(false);
+		}
+	};
+
+	const handlePickDirectory = async () => {
+		setIsPickingDirectory(true);
+		setPickerError("");
+
+		try {
+			const selectedPath = await pickProjectDirectory();
+
+			if (!selectedPath) {
+				return;
+			}
+
+			setProjectPath(selectedPath);
+			setName((currentName) =>
+				currentName.trim()
+					? currentName
+					: deriveProjectNameFromPath(selectedPath),
+			);
+		} catch (error) {
+			setPickerError(
+				error instanceof Error
+					? error.message
+					: "Failed to open the native folder picker.",
+			);
+		} finally {
+			setIsPickingDirectory(false);
 		}
 	};
 
@@ -90,17 +125,35 @@ export function SaveProjectModal({
 						>
 							Local Path
 						</Label>
-						<Input
-							id="project-path"
-							placeholder="~/projects/side/example"
-							value={projectPath}
-							onChange={(event) => setProjectPath(event.target.value)}
-							className="bg-muted/30 focus-visible:ring-primary/30"
-						/>
+						<div className="flex gap-2">
+							<Input
+								id="project-path"
+								placeholder="~/projects/side/example"
+								value={projectPath}
+								onChange={(event) => setProjectPath(event.target.value)}
+								className="bg-muted/30 focus-visible:ring-primary/30"
+							/>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={handlePickDirectory}
+								disabled={isSubmitting || isPickingDirectory}
+							>
+								{isPickingDirectory ? "Opening..." : "Choose Folder"}
+							</Button>
+						</div>
+						<p className="text-xs text-muted-foreground">
+							Use the native folder picker when available, or paste a path
+							manually.
+						</p>
+						{pickerError ? (
+							<p className="text-xs text-red-500">{pickerError}</p>
+						) : null}
 					</div>
 				</div>
 				<DialogFooter>
 					<Button
+						type="button"
 						variant="ghost"
 						onClick={() => handleOpenChange(false)}
 						className="cursor-pointer"
@@ -109,6 +162,7 @@ export function SaveProjectModal({
 						Cancel
 					</Button>
 					<Button
+						type="button"
 						onClick={handleSubmit}
 						disabled={!projectPath.trim() || isSubmitting}
 						className="cursor-pointer"

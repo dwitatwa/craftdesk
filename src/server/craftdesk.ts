@@ -26,6 +26,13 @@ export const saveProject = createServerFn({ method: "POST" })
 		return saveProjectToDb(data);
 	});
 
+export const pickProjectDirectory = createServerFn({ method: "POST" }).handler(
+	async () => {
+		const { pickDirectoryPath } = await import("#/server/folder-picker");
+		return pickDirectoryPath();
+	},
+);
+
 export const getProjectWorkspace = createServerFn({ method: "GET" })
 	.inputValidator((input: ProjectLookupInput) => input)
 	.handler(async ({ data }) => {

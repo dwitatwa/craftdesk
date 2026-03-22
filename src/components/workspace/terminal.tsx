@@ -194,6 +194,7 @@ export function Terminal({
 
 			syncSnapshot(snapshot, { resetViewport: true });
 			await pushResize();
+			setIsConnecting(false);
 
 			inputSubscription = terminal.onData((data) => {
 				const currentSessionId = sessionIdRef.current;
@@ -269,15 +270,10 @@ export function Terminal({
 			}
 		};
 
-		void start()
-			.catch((cause) => {
-				setError(getErrorMessage(cause));
-			})
-			.finally(() => {
-				if (!cancelled) {
-					setIsConnecting(false);
-				}
-			});
+		void start().catch((cause) => {
+			setIsConnecting(false);
+			setError(getErrorMessage(cause));
+		});
 
 		return () => {
 			cancelled = true;
