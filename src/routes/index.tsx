@@ -5,12 +5,23 @@ import {
 	History,
 	Plus,
 	Terminal as TerminalIcon,
+	Trash2,
 } from "lucide-react";
 import { useState } from "react";
 
 import { AppShell } from "#/components/layout/app-shell";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "#/components/ui/alert-dialog";
 import { SaveProjectModal } from "#/components/workspace/save-project-modal";
-import { listProjects, saveProject } from "#/server/craftdesk";
+import { deleteProject, listProjects, saveProject } from "#/server/craftdesk";
 
 export const Route = createFileRoute("/")({
 	loader: async () => ({
@@ -35,8 +46,13 @@ function CraftdeskApp() {
 		});
 	};
 
+	const handleDeleteProject = async (projectId: string) => {
+		await deleteProject({ data: { projectId } });
+		await router.invalidate();
+	};
+
 	return (
-		<AppShell showSidebar={false}>
+		<AppShell showSidebar={false} onDeleteProject={handleDeleteProject}>
 			<div className="flex-1 flex flex-col items-center justify-center p-8 max-w-5xl mx-auto w-full">
 				<div className="text-center space-y-4 mb-12">
 					<div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs font-mono text-primary">
@@ -63,11 +79,13 @@ function CraftdeskApp() {
 								projects.map((project) => (
 									<RecentWorkspaceCard
 										key={project.id}
+										projectName={project.name}
 										name={project.name}
 										path={project.path}
 										projectId={project.id}
 										tasks={project.taskCount}
 										activeSessions={project.activeSessions}
+										onDelete={handleDeleteProject}
 									/>
 								))
 							) : (
@@ -117,45 +135,101 @@ function CraftdeskApp() {
 
 function RecentWorkspaceCard({
 	name,
+	projectName,
 	path,
 	projectId,
 	tasks,
 	activeSessions,
+	onDelete,
 }: {
 	name: string;
+	projectName: string;
 	path: string;
 	projectId: string;
 	tasks: number;
 	activeSessions: number;
+	onDelete: (projectId: string) => Promise<void> | void;
 }) {
+	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+	const [isDeleting, setIsDeleting] = useState(false);
+
+	const handleDelete = async () => {
+		setIsDeleting(true);
+
+		try {
+			await onDelete(projectId);
+			setIsDeleteDialogOpen(false);
+		} finally {
+			setIsDeleting(false);
+		}
+	};
+
 	return (
-		<Link
-			to="/projects/$projectId"
-			params={{ projectId }}
-			className="flex items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/40 hover:shadow-sm transition-all text-left group cursor-pointer"
-		>
-			<div className="space-y-1">
-				<div className="font-medium group-hover:text-primary transition-colors">
-					{name}
-				</div>
-				<div className="text-[10px] font-mono text-muted-foreground">
-					{path}
-				</div>
-			</div>
-			<div className="flex items-center gap-4 text-right">
-				<div className="space-y-1">
-					<div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1.5 justify-end">
-						{tasks} tasks
+		<>
+			<Link
+				to="/projects/$projectId"
+				params={{ projectId }}
+				className="flex items-center justify-between p-4 rounded-xl border bg-card hover:border-primary/40 hover:shadow-sm transition-all text-left group cursor-pointer"
+			>
+				<div className="space-y-1 min-w-0">
+					<div className="font-medium group-hover:text-primary transition-colors truncate">
+						{name}
 					</div>
-					{activeSessions > 0 && (
-						<div className="text-[10px] font-mono text-green-500 flex items-center gap-1 justify-end">
-							<div className="size-1 rounded-full bg-green-500 animate-pulse" />
-							{activeSessions} live
-						</div>
-					)}
+					<div className="text-[10px] font-mono text-muted-foreground truncate">
+						{path}
+					</div>
 				</div>
-				<ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-			</div>
-		</Link>
+				<div className="flex items-center gap-4 text-right shrink-0">
+					<div className="space-y-1">
+						<div className="text-[10px] font-mono text-muted-foreground flex items-center gap-1.5 justify-end">
+							{tasks} tasks
+						</div>
+						{activeSessions > 0 && (
+							<div className="text-[10px] font-mono text-green-500 flex items-center gap-1 justify-end">
+								<div className="size-1 rounded-full bg-green-500 animate-pulse" />
+								{activeSessions} live
+							</div>
+						)}
+					</div>
+					<button
+						type="button"
+						className="rounded-md p-2 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 transition-all"
+						onClick={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							setIsDeleteDialogOpen(true);
+						}}
+					>
+						<Trash2 className="size-4" />
+					</button>
+					<ArrowRight className="size-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+				</div>
+			</Link>
+
+			<AlertDialog
+				open={isDeleteDialogOpen}
+				onOpenChange={setIsDeleteDialogOpen}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete Saved Project</AlertDialogTitle>
+						<AlertDialogDescription>
+							This removes "{projectName}" from Craftdesk and deletes its board
+							data. This action cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={handleDelete}
+							className="bg-red-600 hover:bg-red-700"
+							disabled={isDeleting}
+						>
+							{isDeleting ? "Deleting..." : "Delete Project"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</>
 	);
 }

@@ -15,6 +15,7 @@ import { cn } from "#/lib/utils";
 
 interface TaskCardProps {
 	id: string;
+	projectId: string;
 	title: string;
 	description?: string;
 	className?: string;
@@ -23,6 +24,7 @@ interface TaskCardProps {
 
 export function TaskCard({
 	id,
+	projectId,
 	title,
 	description,
 	className,
@@ -48,8 +50,8 @@ export function TaskCard({
 		<>
 			<div className={cn("group flex flex-col w-full", className)}>
 				<Link
-					to="/tasks/$taskId"
-					params={{ taskId: id }}
+					to="/projects/$projectId/tasks/$taskId"
+					params={{ projectId, taskId: id }}
 					className={cn(
 						"relative flex flex-col bg-card border border-border shadow-sm transition-all duration-150 rounded-md overflow-hidden cursor-pointer",
 						"hover:border-primary/50 hover:bg-white/[0.02]",

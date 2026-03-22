@@ -4,6 +4,7 @@ import type {
 	CreateColumnInput,
 	CreateTaskInput,
 	DeleteColumnInput,
+	DeleteProjectInput,
 	DeleteTaskInput,
 	ListProjectsInput,
 	ProjectLookupInput,
@@ -60,6 +61,13 @@ export const deleteTask = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const { deleteTask: deleteTaskInDb } = await import("#/server/db");
 		return deleteTaskInDb(data);
+	});
+
+export const deleteProject = createServerFn({ method: "POST" })
+	.inputValidator((input: DeleteProjectInput) => input)
+	.handler(async ({ data }) => {
+		const { deleteProject: deleteProjectInDb } = await import("#/server/db");
+		return deleteProjectInDb(data);
 	});
 
 export const getTaskDetail = createServerFn({ method: "GET" })

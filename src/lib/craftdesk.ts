@@ -72,6 +72,10 @@ export interface DeleteTaskInput {
 	taskId: string;
 }
 
+export interface DeleteProjectInput {
+	projectId: string;
+}
+
 export interface ProjectLookupInput {
 	projectId: string;
 }

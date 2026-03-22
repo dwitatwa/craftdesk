@@ -7,6 +7,7 @@ interface AppShellProps {
 	showSidebar?: boolean;
 	projects?: ProjectSummary[];
 	onAddProject?: () => void;
+	onDeleteProject?: (projectId: string) => Promise<void> | void;
 }
 
 export function AppShell({
@@ -14,11 +15,16 @@ export function AppShell({
 	showSidebar = true,
 	projects = [],
 	onAddProject,
+	onDeleteProject,
 }: AppShellProps) {
 	return (
 		<div className="flex h-screen w-full overflow-hidden bg-background">
 			{showSidebar && (
-				<Sidebar projects={projects} onAddProject={onAddProject} />
+				<Sidebar
+					projects={projects}
+					onAddProject={onAddProject}
+					onDeleteProject={onDeleteProject}
+				/>
 			)}
 			<div className="flex flex-1 flex-col overflow-hidden">
 				<main className="flex-1 overflow-auto bg-background/50 relative">

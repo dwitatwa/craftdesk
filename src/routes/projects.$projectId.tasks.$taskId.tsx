@@ -4,17 +4,27 @@ import { useState } from "react";
 import { AppShell } from "#/components/layout/app-shell";
 import { SaveProjectModal } from "#/components/workspace/save-project-modal";
 import { Terminal } from "#/components/workspace/terminal";
-import { getTaskDetail, listProjects, saveProject } from "#/server/craftdesk";
+import {
+	deleteProject,
+	getTaskDetail,
+	listProjects,
+	saveProject,
+} from "#/server/craftdesk";
 
-export const Route = createFileRoute("/tasks/$taskId")({
-	loader: async ({ params }) => ({
-		task: await getTaskDetail({
+export const Route = createFileRoute("/projects/$projectId/tasks/$taskId")({
+	loader: async ({ params }) => {
+		const task = await getTaskDetail({
 			data: { taskId: params.taskId },
-		}),
-		projects: await listProjects({
+		});
+		const projects = await listProjects({
 			data: { sortBy: "name" },
-		}),
-	}),
+		});
+
+		return {
+			task: task?.projectId === params.projectId ? task : null,
+			projects,
+		};
+	},
 	component: TaskDetailView,
 });
 
@@ -32,10 +42,20 @@ function TaskDetailView() {
 		});
 	};
 
+	const handleDeleteProject = async (projectId: string) => {
+		await deleteProject({ data: { projectId } });
+		await router.invalidate();
+
+		if (task?.projectId === projectId) {
+			await router.navigate({ to: "/" });
+		}
+	};
+
 	return (
 		<AppShell
 			projects={projects}
 			onAddProject={() => setIsSaveProjectModalOpen(true)}
+			onDeleteProject={handleDeleteProject}
 		>
 			<div className="flex h-full flex-1 overflow-hidden">
 				{task ? (
@@ -128,8 +148,8 @@ function TaskDetailView() {
 						<div className="max-w-md rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
 							<h1 className="text-lg font-semibold">Task not found</h1>
 							<p className="mt-2 text-sm text-muted-foreground">
-								This task may have been deleted or the database has not been
-								seeded with it.
+								This task may have been deleted, may not belong to this project,
+								or the database has not been seeded with it.
 							</p>
 						</div>
 					</div>

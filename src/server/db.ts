@@ -8,6 +8,7 @@ import {
 	type CreateColumnInput,
 	type CreateTaskInput,
 	type DeleteColumnInput,
+	type DeleteProjectInput,
 	type DeleteTaskInput,
 	deriveProjectNameFromPath,
 	type ListProjectsInput,
@@ -729,6 +730,12 @@ export function deleteTask(input: DeleteTaskInput) {
 	const db = getDb();
 
 	db.prepare("DELETE FROM tasks WHERE id = ?").run(input.taskId);
+}
+
+export function deleteProject(input: DeleteProjectInput) {
+	const db = getDb();
+
+	db.prepare("DELETE FROM projects WHERE id = ?").run(input.projectId);
 }
 
 export function getTaskDetail(taskId: string): TaskDetail | null {
