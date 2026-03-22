@@ -11,14 +11,12 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
-import type { TaskStatus } from "#/lib/craftdesk";
 import { cn } from "#/lib/utils";
 
 interface TaskCardProps {
 	id: string;
 	title: string;
 	description?: string;
-	status: TaskStatus;
 	className?: string;
 	onDelete: (taskId: string) => Promise<void> | void;
 }
@@ -27,7 +25,6 @@ export function TaskCard({
 	id,
 	title,
 	description,
-	status,
 	className,
 	onDelete,
 }: TaskCardProps) {
@@ -84,9 +81,6 @@ export function TaskCard({
 							<h3 className="text-[12px] font-medium leading-[1.4] text-foreground/90 group-hover:text-foreground transition-colors line-clamp-1">
 								{title}
 							</h3>
-							<div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/70">
-								{status}
-							</div>
 							{description ? (
 								<p className="text-[10px] text-muted-foreground leading-snug line-clamp-2">
 									{description}

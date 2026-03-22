@@ -16,7 +16,6 @@ import {
 	type SaveProjectInput,
 	slugifyProjectId,
 	type TaskDetail,
-	type TaskStatus,
 } from "#/lib/craftdesk";
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -49,7 +48,6 @@ const DEFAULT_ALPHA_TASKS = [
 		title: "Implement dark mode persistence",
 		description:
 			"Save user theme preference to local storage and sync with account settings.",
-		status: "idle" as const,
 	},
 	{
 		id: "TASK-0002",
@@ -57,7 +55,6 @@ const DEFAULT_ALPHA_TASKS = [
 		title: "Refactor terminal state management",
 		description:
 			"Migrate terminal history to a more performant data structure to support longer sessions.",
-		status: "idle" as const,
 	},
 	{
 		id: "TASK-0003",
@@ -65,7 +62,6 @@ const DEFAULT_ALPHA_TASKS = [
 		title: "Design new command palette",
 		description:
 			"Create a modern command interface for quick actions and file searching.",
-		status: "idle" as const,
 	},
 	{
 		id: "TASK-0004",
@@ -73,7 +69,6 @@ const DEFAULT_ALPHA_TASKS = [
 		title: "Compile production kernel",
 		description:
 			"Running build scripts for the main application engine with optimized flags.",
-		status: "running" as const,
 	},
 	{
 		id: "TASK-0005",
@@ -81,7 +76,6 @@ const DEFAULT_ALPHA_TASKS = [
 		title: "Optimize asset loading pipeline",
 		description:
 			"Implementing lazy loading and progressive image decoding for the workspace.",
-		status: "idle" as const,
 	},
 	{
 		id: "TASK-0006",
@@ -89,14 +83,12 @@ const DEFAULT_ALPHA_TASKS = [
 		title: "Fix layout shift on mobile",
 		description:
 			"Resolved jumpy transitions when switching between board and list views on small screens.",
-		status: "idle" as const,
 	},
 	{
 		id: "TASK-0007",
 		columnTitle: "Done",
 		title: "Update documentation for API",
 		description: "Completed the reference guide for all public REST endpoints.",
-		status: "idle" as const,
 	},
 ] as const;
 
@@ -118,6 +110,7 @@ function getDb() {
 	db.exec("PRAGMA journal_mode = WAL;");
 
 	initializeSchema(db);
+	runMigrations(db);
 	seedDefaults(db);
 
 	dbInstance = db;
@@ -152,12 +145,11 @@ function initializeSchema(db: DatabaseSync) {
       column_id TEXT NOT NULL,
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'idle',
       created_at TEXT NOT NULL,
+      done_at TEXT,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE,
-      CHECK (status IN ('idle', 'running', 'error'))
+      FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
     );
 
     CREATE INDEX IF NOT EXISTS idx_projects_last_opened_at ON projects(last_opened_at DESC);
@@ -165,6 +157,106 @@ function initializeSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_column_id ON tasks(column_id);
   `);
+}
+
+function runMigrations(db: DatabaseSync) {
+	ensureColumnExists(db, "tasks", "created_at", "TEXT");
+	ensureColumnExists(db, "tasks", "done_at", "TEXT");
+	removeStatusColumnIfPresent(db);
+	db.exec(`
+    UPDATE tasks
+    SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+    WHERE created_at IS NULL OR created_at = '';
+
+    UPDATE tasks
+    SET done_at = COALESCE(done_at, updated_at, created_at)
+    WHERE done_at IS NULL
+      AND column_id IN (
+        SELECT id
+        FROM board_columns
+        WHERE title = 'Done'
+      );
+  `);
+}
+
+function ensureColumnExists(
+	db: DatabaseSync,
+	tableName: string,
+	columnName: string,
+	columnDefinition: string,
+) {
+	const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+		name: string;
+	}>;
+
+	if (columns.some((column) => column.name === columnName)) {
+		return;
+	}
+
+	db.exec(
+		`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition};`,
+	);
+}
+
+function removeStatusColumnIfPresent(db: DatabaseSync) {
+	const columns = getTableColumns(db, "tasks");
+
+	if (!columns.some((column) => column.name === "status")) {
+		return;
+	}
+
+	db.exec(`
+    BEGIN TRANSACTION;
+
+    CREATE TABLE tasks__new (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      column_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      done_at TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
+    );
+
+    INSERT INTO tasks__new (
+      id,
+      project_id,
+      column_id,
+      title,
+      description,
+      created_at,
+      done_at,
+      updated_at
+    )
+    SELECT
+      id,
+      project_id,
+      column_id,
+      title,
+      description,
+      created_at,
+      done_at,
+      updated_at
+    FROM tasks;
+
+    DROP TABLE tasks;
+
+    ALTER TABLE tasks__new RENAME TO tasks;
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_column_id ON tasks(column_id);
+
+    COMMIT;
+  `);
+}
+
+function getTableColumns(db: DatabaseSync, tableName: string) {
+	return db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+		name: string;
+	}>;
 }
 
 function seedDefaults(db: DatabaseSync) {
@@ -219,8 +311,8 @@ function seedDefaults(db: DatabaseSync) {
       column_id,
       title,
       description,
-      status,
       created_at,
+      done_at,
       updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
@@ -232,14 +324,16 @@ function seedDefaults(db: DatabaseSync) {
 			continue;
 		}
 
+		const doneAt = task.columnTitle === "Done" ? timestamp : null;
+
 		insertTask.run(
 			task.id,
 			"alpha",
 			columnId,
 			task.title,
 			task.description,
-			task.status,
 			timestamp,
+			doneAt,
 			timestamp,
 		);
 	}
@@ -491,7 +585,7 @@ export function getProjectWorkspace(
 
 	const tasks = db
 		.prepare(`
-      SELECT id, title, description, status, project_id, column_id
+      SELECT id, title, description, project_id, column_id, created_at, done_at
       FROM tasks
       WHERE project_id = ?
       ORDER BY created_at DESC, id DESC
@@ -500,9 +594,10 @@ export function getProjectWorkspace(
 		id: string;
 		title: string;
 		description: string;
-		status: TaskStatus;
 		project_id: string;
 		column_id: string;
+		created_at: string;
+		done_at: string | null;
 	}>;
 
 	const tasksByColumnId = new Map<string, BoardColumn["tasks"]>();
@@ -513,9 +608,10 @@ export function getProjectWorkspace(
 			id: task.id,
 			title: task.title,
 			description: task.description,
-			status: task.status,
 			projectId: task.project_id,
 			columnId: task.column_id,
+			createdAt: task.created_at,
+			doneAt: task.done_at,
 		});
 		tasksByColumnId.set(task.column_id, existingTasks);
 	}
@@ -613,8 +709,8 @@ export function createTask(input: CreateTaskInput) {
       column_id,
       title,
       description,
-      status,
       created_at,
+      done_at,
       updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
@@ -623,8 +719,8 @@ export function createTask(input: CreateTaskInput) {
 		input.columnId,
 		title,
 		description,
-		"idle",
 		timestamp,
+		null,
 		timestamp,
 	);
 }
@@ -643,8 +739,9 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
         t.id,
         t.title,
         t.description,
-        t.status,
         t.project_id,
+        t.created_at,
+        t.done_at,
         p.name AS project_name,
         p.path AS project_path,
         c.id AS column_id,
@@ -659,8 +756,9 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 				id: string;
 				title: string;
 				description: string;
-				status: TaskStatus;
 				project_id: string;
+				created_at: string;
+				done_at: string | null;
 				project_name: string;
 				project_path: string;
 				column_id: string;
@@ -676,11 +774,12 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 		id: row.id,
 		title: row.title,
 		description: row.description,
-		status: row.status,
 		projectId: row.project_id,
 		projectName: row.project_name,
 		projectPath: row.project_path,
 		columnId: row.column_id,
 		columnTitle: row.column_title,
+		createdAt: row.created_at,
+		doneAt: row.done_at,
 	};
 }

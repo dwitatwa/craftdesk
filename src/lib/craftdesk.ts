@@ -1,5 +1,3 @@
-export type TaskStatus = "idle" | "running" | "error";
-
 export interface ProjectSummary {
 	id: string;
 	name: string;
@@ -13,9 +11,10 @@ export interface BoardTask {
 	id: string;
 	title: string;
 	description: string;
-	status: TaskStatus;
 	projectId: string;
 	columnId: string;
+	createdAt: string;
+	doneAt: string | null;
 }
 
 export interface BoardColumn {
@@ -34,12 +33,13 @@ export interface TaskDetail {
 	id: string;
 	title: string;
 	description: string;
-	status: TaskStatus;
 	projectId: string;
 	projectName: string;
 	projectPath: string;
 	columnId: string;
 	columnTitle: string;
+	createdAt: string;
+	doneAt: string | null;
 }
 
 export interface SaveProjectInput {

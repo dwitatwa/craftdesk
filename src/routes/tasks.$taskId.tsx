@@ -75,6 +75,32 @@ function TaskDetailView() {
 							<div className="p-6 space-y-8">
 								<div className="space-y-3">
 									<h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+										Timeline
+									</h2>
+									<div className="grid gap-3 sm:grid-cols-2">
+										<div className="rounded-xl border bg-muted/20 p-4">
+											<div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+												Created
+											</div>
+											<div className="mt-2 text-sm font-medium">
+												{formatTimestamp(task.createdAt)}
+											</div>
+										</div>
+										<div className="rounded-xl border bg-muted/20 p-4">
+											<div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+												Done
+											</div>
+											<div className="mt-2 text-sm font-medium">
+												{task.doneAt
+													? formatTimestamp(task.doneAt)
+													: "Not completed yet"}
+											</div>
+										</div>
+									</div>
+								</div>
+
+								<div className="space-y-3">
+									<h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
 										Workspace
 									</h2>
 									<div className="rounded-xl border bg-muted/20 p-4">
@@ -117,4 +143,11 @@ function TaskDetailView() {
 			/>
 		</AppShell>
 	);
+}
+
+function formatTimestamp(value: string) {
+	return new Intl.DateTimeFormat("en-US", {
+		dateStyle: "medium",
+		timeStyle: "short",
+	}).format(new Date(value));
 }
