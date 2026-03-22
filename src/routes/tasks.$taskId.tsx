@@ -48,15 +48,6 @@ function TaskDetailView() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className={cn(
-                "px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border leading-none",
-                statusConfig[task.status as keyof typeof statusConfig].color
-              )}>
-                {statusConfig[task.status as keyof typeof statusConfig].label}
-              </div>
-              <Button variant="ghost" size="icon" className="size-8 ml-1">
-                <MoreVertical className="size-4" />
-              </Button>
             </div>
           </div>
 

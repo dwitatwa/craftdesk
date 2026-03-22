@@ -3,12 +3,13 @@ import { Sidebar } from "./sidebar";
 
 interface AppShellProps {
   children: React.ReactNode;
+  showSidebar?: boolean;
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, showSidebar = true }: AppShellProps) {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      <Sidebar />
+      {showSidebar && <Sidebar />}
       <div className="flex flex-1 flex-col overflow-hidden">
         <main className="flex-1 overflow-auto bg-background/50 relative">
           {/* Dot Grid Overlay */}

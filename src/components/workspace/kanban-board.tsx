@@ -1,17 +1,38 @@
-import { Plus, MoreHorizontal } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { TaskCard, type TaskStatus } from "./task-card";
 import { Button } from "#/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/components/ui/alert-dialog";
+import { CreateTaskModal } from "./create-task-modal";
 
 interface ColumnProps {
   title: string;
   tasks: Array<{
     id: string;
     title: string;
+    description?: string;
     status: TaskStatus;
   }>;
 }
 
 function Column({ title, tasks }: ColumnProps) {
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const handleDeleteColumn = () => {
+    console.log(`Deleting column: ${title}`);
+    // Real delete logic would go here
+  };
+
   return (
     <div className="flex flex-col w-72 h-full gap-4 shrink-0">
       <div className="flex items-center justify-between px-2">
@@ -24,11 +45,13 @@ function Column({ title, tasks }: ColumnProps) {
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-foreground">
-            <Plus className="size-3.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="size-6 text-muted-foreground hover:text-foreground">
-            <MoreHorizontal className="size-3.5" />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="size-6 text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+            onClick={() => setIsDeleteDialogOpen(true)}
+          >
+            <Trash2 className="size-3.5" />
           </Button>
         </div>
       </div>
@@ -37,11 +60,38 @@ function Column({ title, tasks }: ColumnProps) {
         {tasks.map(task => (
           <TaskCard key={task.id} {...task} />
         ))}
-        <Button variant="ghost" className="w-full h-8 justify-start gap-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-border/50 hover:border-primary/30 mt-1">
+        <Button 
+          variant="ghost" 
+          className="w-full h-8 justify-start gap-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-border/50 hover:border-primary/30 mt-1 cursor-pointer"
+          onClick={() => setIsCreateModalOpen(true)}
+        >
           <Plus className="size-3" />
           Add Task
         </Button>
       </div>
+
+      <CreateTaskModal 
+        isOpen={isCreateModalOpen}
+        onOpenChange={setIsCreateModalOpen}
+        columnTitle={title}
+      />
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Column</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the "{title}" column? All tasks within this column will be permanently removed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteColumn} className="bg-red-600 hover:bg-red-700 cursor-pointer">
+              Delete Column
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -49,19 +99,19 @@ function Column({ title, tasks }: ColumnProps) {
 export function KanbanBoard() {
   const mockTasks = {
     backlog: [
-      { id: "DEV-104", title: "Implement dark mode persistence", status: "idle" as const },
-      { id: "DEV-108", title: "Refactor terminal state management", status: "idle" as const },
+      { id: "DEV-104", title: "Implement dark mode persistence", description: "Save user theme preference to local storage and sync with account settings.", status: "idle" as const },
+      { id: "DEV-108", title: "Refactor terminal state management", description: "Migrate terminal history to a more performant data structure to support longer sessions.", status: "idle" as const },
     ],
     todo: [
-      { id: "DEV-105", title: "Design new command palette", status: "idle" as const },
+      { id: "DEV-105", title: "Design new command palette", description: "Create a modern command interface for quick actions and file searching.", status: "idle" as const },
     ],
     inProgress: [
-      { id: "DEV-101", title: "Compile production kernel", status: "running" as const },
-      { id: "DEV-103", title: "Optimize asset loading pipeline", status: "idle" as const },
+      { id: "DEV-101", title: "Compile production kernel", description: "Running build scripts for the main application engine with optimized flags.", status: "running" as const },
+      { id: "DEV-103", title: "Optimize asset loading pipeline", description: "Implementing lazy loading and progressive image decoding for the workspace.", status: "idle" as const },
     ],
     done: [
-      { id: "DEV-98", title: "Fix layout shift on mobile", status: "idle" as const },
-      { id: "DEV-95", title: "Update documentation for API", status: "idle" as const },
+      { id: "DEV-98", title: "Fix layout shift on mobile", description: "Resolved jumpy transitions when switching between board and list views on small screens.", status: "idle" as const },
+      { id: "DEV-95", title: "Update documentation for API", description: "Completed the reference guide for all public REST endpoints.", status: "idle" as const },
     ]
   };
 
