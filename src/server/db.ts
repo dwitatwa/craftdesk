@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -105,6 +105,7 @@ function getDb() {
 	}
 
 	mkdirSync(DATA_DIR, { recursive: true });
+	const isNewDatabase = !existsSync(DB_PATH);
 
 	const db = new DatabaseSync(DB_PATH);
 	db.exec("PRAGMA foreign_keys = ON;");
@@ -112,7 +113,10 @@ function getDb() {
 
 	initializeSchema(db);
 	runMigrations(db);
-	seedDefaults(db);
+
+	if (isNewDatabase) {
+		seedDefaults(db);
+	}
 
 	dbInstance = db;
 	return db;
