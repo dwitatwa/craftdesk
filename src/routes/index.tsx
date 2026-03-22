@@ -13,13 +13,11 @@ import { useState } from "react";
 import { Button } from "#/components/ui/button";
 import { AppShell } from "#/components/layout/app-shell";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
-import { TerminalPanel } from "#/components/workspace/terminal-panel";
 
 export const Route = createFileRoute("/")({ component: CraftdeskApp });
 
 function CraftdeskApp() {
   const [activeView, setActiveView] = useState<'home' | 'board'>('board');
-  const [isTerminalOpen, setIsTerminalOpen] = useState(true);
 
   if (activeView === 'home') {
     return (
@@ -133,14 +131,6 @@ function CraftdeskApp() {
         <div className="flex-1 min-h-0 overflow-hidden">
           <KanbanBoard />
         </div>
-
-        {/* Bottom Terminal */}
-        <TerminalPanel 
-          taskId="DEV-101" 
-          taskTitle="Compile production kernel" 
-          isOpen={isTerminalOpen} 
-          onToggle={() => setIsTerminalOpen(!isTerminalOpen)}
-        />
       </div>
     </AppShell>
   );

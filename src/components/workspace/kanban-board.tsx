@@ -1,5 +1,5 @@
 import { Plus, MoreHorizontal } from "lucide-react";
-import { TaskCard, type TaskPriority, type TaskStatus } from "./task-card";
+import { TaskCard, type TaskStatus } from "./task-card";
 import { Button } from "#/components/ui/button";
 
 interface ColumnProps {
@@ -7,11 +7,7 @@ interface ColumnProps {
   tasks: Array<{
     id: string;
     title: string;
-    tags: string[];
     status: TaskStatus;
-    priority: TaskPriority;
-    dueDate?: string;
-    activityCount?: number;
   }>;
 }
 
@@ -53,19 +49,19 @@ function Column({ title, tasks }: ColumnProps) {
 export function KanbanBoard() {
   const mockTasks = {
     backlog: [
-      { id: "DEV-104", title: "Implement dark mode persistence", tags: ["UI", "Fix"], status: "idle" as const, priority: "low" as const },
-      { id: "DEV-108", title: "Refactor terminal state management", tags: ["Backend", "Core"], status: "idle" as const, priority: "medium" as const },
+      { id: "DEV-104", title: "Implement dark mode persistence", status: "idle" as const },
+      { id: "DEV-108", title: "Refactor terminal state management", status: "idle" as const },
     ],
     todo: [
-      { id: "DEV-105", title: "Design new command palette", tags: ["Design", "UX"], status: "idle" as const, priority: "high" as const, dueDate: "Mar 25" },
+      { id: "DEV-105", title: "Design new command palette", status: "idle" as const },
     ],
     inProgress: [
-      { id: "DEV-101", title: "Compile production kernel", tags: ["Infra", "Urgent"], status: "running" as const, priority: "urgent" as const, activityCount: 12 },
-      { id: "DEV-103", title: "Optimize asset loading pipeline", tags: ["Performance"], status: "idle" as const, priority: "high" as const },
+      { id: "DEV-101", title: "Compile production kernel", status: "running" as const },
+      { id: "DEV-103", title: "Optimize asset loading pipeline", status: "idle" as const },
     ],
     done: [
-      { id: "DEV-98", title: "Fix layout shift on mobile", tags: ["Bug", "UI"], status: "idle" as const, priority: "medium" as const, dueDate: "Mar 20" },
-      { id: "DEV-95", title: "Update documentation for API", tags: ["Docs"], status: "idle" as const, priority: "low" as const },
+      { id: "DEV-98", title: "Fix layout shift on mobile", status: "idle" as const },
+      { id: "DEV-95", title: "Update documentation for API", status: "idle" as const },
     ]
   };
 
