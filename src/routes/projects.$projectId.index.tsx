@@ -6,8 +6,8 @@ import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
 import { CreateTaskModal } from "#/components/workspace/create-task-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
-import { SaveProjectModal } from "#/components/workspace/save-project-modal";
 import { Terminal } from "#/components/workspace/terminal";
+import { useAddProject } from "#/components/workspace/use-add-project";
 import { cn } from "#/lib/utils";
 import {
 	createColumn,
@@ -17,7 +17,6 @@ import {
 	deleteTask,
 	getProjectWorkspace,
 	listProjects,
-	saveProject,
 } from "#/server/craftdesk";
 
 export const Route = createFileRoute("/projects/$projectId/")({
@@ -42,7 +41,6 @@ function ProjectDetailView() {
 	const router = useRouter();
 	const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
 	const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
-	const [isSaveProjectModalOpen, setIsSaveProjectModalOpen] = useState(false);
 	const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(true);
 
 	const primaryColumn = workspace?.columns[0];
@@ -51,14 +49,9 @@ function ProjectDetailView() {
 		await router.invalidate();
 	};
 
-	const handleSaveProject = async (input: { name: string; path: string }) => {
-		const project = await saveProject({ data: input });
-		await refreshData();
-		await router.navigate({
-			to: "/projects/$projectId",
-			params: { projectId: project.id },
-		});
-	};
+	const { addProject, addProjectError, isAddingProject } = useAddProject({
+		onProjectSaved: refreshData,
+	});
 
 	const handleCreateColumn = async (title: string) => {
 		if (!workspace) {
@@ -127,7 +120,9 @@ function ProjectDetailView() {
 	return (
 		<AppShell
 			projects={projects}
-			onAddProject={() => setIsSaveProjectModalOpen(true)}
+			onAddProject={addProject}
+			isAddingProject={isAddingProject}
+			addProjectError={addProjectError}
 			onDeleteProject={handleDeleteProject}
 		>
 			<div className="flex-1 flex flex-col min-h-0">
@@ -229,12 +224,6 @@ function ProjectDetailView() {
 					isOpen={isCreateColumnModalOpen}
 					onOpenChange={setIsCreateColumnModalOpen}
 					onCreate={handleCreateColumn}
-				/>
-
-				<SaveProjectModal
-					isOpen={isSaveProjectModalOpen}
-					onOpenChange={setIsSaveProjectModalOpen}
-					onSubmit={handleSaveProject}
 				/>
 			</div>
 		</AppShell>

@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Folder, Layers, Plus, Trash2 } from "lucide-react";
+import { Folder, Layers, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
 	AlertDialog,
@@ -17,7 +17,9 @@ import { cn } from "#/lib/utils";
 interface SidebarProps {
 	className?: string;
 	projects: ProjectSummary[];
-	onAddProject?: () => void;
+	onAddProject?: () => Promise<void> | void;
+	isAddingProject?: boolean;
+	addProjectError?: string;
 	onDeleteProject?: (projectId: string) => Promise<void> | void;
 }
 
@@ -25,6 +27,8 @@ export function Sidebar({
 	className,
 	projects,
 	onAddProject,
+	isAddingProject = false,
+	addProjectError = "",
 	onDeleteProject,
 }: SidebarProps) {
 	return (
@@ -52,8 +56,15 @@ export function Sidebar({
 						type="button"
 						className="cursor-pointer rounded-sm p-1 hover:text-foreground"
 						onClick={onAddProject}
+						disabled={isAddingProject}
+						aria-label={isAddingProject ? "Adding project" : "Add project"}
+						title={isAddingProject ? "Adding project" : "Add project"}
 					>
-						<Plus className="size-3" />
+						{isAddingProject ? (
+							<LoaderCircle className="size-3 animate-spin" />
+						) : (
+							<Plus className="size-3" />
+						)}
 					</button>
 				</div>
 				{projects.length > 0 ? (
@@ -73,6 +84,11 @@ export function Sidebar({
 						No saved projects yet.
 					</div>
 				)}
+				{addProjectError ? (
+					<div className="px-3 pb-3 text-xs text-red-500">
+						{addProjectError}
+					</div>
+				) : null}
 			</div>
 		</aside>
 	);

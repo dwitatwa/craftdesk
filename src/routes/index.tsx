@@ -3,6 +3,7 @@ import {
 	ArrowRight,
 	FolderPlus,
 	History,
+	LoaderCircle,
 	Plus,
 	Terminal as TerminalIcon,
 	Trash2,
@@ -20,8 +21,8 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
-import { SaveProjectModal } from "#/components/workspace/save-project-modal";
-import { deleteProject, listProjects, saveProject } from "#/server/craftdesk";
+import { useAddProject } from "#/components/workspace/use-add-project";
+import { deleteProject, listProjects } from "#/server/craftdesk";
 
 export const Route = createFileRoute("/")({
 	loader: async () => ({
@@ -35,16 +36,11 @@ export const Route = createFileRoute("/")({
 function CraftdeskApp() {
 	const { projects } = Route.useLoaderData();
 	const router = useRouter();
-	const [isSaveProjectModalOpen, setIsSaveProjectModalOpen] = useState(false);
-
-	const handleSaveProject = async (input: { name: string; path: string }) => {
-		const project = await saveProject({ data: input });
-		await router.invalidate();
-		await router.navigate({
-			to: "/projects/$projectId",
-			params: { projectId: project.id },
-		});
-	};
+	const { addProject, addProjectError, isAddingProject } = useAddProject({
+		onProjectSaved: async () => {
+			await router.invalidate();
+		},
+	});
 
 	const handleDeleteProject = async (projectId: string) => {
 		await deleteProject({ data: { projectId } });
@@ -90,7 +86,7 @@ function CraftdeskApp() {
 								))
 							) : (
 								<div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-border bg-card/40 p-6 text-center text-sm text-muted-foreground">
-									Save a local folder to start building your workspace list.
+									Choose a folder to add your first workspace.
 								</div>
 							)}
 						</div>
@@ -105,30 +101,34 @@ function CraftdeskApp() {
 							<button
 								type="button"
 								className="flex flex-col items-center justify-center gap-3 w-full h-full rounded-2xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all group text-center cursor-pointer"
-								onClick={() => setIsSaveProjectModalOpen(true)}
+								onClick={addProject}
+								disabled={isAddingProject}
 							>
 								<div className="size-12 rounded-full bg-muted flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-									<FolderPlus className="size-6 text-muted-foreground group-hover:text-primary" />
+									{isAddingProject ? (
+										<LoaderCircle className="size-6 animate-spin text-primary" />
+									) : (
+										<FolderPlus className="size-6 text-muted-foreground group-hover:text-primary" />
+									)}
 								</div>
 								<div>
 									<div className="font-medium group-hover:text-primary transition-colors">
-										Save Local Folder
+										{isAddingProject
+											? "Opening Folder Picker..."
+											: "Choose Folder"}
 									</div>
 									<p className="text-xs text-muted-foreground">
-										Store a local project path in SQLite and jump into its board
+										Pick a local folder and add it straight to your project list
 									</p>
 								</div>
 							</button>
+							{addProjectError ? (
+								<p className="mt-3 text-sm text-red-500">{addProjectError}</p>
+							) : null}
 						</div>
 					</div>
 				</div>
 			</div>
-
-			<SaveProjectModal
-				isOpen={isSaveProjectModalOpen}
-				onOpenChange={setIsSaveProjectModalOpen}
-				onSubmit={handleSaveProject}
-			/>
 		</AppShell>
 	);
 }

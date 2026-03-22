@@ -6,7 +6,9 @@ interface AppShellProps {
 	children: React.ReactNode;
 	showSidebar?: boolean;
 	projects?: ProjectSummary[];
-	onAddProject?: () => void;
+	onAddProject?: () => Promise<void> | void;
+	isAddingProject?: boolean;
+	addProjectError?: string;
 	onDeleteProject?: (projectId: string) => Promise<void> | void;
 }
 
@@ -15,6 +17,8 @@ export function AppShell({
 	showSidebar = true,
 	projects = [],
 	onAddProject,
+	isAddingProject = false,
+	addProjectError = "",
 	onDeleteProject,
 }: AppShellProps) {
 	return (
@@ -23,6 +27,8 @@ export function AppShell({
 				<Sidebar
 					projects={projects}
 					onAddProject={onAddProject}
+					isAddingProject={isAddingProject}
+					addProjectError={addProjectError}
 					onDeleteProject={onDeleteProject}
 				/>
 			)}

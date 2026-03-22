@@ -1,15 +1,9 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
 import { AppShell } from "#/components/layout/app-shell";
-import { SaveProjectModal } from "#/components/workspace/save-project-modal";
 import { Terminal } from "#/components/workspace/terminal";
-import {
-	deleteProject,
-	getTaskDetail,
-	listProjects,
-	saveProject,
-} from "#/server/craftdesk";
+import { useAddProject } from "#/components/workspace/use-add-project";
+import { deleteProject, getTaskDetail, listProjects } from "#/server/craftdesk";
 
 export const Route = createFileRoute("/projects/$projectId/tasks/$taskId")({
 	loader: async ({ params }) => {
@@ -31,16 +25,11 @@ export const Route = createFileRoute("/projects/$projectId/tasks/$taskId")({
 function TaskDetailView() {
 	const { task, projects } = Route.useLoaderData();
 	const router = useRouter();
-	const [isSaveProjectModalOpen, setIsSaveProjectModalOpen] = useState(false);
-
-	const handleSaveProject = async (input: { name: string; path: string }) => {
-		const project = await saveProject({ data: input });
-		await router.invalidate();
-		await router.navigate({
-			to: "/projects/$projectId",
-			params: { projectId: project.id },
-		});
-	};
+	const { addProject, addProjectError, isAddingProject } = useAddProject({
+		onProjectSaved: async () => {
+			await router.invalidate();
+		},
+	});
 
 	const handleDeleteProject = async (projectId: string) => {
 		await deleteProject({ data: { projectId } });
@@ -54,7 +43,9 @@ function TaskDetailView() {
 	return (
 		<AppShell
 			projects={projects}
-			onAddProject={() => setIsSaveProjectModalOpen(true)}
+			onAddProject={addProject}
+			isAddingProject={isAddingProject}
+			addProjectError={addProjectError}
 			onDeleteProject={handleDeleteProject}
 		>
 			<div className="flex h-full flex-1 overflow-hidden">
@@ -165,12 +156,6 @@ function TaskDetailView() {
 					</div>
 				)}
 			</div>
-
-			<SaveProjectModal
-				isOpen={isSaveProjectModalOpen}
-				onOpenChange={setIsSaveProjectModalOpen}
-				onSubmit={handleSaveProject}
-			/>
 		</AppShell>
 	);
 }
