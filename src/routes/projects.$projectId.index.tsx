@@ -189,6 +189,12 @@ function ProjectDetailView() {
 								onToggleCollapse={() =>
 									setIsTerminalCollapsed(!isTerminalCollapsed)
 								}
+								scope={{
+									scopeType: "project",
+									scopeId: workspace.project.id,
+									projectId: workspace.project.id,
+									cwd: workspace.project.path,
+								}}
 							/>
 						</div>
 					</>

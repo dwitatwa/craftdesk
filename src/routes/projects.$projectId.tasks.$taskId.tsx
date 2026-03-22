@@ -141,7 +141,17 @@ function TaskDetailView() {
 								</div>
 							</div>
 						</div>
-						<Terminal className="flex-1" headerHeight="h-20" />
+						<Terminal
+							className="flex-1"
+							headerHeight="h-20"
+							title="Task Terminal"
+							scope={{
+								scopeType: "task",
+								scopeId: task.id,
+								projectId: task.projectId,
+								cwd: task.projectPath,
+							}}
+						/>
 					</>
 				) : (
 					<div className="flex flex-1 items-center justify-center p-8">

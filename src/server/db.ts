@@ -113,6 +113,7 @@ function getDb() {
 
 	initializeSchema(db);
 	runMigrations(db);
+	db.exec("UPDATE projects SET active_sessions = 0;");
 
 	if (isNewDatabase) {
 		seedDefaults(db);
@@ -740,6 +741,17 @@ export function deleteProject(input: DeleteProjectInput) {
 	const db = getDb();
 
 	db.prepare("DELETE FROM projects WHERE id = ?").run(input.projectId);
+}
+
+export function setProjectActiveSessions(projectId: string, count: number) {
+	const db = getDb();
+	const timestamp = nowIso();
+
+	db.prepare(`
+    UPDATE projects
+    SET active_sessions = ?, updated_at = ?
+    WHERE id = ?
+  `).run(Math.max(0, count), timestamp, projectId);
 }
 
 export function getTaskDetail(taskId: string): TaskDetail | null {
