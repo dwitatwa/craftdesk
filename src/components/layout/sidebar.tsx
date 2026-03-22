@@ -54,19 +54,25 @@ export function Sidebar({
 					<span>Projects</span>
 					<button
 						type="button"
-						className="cursor-pointer rounded-sm p-1 hover:text-foreground"
+						className="inline-flex items-center gap-1.5 rounded-md border border-border/70 px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground transition-colors hover:text-foreground hover:border-border cursor-pointer"
 						onClick={onAddProject}
 						disabled={isAddingProject}
 						aria-label={isAddingProject ? "Adding project" : "Add project"}
 						title={isAddingProject ? "Adding project" : "Add project"}
 					>
 						{isAddingProject ? (
-							<LoaderCircle className="size-3 animate-spin" />
-						) : (
-							<Plus className="size-3" />
-						)}
-					</button>
-				</div>
+							<>
+								<LoaderCircle className="size-3 animate-spin" />
+								<span>Adding...</span>
+							</>
+							) : (
+								<>
+									<Plus className="size-3" />
+									<span>Add</span>
+								</>
+							)}
+						</button>
+					</div>
 				{projects.length > 0 ? (
 					<nav className="space-y-1">
 						{projects.map((project) => (

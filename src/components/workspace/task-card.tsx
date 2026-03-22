@@ -48,6 +48,8 @@ export function TaskCard({
 	const [isClickSuppressed, setIsClickSuppressed] = useState(false);
 	const taskLabel = id.startsWith("TASK-") ? `#${id.slice(5)}` : id.slice(0, 8);
 	const notesPreview = summarizeNotes(notes);
+	const metaBadgeClassName =
+		"inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] leading-none font-mono font-bold tracking-tight";
 
 	const handleDelete = async () => {
 		setIsDeleting(true);
@@ -120,11 +122,21 @@ export function TaskCard({
 						{/* Top Row: ID and Delete */}
 						<div className="flex items-center justify-between">
 							<div className="flex items-center gap-2">
-								<span className="inline-flex items-center rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[9px] leading-none font-mono font-bold tracking-tight text-muted-foreground/80">
+								<span
+									className={cn(
+										metaBadgeClassName,
+										"border border-border/70 bg-muted/35 text-muted-foreground/80",
+									)}
+								>
 									{taskLabel}
 								</span>
 								{isRunning && (
-									<span className="inline-flex items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/5 px-1.5 py-0.5 text-[8px] font-bold tracking-widest text-green-500 uppercase">
+									<span
+										className={cn(
+											metaBadgeClassName,
+											"gap-1.5 border border-green-500/20 bg-green-500/5 text-green-500 uppercase",
+										)}
+									>
 										<Terminal className="size-2.5" />
 										Running
 									</span>
