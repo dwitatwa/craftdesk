@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "#/components/layout/app-shell";
 import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
@@ -37,12 +37,24 @@ export const Route = createFileRoute("/projects/$projectId/")({
 	component: ProjectDetailView,
 });
 
+const COLLAPSED_TERMINAL_HEIGHT = 56;
+const DEFAULT_TERMINAL_HEIGHT = 280;
+const MIN_EXPANDED_TERMINAL_HEIGHT = 180;
+
 function ProjectDetailView() {
 	const { projects, workspace } = Route.useLoaderData();
 	const router = useRouter();
+	const layoutRef = useRef<HTMLDivElement | null>(null);
+	const workspaceAreaRef = useRef<HTMLDivElement | null>(null);
+	const resizeStateRef = useRef<{
+		containerBottom: number;
+		containerHeight: number;
+	} | null>(null);
 	const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
 	const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
 	const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(true);
+	const [terminalHeight, setTerminalHeight] = useState(DEFAULT_TERMINAL_HEIGHT);
+	const [isResizingTerminal, setIsResizingTerminal] = useState(false);
 
 	const primaryColumn = workspace?.columns[0];
 
@@ -133,6 +145,159 @@ function ProjectDetailView() {
 		}
 	};
 
+	useEffect(() => {
+		const container = workspaceAreaRef.current;
+
+		if (!container || typeof ResizeObserver === "undefined") {
+			return;
+		}
+
+		const syncHeight = (containerHeight: number) => {
+			setTerminalHeight((currentHeight) =>
+				clampProjectTerminalHeight(currentHeight, containerHeight),
+			);
+		};
+
+		syncHeight(container.getBoundingClientRect().height);
+
+		const resizeObserver = new ResizeObserver(([entry]) => {
+			syncHeight(entry.contentRect.height);
+		});
+
+		resizeObserver.observe(container);
+
+		return () => {
+			resizeObserver.disconnect();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isResizingTerminal) {
+			return;
+		}
+
+		const handlePointerMove = (event: PointerEvent) => {
+			const resizeState = resizeStateRef.current;
+
+			if (!resizeState) {
+				return;
+			}
+
+			setTerminalHeight(
+				clampProjectTerminalHeight(
+					resizeState.containerBottom - event.clientY,
+					resizeState.containerHeight,
+				),
+			);
+		};
+
+		const stopResizing = () => {
+			resizeStateRef.current = null;
+			setIsResizingTerminal(false);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+		};
+
+		window.addEventListener("pointermove", handlePointerMove);
+		window.addEventListener("pointerup", stopResizing);
+		window.addEventListener("pointercancel", stopResizing);
+
+		return () => {
+			window.removeEventListener("pointermove", handlePointerMove);
+			window.removeEventListener("pointerup", stopResizing);
+			window.removeEventListener("pointercancel", stopResizing);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+		};
+	}, [isResizingTerminal]);
+
+	const handleTerminalResizeStart = (
+		event: React.PointerEvent<HTMLButtonElement>,
+	) => {
+		if (event.button !== 0) {
+			return;
+		}
+
+		const container = workspaceAreaRef.current;
+
+		if (!container) {
+			return;
+		}
+
+		const rect = container.getBoundingClientRect();
+
+		resizeStateRef.current = {
+			containerBottom: rect.bottom,
+			containerHeight: rect.height,
+		};
+
+		if (isTerminalCollapsed) {
+			setIsTerminalCollapsed(false);
+		}
+
+		setTerminalHeight((currentHeight) =>
+			clampProjectTerminalHeight(currentHeight, rect.height),
+		);
+		setIsResizingTerminal(true);
+		document.body.style.cursor = "row-resize";
+		document.body.style.userSelect = "none";
+		event.currentTarget.setPointerCapture(event.pointerId);
+		event.preventDefault();
+	};
+
+	const handleTerminalResizeKeyDown = (
+		event: React.KeyboardEvent<HTMLButtonElement>,
+	) => {
+		const container = workspaceAreaRef.current;
+
+		if (!container) {
+			return;
+		}
+
+		const containerHeight = container.getBoundingClientRect().height;
+		const step = event.shiftKey ? 56 : 28;
+
+		if (event.key === "ArrowUp") {
+			event.preventDefault();
+			if (isTerminalCollapsed) {
+				setIsTerminalCollapsed(false);
+			}
+			setTerminalHeight((currentHeight) =>
+				clampProjectTerminalHeight(currentHeight + step, containerHeight),
+			);
+		}
+
+		if (event.key === "ArrowDown") {
+			event.preventDefault();
+			if (isTerminalCollapsed) {
+				setIsTerminalCollapsed(false);
+			}
+			setTerminalHeight((currentHeight) =>
+				clampProjectTerminalHeight(currentHeight - step, containerHeight),
+			);
+		}
+	};
+
+	const handleTerminalResizeDoubleClick = () => {
+		const container = workspaceAreaRef.current;
+
+		if (!container) {
+			return;
+		}
+
+		setIsTerminalCollapsed(false);
+		setTerminalHeight(
+			clampProjectTerminalHeight(
+				DEFAULT_TERMINAL_HEIGHT,
+				container.getBoundingClientRect().height,
+			),
+		);
+	};
+
+	const renderedTerminalHeight = isTerminalCollapsed
+		? COLLAPSED_TERMINAL_HEIGHT
+		: terminalHeight;
+
 	return (
 		<AppShell
 			projects={projects}
@@ -143,7 +308,7 @@ function ProjectDetailView() {
 			addProjectError={addProjectError}
 			onDeleteProject={handleDeleteProject}
 		>
-			<div className="flex-1 flex flex-col min-h-0">
+			<div ref={layoutRef} className="flex-1 flex flex-col min-h-0">
 				{workspace ? (
 					<>
 						{/* Workspace Header Info */}
@@ -178,38 +343,55 @@ function ProjectDetailView() {
 							</div>
 						</div>
 
-						{/* Board Area */}
-						<div className="flex-1 min-h-0 overflow-hidden">
-							<KanbanBoard
-								columns={workspace.columns}
-								onCreateTask={handleCreateTask}
-								onDeleteColumn={handleDeleteColumn}
-								onDeleteTask={handleDeleteTask}
-								onMoveTask={handleMoveTask}
-							/>
-						</div>
-
-						{/* Project Terminal */}
 						<div
-							className={cn(
-								"border-t border-white/5 transition-all duration-300 ease-in-out overflow-hidden relative",
-								isTerminalCollapsed ? "h-14" : "h-[280px]",
-							)}
+							ref={workspaceAreaRef}
+							className="relative flex-1 min-h-0 overflow-hidden"
 						>
-							<Terminal
-								title="Terminal"
-								className="h-full"
-								isCollapsed={isTerminalCollapsed}
-								onToggleCollapse={() =>
-									setIsTerminalCollapsed(!isTerminalCollapsed)
-								}
-								scope={{
-									scopeType: "project",
-									scopeId: workspace.project.id,
-									projectId: workspace.project.id,
-									cwd: workspace.project.path,
-								}}
-							/>
+							{/* Board Area */}
+							<div className="relative z-0 h-full overflow-hidden pb-14">
+								<KanbanBoard
+									columns={workspace.columns}
+									onCreateTask={handleCreateTask}
+									onDeleteColumn={handleDeleteColumn}
+									onDeleteTask={handleDeleteTask}
+									onMoveTask={handleMoveTask}
+								/>
+							</div>
+
+							{/* Project Terminal */}
+							<div
+								className={cn(
+									"absolute inset-x-0 bottom-0 z-20 overflow-hidden border-t border-white/5 bg-[#09090B] shadow-[0_-12px_36px_rgba(0,0,0,0.42)]",
+									isResizingTerminal
+										? "transition-none"
+										: "transition-[height] duration-300 ease-in-out",
+								)}
+								style={{ height: renderedTerminalHeight }}
+							>
+								<button
+									type="button"
+									className="absolute inset-x-0 top-0 z-10 h-3 cursor-row-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+									onPointerDown={handleTerminalResizeStart}
+									onKeyDown={handleTerminalResizeKeyDown}
+									onDoubleClick={handleTerminalResizeDoubleClick}
+									aria-label="Resize terminal height"
+								/>
+								<Terminal
+									title="Terminal"
+									className="h-full"
+									collapseTrigger="header"
+									isCollapsed={isTerminalCollapsed}
+									onToggleCollapse={() =>
+										setIsTerminalCollapsed(!isTerminalCollapsed)
+									}
+									scope={{
+										scopeType: "project",
+										scopeId: workspace.project.id,
+										projectId: workspace.project.id,
+										cwd: workspace.project.path,
+									}}
+								/>
+							</div>
 						</div>
 					</>
 				) : (
@@ -247,4 +429,10 @@ function ProjectDetailView() {
 			</div>
 		</AppShell>
 	);
+}
+
+function clampProjectTerminalHeight(height: number, containerHeight: number) {
+	const maxHeight = Math.max(MIN_EXPANDED_TERMINAL_HEIGHT, containerHeight);
+
+	return Math.min(Math.max(height, MIN_EXPANDED_TERMINAL_HEIGHT), maxHeight);
 }

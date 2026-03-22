@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { AlignLeft, ArrowLeft, Calendar, CheckCircle2, Folder, Info } from "lucide-react";
+import { AlignLeft, ArrowLeft, Calendar, CheckCircle2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "#/components/layout/app-shell";
 import { Terminal } from "#/components/workspace/terminal";
 import { useAddProject } from "#/components/workspace/use-add-project";
@@ -22,14 +23,26 @@ export const Route = createFileRoute("/projects/$projectId/tasks/$taskId")({
 	component: TaskDetailView,
 });
 
+const DEFAULT_DETAIL_PANEL_RATIO = 0.48;
+const MIN_DETAIL_PANEL_WIDTH = 360;
+const MIN_TERMINAL_PANEL_WIDTH = 420;
+const DIVIDER_WIDTH = 12;
+
 function TaskDetailView() {
 	const { task, projects } = Route.useLoaderData();
 	const router = useRouter();
+	const splitContainerRef = useRef<HTMLDivElement | null>(null);
+	const dragStateRef = useRef<{
+		containerLeft: number;
+		containerWidth: number;
+	} | null>(null);
 	const { addProject, addProjectError, isAddingProject } = useAddProject({
 		onProjectSaved: async () => {
 			await router.invalidate();
 		},
 	});
+	const [detailPanelWidth, setDetailPanelWidth] = useState<number | null>(null);
+	const [isDraggingDivider, setIsDraggingDivider] = useState(false);
 
 	const handleDeleteProject = async (projectId: string) => {
 		await deleteProject({ data: { projectId } });
@@ -40,19 +53,179 @@ function TaskDetailView() {
 		}
 	};
 
+	useEffect(() => {
+		const container = splitContainerRef.current;
+
+		if (!container || typeof ResizeObserver === "undefined") {
+			return;
+		}
+
+		const syncWidth = (containerWidth: number) => {
+			setDetailPanelWidth((currentWidth) => {
+				const fallbackWidth = containerWidth * DEFAULT_DETAIL_PANEL_RATIO;
+				return clampDetailPanelWidth(
+					currentWidth ?? fallbackWidth,
+					containerWidth,
+				);
+			});
+		};
+
+		syncWidth(container.getBoundingClientRect().width);
+
+		const resizeObserver = new ResizeObserver(([entry]) => {
+			syncWidth(entry.contentRect.width);
+		});
+
+		resizeObserver.observe(container);
+
+		return () => {
+			resizeObserver.disconnect();
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isDraggingDivider) {
+			return;
+		}
+
+		const handlePointerMove = (event: PointerEvent) => {
+			const dragState = dragStateRef.current;
+
+			if (!dragState) {
+				return;
+			}
+
+			const nextWidth = clampDetailPanelWidth(
+				event.clientX - dragState.containerLeft,
+				dragState.containerWidth,
+			);
+
+			setDetailPanelWidth(nextWidth);
+		};
+
+		const stopDragging = () => {
+			dragStateRef.current = null;
+			setIsDraggingDivider(false);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+		};
+
+		window.addEventListener("pointermove", handlePointerMove);
+		window.addEventListener("pointerup", stopDragging);
+		window.addEventListener("pointercancel", stopDragging);
+
+		return () => {
+			window.removeEventListener("pointermove", handlePointerMove);
+			window.removeEventListener("pointerup", stopDragging);
+			window.removeEventListener("pointercancel", stopDragging);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+		};
+	}, [isDraggingDivider]);
+
+	const handleDividerPointerDown = (
+		event: React.PointerEvent<HTMLButtonElement>,
+	) => {
+		if (event.button !== 0) {
+			return;
+		}
+
+		const container = splitContainerRef.current;
+
+		if (!container) {
+			return;
+		}
+
+		const rect = container.getBoundingClientRect();
+
+		dragStateRef.current = {
+			containerLeft: rect.left,
+			containerWidth: rect.width,
+		};
+
+		setDetailPanelWidth((currentWidth) =>
+			clampDetailPanelWidth(
+				currentWidth ?? rect.width * DEFAULT_DETAIL_PANEL_RATIO,
+				rect.width,
+			),
+		);
+		setIsDraggingDivider(true);
+		document.body.style.cursor = "col-resize";
+		document.body.style.userSelect = "none";
+		event.currentTarget.setPointerCapture(event.pointerId);
+		event.preventDefault();
+	};
+
+	const handleDividerDoubleClick = () => {
+		const container = splitContainerRef.current;
+
+		if (!container) {
+			return;
+		}
+
+		setDetailPanelWidth(
+			clampDetailPanelWidth(
+				container.getBoundingClientRect().width * DEFAULT_DETAIL_PANEL_RATIO,
+				container.getBoundingClientRect().width,
+			),
+		);
+	};
+
+	const handleDividerKeyDown = (
+		event: React.KeyboardEvent<HTMLButtonElement>,
+	) => {
+		const container = splitContainerRef.current;
+
+		if (!container) {
+			return;
+		}
+
+		const containerWidth = container.getBoundingClientRect().width;
+		const step = event.shiftKey ? 48 : 24;
+		const currentWidth = clampDetailPanelWidth(
+			detailPanelWidth ?? containerWidth * DEFAULT_DETAIL_PANEL_RATIO,
+			containerWidth,
+		);
+
+		if (event.key === "ArrowLeft") {
+			event.preventDefault();
+			setDetailPanelWidth(
+				clampDetailPanelWidth(currentWidth - step, containerWidth),
+			);
+		}
+
+		if (event.key === "ArrowRight") {
+			event.preventDefault();
+			setDetailPanelWidth(
+				clampDetailPanelWidth(currentWidth + step, containerWidth),
+			);
+		}
+	};
+
+	const detailWidth = detailPanelWidth ?? MIN_DETAIL_PANEL_WIDTH;
+
 	return (
 		<AppShell
 			projects={projects}
-			onAddProject={addProject}
+			onAddProject={async () => {
+				await addProject();
+			}}
 			isAddingProject={isAddingProject}
 			addProjectError={addProjectError}
 			onDeleteProject={handleDeleteProject}
 		>
-			<div className="flex h-full flex-1 overflow-hidden">
+			<div
+				ref={splitContainerRef}
+				className="flex h-full flex-1 overflow-hidden"
+			>
 				{task ? (
 					<>
 						{/* Left Side: Details */}
-						<div className="flex flex-col w-1/2 border-r bg-background overflow-y-auto custom-scrollbar">
+						<div
+							id="task-detail-panel"
+							className="flex min-w-0 flex-col overflow-y-auto bg-background custom-scrollbar"
+							style={{ width: detailWidth }}
+						>
 							{/* Header - Consistent with Sidebar and Terminal */}
 							<div className="h-20 flex items-center justify-between px-6 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
 								<div className="flex items-center gap-4 min-w-0">
@@ -74,7 +247,9 @@ function TaskDetailView() {
 														<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
 														<span className="relative inline-flex rounded-full size-1.5 bg-green-500" />
 													</span>
-													<span className="text-[8px] font-mono font-bold text-green-500 uppercase tracking-widest">Running</span>
+													<span className="text-[8px] font-mono font-bold text-green-500 uppercase tracking-widest">
+														Running
+													</span>
 												</div>
 											)}
 										</div>
@@ -116,7 +291,9 @@ function TaskDetailView() {
 											Done Date
 										</div>
 										<div className="text-sm font-medium text-foreground/90">
-											{task.doneAt ? formatTimestamp(task.doneAt) : "In Progress Session"}
+											{task.doneAt
+												? formatTimestamp(task.doneAt)
+												: "In Progress Session"}
 										</div>
 										<div className="absolute -right-2 -bottom-2 opacity-[0.02] group-hover:opacity-[0.05] transition-opacity">
 											<CheckCircle2 className="size-16" />
@@ -136,7 +313,8 @@ function TaskDetailView() {
 										<div className="text-sm leading-relaxed text-foreground/80 whitespace-pre-wrap">
 											{task.description || (
 												<span className="italic text-muted-foreground/40">
-													No description provided for this task. Use the dashboard to add technical requirements.
+													No description provided for this task. Use the
+													dashboard to add technical requirements.
 												</span>
 											)}
 										</div>
@@ -144,17 +322,34 @@ function TaskDetailView() {
 								</div>
 							</div>
 						</div>
-						<Terminal
-							className="flex-1"
-							headerHeight="h-20"
-							title="Terminal"
-							scope={{
-								scopeType: "task",
-								scopeId: task.id,
-								projectId: task.projectId,
-								cwd: task.projectPath,
-							}}
-						/>
+
+						<div className="relative flex w-3 shrink-0 items-stretch justify-center bg-background/80">
+							<div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80" />
+							<button
+								type="button"
+								className="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+								onPointerDown={handleDividerPointerDown}
+								onDoubleClick={handleDividerDoubleClick}
+								onKeyDown={handleDividerKeyDown}
+								aria-controls="task-detail-panel task-terminal-panel"
+								aria-label="Resize task detail panels"
+								tabIndex={0}
+							/>
+						</div>
+
+						<div id="task-terminal-panel" className="flex min-w-0 flex-1">
+							<Terminal
+								className="flex-1"
+								headerHeight="h-20"
+								title="Terminal"
+								scope={{
+									scopeType: "task",
+									scopeId: task.id,
+									projectId: task.projectId,
+									cwd: task.projectPath,
+								}}
+							/>
+						</div>
 					</>
 				) : (
 					<div className="flex flex-1 items-center justify-center p-8">
@@ -170,6 +365,15 @@ function TaskDetailView() {
 			</div>
 		</AppShell>
 	);
+}
+
+function clampDetailPanelWidth(width: number, containerWidth: number) {
+	const maxWidth = Math.max(
+		MIN_DETAIL_PANEL_WIDTH,
+		containerWidth - MIN_TERMINAL_PANEL_WIDTH - DIVIDER_WIDTH,
+	);
+
+	return Math.min(Math.max(width, MIN_DETAIL_PANEL_WIDTH), maxWidth);
 }
 
 function formatTimestamp(value: string) {

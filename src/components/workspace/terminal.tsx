@@ -17,6 +17,7 @@ import {
 
 interface TerminalProps {
 	className?: string;
+	collapseTrigger?: "button" | "header";
 	title?: string;
 	headerHeight?: string;
 	isCollapsed?: boolean;
@@ -32,6 +33,7 @@ const INITIAL_VIEW_STATE: TerminalViewState = {
 
 export function Terminal({
 	className,
+	collapseTrigger = "button",
 	title = "Active Terminal",
 	headerHeight = "h-14",
 	isCollapsed = false,
@@ -107,6 +109,37 @@ export function Terminal({
 	const { error, isConnecting, session } = viewState;
 	const statusLabel = session?.status ?? (isConnecting ? "connecting" : "idle");
 	const scopeLabel = scope.scopeType === "task" ? "task" : "project";
+	const isHeaderToggleEnabled =
+		Boolean(onToggleCollapse) && collapseTrigger === "header";
+
+	const headerContent = (
+		<>
+			<TerminalIcon className="size-3.5 text-primary shrink-0" />
+			<div className="flex items-center gap-1.5 min-w-0">
+				<span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest truncate">
+					{title}
+				</span>
+				<span className="text-[10px] font-mono text-zinc-500 uppercase">
+					[{scopeLabel}]
+				</span>
+				<span
+					className={cn(
+						"text-[10px] font-mono uppercase",
+						session?.status === "running"
+							? "text-green-400"
+							: session?.status === "exited"
+								? "text-amber-300"
+								: "text-zinc-400",
+					)}
+				>
+					[{statusLabel}]
+					{session?.exitCode !== null && session?.status === "exited" && (
+						<span className="ml-1 opacity-70">({session.exitCode})</span>
+					)}
+				</span>
+			</div>
+		</>
+	);
 
 	return (
 		<div className={cn("flex flex-col bg-[#09090B]", className)}>
@@ -116,34 +149,21 @@ export function Terminal({
 					headerHeight,
 				)}
 			>
-				<div className="flex items-center gap-3 min-w-0">
-					<TerminalIcon className="size-3.5 text-primary shrink-0" />
-					<div className="flex items-center gap-1.5 min-w-0">
-						<span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest truncate">
-							{title}
-						</span>
-						<span className="text-[10px] font-mono text-zinc-500 uppercase">
-							[{scopeLabel}]
-						</span>
-						<span
-							className={cn(
-								"text-[10px] font-mono uppercase",
-								session?.status === "running"
-									? "text-green-400"
-									: session?.status === "exited"
-										? "text-amber-300"
-										: "text-zinc-400",
-							)}
-						>
-							[{statusLabel}]
-							{session?.exitCode !== null && session?.status === "exited" && (
-								<span className="ml-1 opacity-70">({session.exitCode})</span>
-							)}
-						</span>
-					</div>
-				</div>
+				{isHeaderToggleEnabled ? (
+					<button
+						type="button"
+						className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+						onClick={onToggleCollapse}
+						aria-expanded={!isCollapsed}
+						aria-label={isCollapsed ? `Expand ${title}` : `Collapse ${title}`}
+					>
+						{headerContent}
+					</button>
+				) : (
+					<div className="flex min-w-0 items-center gap-3">{headerContent}</div>
+				)}
 				<div className="flex items-center gap-1 shrink-0">
-					{onToggleCollapse && (
+					{onToggleCollapse && collapseTrigger === "button" && (
 						<Button
 							variant="ghost"
 							size="icon"
@@ -187,32 +207,32 @@ export function Terminal({
 					<div ref={hostRef} className="h-full w-full" />
 
 					{(isConnecting || error || session?.warnings.length) && (
-							<div className="absolute right-4 top-4 z-10 flex max-w-[min(32rem,calc(100%-2rem))] flex-col gap-2">
-								{isConnecting && (
-									<div className="rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs font-mono text-zinc-300 shadow-lg backdrop-blur-sm">
-										<span className="inline-flex items-center gap-2">
-											<LoaderCircle className="size-3 animate-spin" />
-											Connecting terminal...
-										</span>
-									</div>
-								)}
-								{session?.warnings.map((warning) => (
-									<div
-										key={warning}
-										className="rounded-lg border border-amber-400/15 bg-amber-400/10 px-3 py-2 text-xs font-mono text-amber-100 shadow-lg backdrop-blur-sm"
-									>
-										{warning}
-									</div>
-								))}
-								{error && (
-									<div className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-100 shadow-lg backdrop-blur-sm">
-										{error}
-									</div>
-								)}
-							</div>
-						)}
-					</div>
-				)}
+						<div className="absolute right-4 top-4 z-10 flex max-w-[min(32rem,calc(100%-2rem))] flex-col gap-2">
+							{isConnecting && (
+								<div className="rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs font-mono text-zinc-300 shadow-lg backdrop-blur-sm">
+									<span className="inline-flex items-center gap-2">
+										<LoaderCircle className="size-3 animate-spin" />
+										Connecting terminal...
+									</span>
+								</div>
+							)}
+							{session?.warnings.map((warning) => (
+								<div
+									key={warning}
+									className="rounded-lg border border-amber-400/15 bg-amber-400/10 px-3 py-2 text-xs font-mono text-amber-100 shadow-lg backdrop-blur-sm"
+								>
+									{warning}
+								</div>
+							))}
+							{error && (
+								<div className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-100 shadow-lg backdrop-blur-sm">
+									{error}
+								</div>
+							)}
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
