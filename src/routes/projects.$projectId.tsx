@@ -9,6 +9,8 @@ import { AppShell } from "#/components/layout/app-shell";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { CreateTaskModal } from "#/components/workspace/create-task-modal";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
+import { Terminal } from "#/components/workspace/terminal";
+import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/projects/$projectId")({
   component: ProjectDetailView,
@@ -24,6 +26,7 @@ function ProjectDetailView() {
   const { projectId } = Route.useParams();
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
+  const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
 
   const project = PROJECT_MAP[projectId as keyof typeof PROJECT_MAP] || { 
     title: projectId.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' '), 
@@ -63,6 +66,21 @@ function ProjectDetailView() {
         {/* Board Area */}
         <div className="flex-1 min-h-0 overflow-hidden">
           <KanbanBoard />
+        </div>
+
+        {/* Project Terminal */}
+        <div 
+          className={cn(
+            "border-t border-white/5 transition-all duration-300 ease-in-out overflow-hidden relative",
+            isTerminalCollapsed ? "h-14" : "h-[280px]"
+          )}
+        >
+          <Terminal 
+            title="Project Terminal" 
+            className="h-full" 
+            isCollapsed={isTerminalCollapsed}
+            onToggleCollapse={() => setIsTerminalCollapsed(!isTerminalCollapsed)}
+          />
         </div>
 
         <CreateTaskModal 
