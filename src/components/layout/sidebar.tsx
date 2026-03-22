@@ -1,6 +1,7 @@
 import { 
   Folder, 
-  Plus
+  Plus,
+  Layers
 } from "lucide-react";
 import { cn } from "#/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -14,11 +15,11 @@ export function Sidebar({ className }: SidebarProps) {
     <aside className={cn("flex flex-col border-r bg-sidebar h-screen w-64", className)}>
       {/* App Header */}
       <div className="h-20 flex items-center px-4 border-b">
-        <Link to="/" className="flex items-center gap-2 px-3 cursor-pointer">
-          <div className="flex items-center justify-center w-6 h-6 rounded bg-primary text-primary-foreground font-bold text-[10px]">
-            C
+        <Link to="/" className="flex items-center gap-2.5 px-3 cursor-pointer">
+          <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary text-primary-foreground">
+            <Layers className="size-4" />
           </div>
-          <span className="text-sm font-bold tracking-tight">Craftdesk</span>
+          <span className="text-base font-bold tracking-tight">Craftdesk</span>
         </Link>
       </div>
 
