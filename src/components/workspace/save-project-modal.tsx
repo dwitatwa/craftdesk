@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -10,47 +11,26 @@ import {
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import { Textarea } from "#/components/ui/textarea";
+import type { SaveProjectInput } from "#/lib/craftdesk";
 
-interface CreateTaskModalProps {
+interface SaveProjectModalProps {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
-	columnTitle?: string;
-	onCreate: (input: {
-		title: string;
-		description: string;
-	}) => Promise<void> | void;
+	onSubmit: (input: SaveProjectInput) => Promise<void> | void;
 }
 
-export function CreateTaskModal({
+export function SaveProjectModal({
 	isOpen,
 	onOpenChange,
-	columnTitle,
-	onCreate,
-}: CreateTaskModalProps) {
-	const [title, setTitle] = useState("");
-	const [description, setDescription] = useState("");
+	onSubmit,
+}: SaveProjectModalProps) {
+	const [name, setName] = useState("");
+	const [projectPath, setProjectPath] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	const resetForm = () => {
-		setTitle("");
-		setDescription("");
-	};
-
-	const handleCreate = async () => {
-		setIsSubmitting(true);
-
-		try {
-			await onCreate({
-				title: title.trim(),
-				description: description.trim(),
-			});
-
-			resetForm();
-			onOpenChange(false);
-		} finally {
-			setIsSubmitting(false);
-		}
+		setName("");
+		setProjectPath("");
 	};
 
 	const handleOpenChange = (open: boolean) => {
@@ -61,46 +41,61 @@ export function CreateTaskModal({
 		onOpenChange(open);
 	};
 
+	const handleSubmit = async () => {
+		setIsSubmitting(true);
+
+		try {
+			await onSubmit({
+				name: name.trim(),
+				path: projectPath.trim(),
+			});
+
+			resetForm();
+			onOpenChange(false);
+		} finally {
+			setIsSubmitting(false);
+		}
+	};
+
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
 			<DialogContent className="sm:max-w-[425px]">
 				<DialogHeader>
-					<DialogTitle>Create New Task</DialogTitle>
+					<DialogTitle>Save Project</DialogTitle>
 					<DialogDescription>
-						{columnTitle
-							? `Add a new task to the "${columnTitle}" column.`
-							: "Add a new task to your workspace."}
+						Add a local folder to Craftdesk so it appears in your recent and
+						sidebar project lists.
 					</DialogDescription>
 				</DialogHeader>
 				<div className="grid gap-4 py-4">
 					<div className="grid gap-2">
 						<Label
-							htmlFor="title"
+							htmlFor="project-name"
 							className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70"
 						>
-							Title
+							Project Name
 						</Label>
 						<Input
-							id="title"
-							placeholder="Task title..."
-							value={title}
-							onChange={(e) => setTitle(e.target.value)}
+							id="project-name"
+							placeholder="Optional display name"
+							value={name}
+							onChange={(event) => setName(event.target.value)}
 							className="bg-muted/30 focus-visible:ring-primary/30"
 						/>
 					</div>
 					<div className="grid gap-2">
 						<Label
-							htmlFor="description"
+							htmlFor="project-path"
 							className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70"
 						>
-							Description
+							Local Path
 						</Label>
-						<Textarea
-							id="description"
-							placeholder="Detailed description of the task..."
-							value={description}
-							onChange={(e) => setDescription(e.target.value)}
-							className="min-h-[100px] bg-muted/30 focus-visible:ring-primary/30"
+						<Input
+							id="project-path"
+							placeholder="~/projects/side/example"
+							value={projectPath}
+							onChange={(event) => setProjectPath(event.target.value)}
+							className="bg-muted/30 focus-visible:ring-primary/30"
 						/>
 					</div>
 				</div>
@@ -114,11 +109,11 @@ export function CreateTaskModal({
 						Cancel
 					</Button>
 					<Button
-						onClick={handleCreate}
-						disabled={!title.trim() || isSubmitting}
+						onClick={handleSubmit}
+						disabled={!projectPath.trim() || isSubmitting}
 						className="cursor-pointer"
 					>
-						{isSubmitting ? "Creating..." : "Create Task"}
+						{isSubmitting ? "Saving..." : "Save Project"}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

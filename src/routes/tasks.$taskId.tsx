@@ -1,60 +1,120 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { 
-  ArrowLeft, 
-} from "lucide-react";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 import { AppShell } from "#/components/layout/app-shell";
+import { SaveProjectModal } from "#/components/workspace/save-project-modal";
 import { Terminal } from "#/components/workspace/terminal";
+import { getTaskDetail, listProjects, saveProject } from "#/server/craftdesk";
 
 export const Route = createFileRoute("/tasks/$taskId")({
-  component: TaskDetailView,
+	loader: async ({ params }) => ({
+		task: await getTaskDetail({
+			data: { taskId: params.taskId },
+		}),
+		projects: await listProjects({
+			data: { sortBy: "name" },
+		}),
+	}),
+	component: TaskDetailView,
 });
 
 function TaskDetailView() {
-  const { taskId } = Route.useParams();
+	const { task, projects } = Route.useLoaderData();
+	const router = useRouter();
+	const [isSaveProjectModalOpen, setIsSaveProjectModalOpen] = useState(false);
 
-  // Mock task data for the view
-  const task = {
-    id: taskId,
-    title: "Compile production kernel",
-    description: "The production kernel needs to be compiled with the latest security patches and performance optimizations for the upcoming v2.0 release. This includes updating the build script and verifying the checksums of all dependencies.",
-    status: "running",
-  };
+	const handleSaveProject = async (input: { name: string; path: string }) => {
+		const project = await saveProject({ data: input });
+		await router.invalidate();
+		await router.navigate({
+			to: "/projects/$projectId",
+			params: { projectId: project.id },
+		});
+	};
 
-  return (
-    <AppShell>
-      <div className="flex h-full flex-1 overflow-hidden">
-        {/* Left Side: Details */}
-        <div className="flex flex-col w-1/2 border-r bg-background overflow-y-auto">
-          {/* Header */}
-          <div className="h-20 flex items-center justify-between p-4 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
-            <div className="flex items-center gap-3 px-2">
-              <Link to="/" className="p-2 hover:bg-muted rounded-md transition-colors">
-                <ArrowLeft className="size-4" />
-              </Link>
-              <div className="flex flex-col">
-                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest leading-none">{task.id}</span>
-                <h1 className="text-sm font-bold truncate max-w-[300px] mt-1 leading-none">{task.title}</h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-            </div>
-          </div>
+	return (
+		<AppShell
+			projects={projects}
+			onAddProject={() => setIsSaveProjectModalOpen(true)}
+		>
+			<div className="flex h-full flex-1 overflow-hidden">
+				{task ? (
+					<>
+						{/* Left Side: Details */}
+						<div className="flex flex-col w-1/2 border-r bg-background overflow-y-auto">
+							{/* Header */}
+							<div className="h-20 flex items-center justify-between p-4 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
+								<div className="flex items-center gap-3 px-2">
+									<Link
+										to="/projects/$projectId"
+										params={{ projectId: task.projectId }}
+										className="p-2 hover:bg-muted rounded-md transition-colors"
+									>
+										<ArrowLeft className="size-4" />
+									</Link>
+									<div className="flex flex-col">
+										<span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest leading-none">
+											{task.id}
+										</span>
+										<h1 className="text-sm font-bold truncate max-w-[300px] mt-1 leading-none">
+											{task.title}
+										</h1>
+									</div>
+								</div>
+								<div className="px-2 text-right">
+									<div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+										{task.columnTitle}
+									</div>
+									<div className="mt-1 text-xs text-muted-foreground">
+										{task.projectName}
+									</div>
+								</div>
+							</div>
 
-          {/* Content */}
-          <div className="p-6 space-y-8">
-            {/* Description Section */}
-            <div className="space-y-3">
-              <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Description</h2>
-              <p className="text-sm leading-relaxed text-foreground/90 bg-muted/30 p-4 rounded-xl border">
-                {task.description}
-              </p>
-            </div>
-          </div>
-        </div>
+							{/* Content */}
+							<div className="p-6 space-y-8">
+								<div className="space-y-3">
+									<h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+										Workspace
+									</h2>
+									<div className="rounded-xl border bg-muted/20 p-4">
+										<div className="font-medium">{task.projectName}</div>
+										<div className="mt-1 text-xs font-mono text-muted-foreground">
+											{task.projectPath}
+										</div>
+									</div>
+								</div>
 
-        {/* Right Side: Terminal */}
-        <Terminal className="flex-1" headerHeight="h-20" />
-      </div>
-    </AppShell>
-  );
+								<div className="space-y-3">
+									<h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+										Description
+									</h2>
+									<p className="text-sm leading-relaxed text-foreground/90 bg-muted/30 p-4 rounded-xl border">
+										{task.description || "No description yet."}
+									</p>
+								</div>
+							</div>
+						</div>
+						<Terminal className="flex-1" headerHeight="h-20" />
+					</>
+				) : (
+					<div className="flex flex-1 items-center justify-center p-8">
+						<div className="max-w-md rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
+							<h1 className="text-lg font-semibold">Task not found</h1>
+							<p className="mt-2 text-sm text-muted-foreground">
+								This task may have been deleted or the database has not been
+								seeded with it.
+							</p>
+						</div>
+					</div>
+				)}
+			</div>
+
+			<SaveProjectModal
+				isOpen={isSaveProjectModalOpen}
+				onOpenChange={setIsSaveProjectModalOpen}
+				onSubmit={handleSaveProject}
+			/>
+		</AppShell>
+	);
 }
