@@ -299,6 +299,15 @@ function ProjectDetailView() {
 	return (
 		<AppShell
 			projects={projects}
+			activeProject={
+				workspace
+					? {
+							id: workspace.project.id,
+							name: workspace.project.name,
+							path: workspace.project.path,
+						}
+					: null
+			}
 			onAddProject={async () => {
 				await addProject();
 			}}

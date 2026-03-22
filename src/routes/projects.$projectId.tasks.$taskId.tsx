@@ -208,6 +208,15 @@ function TaskDetailView() {
 	return (
 		<AppShell
 			projects={projects}
+			activeProject={
+				task
+					? {
+							id: task.projectId,
+							name: task.projectName,
+							path: task.projectPath,
+						}
+					: null
+			}
 			onAddProject={async () => {
 				await addProject();
 			}}
