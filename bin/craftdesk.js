@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { constants as fsConstants } from "node:fs";
 import {
 	accessSync,
@@ -13,7 +14,7 @@ import {
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { cp, mkdir, rename, rm } from "node:fs/promises";
+import { mkdir, rename, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -28,17 +29,13 @@ const PACKAGE_ROOT = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
 	"..",
 );
-const COPY_ITEMS = [
-	"package.json",
-	"src",
-	"public",
-	"vite.config.ts",
-	"tsconfig.json",
-	"components.json",
-	"biome.json",
-	"README.md",
-];
-const OPTIONAL_COPY_ITEMS = ["package-lock.json"];
+const PACKAGED_SERVER_ENTRY = path.join(
+	PACKAGE_ROOT,
+	".output",
+	"server",
+	"index.mjs",
+);
+const runtimeRequire = createRequire(import.meta.url);
 
 const REQUIREMENTS = [
 	{
@@ -59,46 +56,6 @@ const REQUIREMENTS = [
 			apt: ["git"],
 			dnf: ["git"],
 			pacman: ["git"],
-		},
-	},
-	{
-		label: "npm",
-		commands: ["npm"],
-		required: true,
-		packages: {
-			apt: ["npm"],
-			dnf: ["npm"],
-			pacman: ["npm"],
-		},
-	},
-	{
-		label: "python",
-		commands: ["python3", "python"],
-		required: true,
-		packages: {
-			apt: ["python3"],
-			dnf: ["python3"],
-			pacman: ["python"],
-		},
-	},
-	{
-		label: "make",
-		commands: ["make"],
-		required: true,
-		packages: {
-			apt: ["build-essential"],
-			dnf: ["make"],
-			pacman: ["make"],
-		},
-	},
-	{
-		label: "c++ compiler",
-		commands: ["g++", "c++"],
-		required: true,
-		packages: {
-			apt: ["build-essential"],
-			dnf: ["gcc-c++"],
-			pacman: ["gcc"],
 		},
 	},
 	{
@@ -188,13 +145,15 @@ Usage:
 
 Notes:
   - Linux only.
-  - The CLI installs a user-owned app copy under ~/.local/share/craftdesk.
-  - The globally installed npm package stays as the bootstrap CLI.`);
+  - The packaged app runtime stays in the global npm install location.
+  - User-owned data and runtime files live under ~/.local/share/craftdesk.`);
 }
 
 async function installCommand(options) {
 	ensureLinux();
 	ensureNodeVersion();
+	ensurePackagedRuntime();
+	ensureRuntimeDependency("node-pty");
 
 	const paths = getInstallPaths();
 	const packageManager = detectLinuxPackageManager();
@@ -267,53 +226,17 @@ async function installCommand(options) {
 	await migrateLegacyRuntimeData(paths);
 	await mkdir(paths.dataRoot, { recursive: true });
 
-	const stageRoot = `${paths.appRoot}.stage`;
-	rmSync(stageRoot, { recursive: true, force: true });
-
-	try {
-		console.log(`Preparing ${APP_NAME} sources in ${stageRoot}`);
-		await stageProjectCopy(stageRoot);
-
-		const installArgs = existsSync(path.join(stageRoot, "package-lock.json"))
-			? ["ci"]
-			: ["install"];
-
-		console.log(`Installing npm dependencies with "npm ${installArgs.join(" ")}"`);
-		runCommand("npm", installArgs, {
-			cwd: stageRoot,
-			stdio: "inherit",
-		});
-
-		console.log("Building production app");
-		runCommand("npm", ["run", "build"], {
-			cwd: stageRoot,
-			stdio: "inherit",
-		});
-
-		const serverEntry = path.join(stageRoot, ".output", "server", "index.mjs");
-
-		if (!existsSync(serverEntry)) {
-			throw new Error(
-				`Build completed without producing ${serverEntry}.`,
-			);
-		}
-
-		rmSync(paths.appRoot, { recursive: true, force: true });
-		await rename(stageRoot, paths.appRoot);
-
-		console.log(`\n${APP_NAME} is installed.`);
-		console.log(`App home: ${paths.installHome}`);
-		console.log(`Data: ${paths.dataRoot}`);
-		console.log(`Next step: ${CLI_NAME} start`);
-	} catch (error) {
-		rmSync(stageRoot, { recursive: true, force: true });
-		throw error;
-	}
+	console.log(`\n${APP_NAME} is installed.`);
+	console.log(`Package runtime: ${PACKAGE_ROOT}`);
+	console.log(`Data: ${paths.dataRoot}`);
+	console.log(`Next step: ${CLI_NAME} start`);
 }
 
 async function startCommand(options) {
 	ensureLinux();
 	ensureNodeVersion();
+	ensurePackagedRuntime();
+	ensureRuntimeDependency("node-pty");
 
 	const paths = getInstallPaths();
 	const metadata = readPidMetadata(paths);
@@ -329,14 +252,6 @@ async function startCommand(options) {
 		removePidFile(paths);
 	}
 
-	const serverEntry = path.join(paths.appRoot, ".output", "server", "index.mjs");
-
-	if (!existsSync(serverEntry)) {
-		throw new Error(
-			`${APP_NAME} is not installed yet. Run "${CLI_NAME} install" first.`,
-		);
-	}
-
 	await mkdir(paths.runtimeRoot, { recursive: true });
 	await mkdir(paths.runRoot, { recursive: true });
 	await mkdir(paths.logsRoot, { recursive: true });
@@ -344,7 +259,7 @@ async function startCommand(options) {
 	await mkdir(paths.dataRoot, { recursive: true });
 
 	const logFd = openSync(paths.logFile, "a");
-	const child = spawn(process.execPath, [serverEntry], {
+	const child = spawn(process.execPath, [PACKAGED_SERVER_ENTRY], {
 		cwd: paths.runtimeRoot,
 		detached: true,
 		env: {
@@ -489,7 +404,6 @@ function getInstallPaths() {
 
 	return {
 		installHome,
-		appRoot: path.join(installHome, "app"),
 		dataRoot: path.join(installHome, "data"),
 		runtimeRoot: path.join(installHome, "runtime"),
 		runRoot: path.join(installHome, "run"),
@@ -497,6 +411,26 @@ function getInstallPaths() {
 		pidFile: path.join(installHome, "run", "craftdesk.pid"),
 		logFile: path.join(installHome, "logs", "server.log"),
 	};
+}
+
+function ensurePackagedRuntime() {
+	if (existsSync(PACKAGED_SERVER_ENTRY)) {
+		return;
+	}
+
+	throw new Error(
+		`Packaged runtime is missing. Rebuild the package with "npm run build" before installing or publishing.`,
+	);
+}
+
+function ensureRuntimeDependency(moduleId) {
+	try {
+		runtimeRequire.resolve(moduleId);
+	} catch {
+		throw new Error(
+			`Runtime dependency "${moduleId}" is missing from the installed CLI package. Reinstall the package with npm.`,
+		);
+	}
 }
 
 function detectLinuxPackageManager() {
@@ -596,37 +530,6 @@ function needsSudo() {
 	return typeof process.getuid === "function" && process.getuid() !== 0;
 }
 
-async function stageProjectCopy(stageRoot) {
-	await mkdir(stageRoot, { recursive: true });
-
-	for (const item of COPY_ITEMS) {
-		const sourcePath = path.join(PACKAGE_ROOT, item);
-		const destinationPath = path.join(stageRoot, item);
-
-		if (!existsSync(sourcePath)) {
-			throw new Error(`Required package asset is missing: ${sourcePath}`);
-		}
-
-		await cp(sourcePath, destinationPath, {
-			force: true,
-			recursive: true,
-		});
-	}
-
-	for (const item of OPTIONAL_COPY_ITEMS) {
-		const sourcePath = path.join(PACKAGE_ROOT, item);
-
-		if (!existsSync(sourcePath)) {
-			continue;
-		}
-
-		await cp(sourcePath, path.join(stageRoot, item), {
-			force: true,
-			recursive: true,
-		});
-	}
-}
-
 async function migrateLegacyRuntimeData(paths) {
 	const legacyDataRoot = path.join(paths.runtimeRoot, "data");
 
@@ -635,39 +538,6 @@ async function migrateLegacyRuntimeData(paths) {
 	}
 
 	await rename(legacyDataRoot, paths.dataRoot);
-}
-
-function runCommand(command, args, options = {}) {
-	const result = spawnSync(command, args, {
-		stdio: "pipe",
-		...options,
-	});
-
-	if (result.error) {
-		throw result.error;
-	}
-
-	if (result.status !== 0) {
-		throw new Error(
-			`Command failed: ${[command, ...args].join(" ")}${formatCommandOutput(result)}`,
-		);
-	}
-
-	return result;
-}
-
-function formatCommandOutput(result) {
-	if (result.stdout || result.stderr) {
-		const stdoutText = String(result.stdout ?? "").trim();
-		const stderrText = String(result.stderr ?? "").trim();
-		const lines = [stdoutText, stderrText].filter(Boolean);
-
-		if (lines.length > 0) {
-			return `\n${lines.join("\n")}`;
-		}
-	}
-
-	return "";
 }
 
 function commandExists(command) {

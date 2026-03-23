@@ -1,20 +1,14 @@
 {
   "name": "craftdesk",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "bin": {
     "craftdesk": "./bin/craftdesk.js"
   },
   "files": [
     "bin",
-    "src",
-    "public",
+    ".output",
     "package.json",
-    "vite.config.ts",
-    "tsconfig.json",
-    "components.json",
-    "biome.json",
     "README.md"
   ],
   "engines": {
@@ -26,6 +20,7 @@
   "scripts": {
     "dev": "vite dev --port 3000",
     "build": "vite build",
+    "prepack": "npm run build",
     "preview": "vite preview",
     "start": "NITRO_PORT=4000 node .output/server/index.mjs",
     "test": "vitest run",
