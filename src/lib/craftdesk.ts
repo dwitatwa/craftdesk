@@ -170,6 +170,23 @@ export interface UpdateTaskNotesInput {
 
 const NON_ALPHANUMERIC_REGEX = /[^a-z0-9]+/g;
 
+export function getProjectFileExtension(relativePath: string) {
+	const normalizedPath = relativePath
+		.replace(/\\/g, "/")
+		.replace(/^\/+|\/+$/g, "");
+	const lastDotIndex = normalizedPath.lastIndexOf(".");
+
+	if (lastDotIndex === -1) {
+		return "";
+	}
+
+	return normalizedPath.slice(lastDotIndex + 1).toLowerCase();
+}
+
+export function isMarkdownFilePath(relativePath: string) {
+	return getProjectFileExtension(relativePath) === "md";
+}
+
 export function slugifyProjectId(value: string) {
 	return value
 		.trim()

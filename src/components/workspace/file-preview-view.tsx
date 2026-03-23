@@ -1,5 +1,7 @@
-import { Eye, FileText, LoaderCircle, Save, SquarePen, X } from "lucide-react";
+import { Eye, FileText, LoaderCircle, SquarePen, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { Button } from "#/components/ui/button";
 import { Textarea } from "#/components/ui/textarea";
@@ -7,6 +9,7 @@ import type {
 	ProjectFileSelectionState,
 	TextProjectFileContent,
 } from "#/lib/craftdesk";
+import { isMarkdownFilePath } from "#/lib/craftdesk";
 import { cn } from "#/lib/utils";
 import { updateProjectFile } from "#/server/craftdesk";
 import type { ActiveProjectContext } from "../layout/app-shell";
@@ -65,6 +68,10 @@ export function FilePreviewView({
 	const lineNumberRef = useRef<HTMLDivElement | null>(null);
 	const previewLines = getPreviewLines(draftContent);
 	const hasChanges = !!activeTextFile && draftContent !== savedContent;
+	const isMarkdownFile = activeTextFile
+		? isMarkdownFilePath(activeTextFile.relativePath)
+		: false;
+	const isMarkdownPreview = isMarkdownFile && mode === "preview";
 
 	useEffect(() => {
 		setDraftContent(activeTextFile?.content ?? "");
@@ -72,7 +79,7 @@ export function FilePreviewView({
 		setMode("write");
 		setIsSaving(false);
 		setSaveError("");
-	}, [activeTextFile?.content, activeTextFile?.relativePath]);
+	}, [activeTextFile?.content]);
 
 	useEffect(() => {
 		onDirtyChange(hasChanges);
@@ -153,50 +160,36 @@ export function FilePreviewView({
 				</div>
 				{activeTextFile ? (
 					<div className="flex items-center gap-2">
-						<div className="inline-flex rounded-lg border border-white/8 bg-white/[0.03] p-1">
-							<button
-								type="button"
-								className={cn(
-									"inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] leading-none transition-colors",
-									mode === "write"
-										? "bg-white/8 text-foreground"
-										: "text-muted-foreground hover:text-foreground",
-								)}
-								onClick={() => setMode("write")}
-							>
-								<SquarePen className="size-3 shrink-0" />
-								Write
-							</button>
-							<button
-								type="button"
-								className={cn(
-									"inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] leading-none transition-colors",
-									mode === "preview"
-										? "bg-white/8 text-foreground"
-										: "text-muted-foreground hover:text-foreground",
-								)}
-								onClick={() => setMode("preview")}
-							>
-								<Eye className="size-3 shrink-0" />
-								Preview
-							</button>
-						</div>
-						<Button
-							className="h-8 min-w-18 rounded-lg border-white/10 bg-white/[0.03] px-3 text-[10px] font-mono uppercase tracking-[0.14em] text-foreground hover:bg-white/8"
-							disabled={!hasChanges || isSaving}
-							onClick={() => {
-								void handleSave();
-							}}
-							size="xs"
-							variant="outline"
-						>
-							{isSaving ? (
-								<LoaderCircle className="size-3 animate-spin" />
-							) : (
-								<Save className="size-3" />
-							)}
-							Save
-						</Button>
+						{isMarkdownFile ? (
+							<div className="inline-flex rounded-lg border border-white/8 bg-white/[0.03] p-1">
+								<button
+									type="button"
+									className={cn(
+										"inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] leading-none transition-colors",
+										mode === "write"
+											? "bg-white/8 text-foreground"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => setMode("write")}
+								>
+									<SquarePen className="size-3 shrink-0" />
+									Write
+								</button>
+								<button
+									type="button"
+									className={cn(
+										"inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] leading-none transition-colors",
+										mode === "preview"
+											? "bg-white/8 text-foreground"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => setMode("preview")}
+								>
+									<Eye className="size-3 shrink-0" />
+									Preview
+								</button>
+							</div>
+						) : null}
 					</div>
 				) : (
 					<div className="hidden items-center gap-2 rounded-full border border-white/6 bg-white/[0.03] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/55 md:inline-flex">
@@ -234,7 +227,7 @@ export function FilePreviewView({
 					</div>
 				) : activeTextFile ? (
 					<div className="flex h-full min-h-0 flex-col">
-						{mode === "write" ? (
+						{!isMarkdownPreview ? (
 							<div className="flex min-h-0 flex-1 bg-[#09090b]/20 pb-4">
 								<div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-white/6 bg-[#050507]/70">
 									<div
@@ -255,7 +248,10 @@ export function FilePreviewView({
 											}
 										}}
 										onKeyDown={(event) => {
-											if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+											if (
+												(event.metaKey || event.ctrlKey) &&
+												event.key === "s"
+											) {
 												event.preventDefault();
 												void handleSave();
 											}
@@ -274,19 +270,29 @@ export function FilePreviewView({
 								</div>
 							</div>
 						) : (
-							<div className="min-w-full">
-								<div className="grid min-w-full grid-cols-[72px_minmax(0,1fr)] font-mono text-[12px] leading-5">
-									{previewLines.map((line) => (
-										<div className="contents" key={line.id}>
-											<div className="select-none border-r border-white/5 bg-[#09090B]/55 px-4 py-px text-right text-muted-foreground/35">
-												{line.lineNumber}
-											</div>
-											<pre className="overflow-x-auto border-b border-white/[0.02] px-5 py-px text-foreground/90">
-												{line.content || " "}
-											</pre>
-										</div>
-									))}
-								</div>
+							<div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-4">
+								{draftContent.trim() ? (
+									<div
+										className={cn(
+											"prose prose-invert prose-sm max-w-none",
+											"prose-headings:text-foreground prose-p:text-foreground/85",
+											"prose-strong:text-foreground prose-a:text-primary",
+											"prose-code:text-foreground prose-code:before:content-none prose-code:after:content-none",
+											"prose-pre:border prose-pre:border-white/10 prose-pre:bg-black/30",
+											"prose-blockquote:border-l-white/20 prose-blockquote:text-muted-foreground",
+											"prose-hr:border-white/10 prose-th:text-foreground prose-td:text-foreground/80",
+											"prose-li:text-foreground/85",
+										)}
+									>
+										<ReactMarkdown remarkPlugins={[remarkGfm]}>
+											{draftContent}
+										</ReactMarkdown>
+									</div>
+								) : (
+									<div className="flex h-full min-h-[260px] items-center justify-center px-6 text-center text-sm italic text-muted-foreground/45">
+										No markdown content yet. Start typing to preview it here.
+									</div>
+								)}
 							</div>
 						)}
 						{saveError ? (

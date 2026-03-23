@@ -6,6 +6,7 @@ import {
 	FolderOpen,
 	ImageIcon,
 	LoaderCircle,
+	NotebookText,
 	RefreshCcw,
 	Trash2,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import type {
 	ProjectFileEntry,
 	ProjectFileSelectionState,
 } from "#/lib/craftdesk";
+import { getProjectFileExtension, isMarkdownFilePath } from "#/lib/craftdesk";
 import { cn } from "#/lib/utils";
 import {
 	createProjectFile,
@@ -175,19 +177,8 @@ function arrayBufferToBase64(arrayBuffer: ArrayBuffer) {
 	return btoa(binary);
 }
 
-function getFileExtension(relativePath: string) {
-	const normalizedPath = normalizeRelativePath(relativePath);
-	const lastDotIndex = normalizedPath.lastIndexOf(".");
-
-	if (lastDotIndex === -1) {
-		return "";
-	}
-
-	return normalizedPath.slice(lastDotIndex + 1).toLowerCase();
-}
-
 function isImageFilePath(relativePath: string) {
-	return IMAGE_FILE_EXTENSIONS.has(getFileExtension(relativePath));
+	return IMAGE_FILE_EXTENSIONS.has(getProjectFileExtension(relativePath));
 }
 
 export function FileExplorer({
@@ -687,6 +678,8 @@ export function FileExplorer({
 				>
 					{isImageFilePath(entry.relativePath) ? (
 						<ImageIcon className="size-3.5 shrink-0 text-sky-300/80" />
+					) : isMarkdownFilePath(entry.relativePath) ? (
+						<NotebookText className="size-3.5 shrink-0 text-emerald-300/80" />
 					) : (
 						<FileText className="size-3.5 shrink-0 text-muted-foreground/70" />
 					)}
