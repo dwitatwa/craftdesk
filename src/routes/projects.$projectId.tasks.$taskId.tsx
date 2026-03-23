@@ -23,6 +23,7 @@ const MIN_DETAIL_PANEL_WIDTH = 360;
 const MIN_TERMINAL_PANEL_WIDTH = 420;
 
 function TaskDetailView() {
+	const { projectId } = Route.useParams();
 	const { task } = Route.useLoaderData();
 	const router = useRouter();
 	const splitContainerRef = useRef<HTMLDivElement | null>(null);
@@ -102,6 +103,34 @@ function TaskDetailView() {
 			document.body.style.userSelect = "";
 		};
 	}, [isDraggingDivider]);
+
+	useEffect(() => {
+		const handleCloseTaskDetailShortcut = (event: KeyboardEvent) => {
+			if (
+				event.defaultPrevented ||
+				event.isComposing ||
+				event.metaKey ||
+				event.ctrlKey ||
+				!event.altKey ||
+				event.shiftKey ||
+				event.key.toLowerCase() !== "w"
+			) {
+				return;
+			}
+
+			event.preventDefault();
+			void router.navigate({
+				to: "/projects/$projectId",
+				params: { projectId },
+			});
+		};
+
+		window.addEventListener("keydown", handleCloseTaskDetailShortcut);
+
+		return () => {
+			window.removeEventListener("keydown", handleCloseTaskDetailShortcut);
+		};
+	}, [projectId, router]);
 
 	const handleDividerPointerDown = (
 		event: React.PointerEvent<HTMLButtonElement>,
@@ -201,6 +230,7 @@ function TaskDetailView() {
 									to="/projects/$projectId"
 									params={{ projectId: task.projectId }}
 									className="inline-flex items-center justify-center size-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+									title="Back to kanban (Alt+W)"
 								>
 									<ArrowLeft className="size-4" />
 								</Link>

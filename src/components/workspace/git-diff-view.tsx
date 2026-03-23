@@ -204,7 +204,7 @@ export function GitDiffView({
 							size="icon-sm"
 							className="text-muted-foreground hover:text-foreground"
 							onClick={onClose}
-							title="Close diff view"
+							title="Close diff view (Alt+W or Escape)"
 						>
 							<X className="size-4" />
 						</Button>

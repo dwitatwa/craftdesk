@@ -209,7 +209,7 @@ export function FilePreviewView({
 					size="icon-sm"
 					className="ml-3 shrink-0 text-muted-foreground hover:text-foreground"
 					onClick={onClose}
-					title="Close file preview"
+					title="Close file preview (Alt+W or Escape)"
 				>
 					<X className="size-4" />
 				</Button>

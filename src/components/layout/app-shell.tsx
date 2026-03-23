@@ -52,6 +52,23 @@ function hasProjectFileSelection(selection: ProjectFileSelectionState) {
 	return !!selection.relativePath || selection.isLoading || !!selection.error;
 }
 
+function isCloseWorkspacePaneShortcut(event: KeyboardEvent) {
+	return (
+		(
+			!event.metaKey &&
+			!event.ctrlKey &&
+			!event.altKey &&
+			!event.shiftKey &&
+			event.key === "Escape"
+		) ||
+		(!event.metaKey &&
+			!event.ctrlKey &&
+			event.altKey &&
+			!event.shiftKey &&
+			event.key.toLowerCase() === "w")
+	);
+}
+
 interface AppShellProps {
 	children: React.ReactNode;
 	showSidebar?: boolean;
@@ -399,6 +416,46 @@ function ProjectWorkspaceShell({
 		}));
 		setIsProjectFileDirty(false);
 	}, []);
+
+	useEffect(() => {
+		const handlePaneCloseShortcut = (event: KeyboardEvent) => {
+			if (
+				event.defaultPrevented ||
+				event.isComposing ||
+				!showSidebar ||
+				isProjectPickerOpen ||
+				!isCloseWorkspacePaneShortcut(event)
+			) {
+				return;
+			}
+
+			if (activeWorkspacePane === "git" && selectedGitChangeRef.current) {
+				event.preventDefault();
+				handleCloseGitDiff();
+				return;
+			}
+
+			if (
+				activeWorkspacePane === "file" &&
+				hasProjectFileSelection(selectedProjectFileRef.current)
+			) {
+				event.preventDefault();
+				handleCloseProjectFile();
+			}
+		};
+
+		window.addEventListener("keydown", handlePaneCloseShortcut);
+
+		return () => {
+			window.removeEventListener("keydown", handlePaneCloseShortcut);
+		};
+	}, [
+		activeWorkspacePane,
+		handleCloseGitDiff,
+		handleCloseProjectFile,
+		isProjectPickerOpen,
+		showSidebar,
+	]);
 
 	const handleSidebarResizeStart = useCallback(
 		(event: React.PointerEvent<HTMLButtonElement>) => {

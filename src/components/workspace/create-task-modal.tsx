@@ -32,6 +32,10 @@ export function CreateTaskModal({
 	};
 
 	const handleCreate = async () => {
+		if (isSubmitting || !title.trim()) {
+			return;
+		}
+
 		setIsSubmitting(true);
 
 		try {
@@ -57,48 +61,56 @@ export function CreateTaskModal({
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
 			<DialogContent className="sm:max-w-[425px]">
-				<DialogHeader>
-					<DialogTitle>Create New Task</DialogTitle>
-					<DialogDescription>
-						{columnTitle
-							? `Add a new task to the "${columnTitle}" column.`
-							: "Add a new task to your workspace."}
-					</DialogDescription>
-				</DialogHeader>
-				<div className="grid gap-4 py-4">
-					<div className="grid gap-2">
-						<Label
-							htmlFor="title"
-							className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70"
-						>
-							Title
-						</Label>
-						<Input
-							id="title"
-							placeholder="Task title..."
-							value={title}
-							onChange={(e) => setTitle(e.target.value)}
-							className="bg-muted/30 focus-visible:ring-primary/30"
-						/>
+				<form
+					onSubmit={(event) => {
+						event.preventDefault();
+						void handleCreate();
+					}}
+				>
+					<DialogHeader>
+						<DialogTitle>Create New Task</DialogTitle>
+						<DialogDescription>
+							{columnTitle
+								? `Add a new task to the "${columnTitle}" column.`
+								: "Add a new task to your workspace."}
+						</DialogDescription>
+					</DialogHeader>
+					<div className="grid gap-4 py-4">
+						<div className="grid gap-2">
+							<Label
+								htmlFor="title"
+								className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70"
+							>
+								Title
+							</Label>
+							<Input
+								id="title"
+								placeholder="Task title..."
+								value={title}
+								onChange={(e) => setTitle(e.target.value)}
+								className="bg-muted/30 focus-visible:ring-primary/30"
+							/>
+						</div>
 					</div>
-				</div>
-				<DialogFooter>
-					<Button
-						variant="ghost"
-						onClick={() => handleOpenChange(false)}
-						className="cursor-pointer"
-						disabled={isSubmitting}
-					>
-						Cancel
-					</Button>
-					<Button
-						onClick={handleCreate}
-						disabled={!title.trim() || isSubmitting}
-						className="cursor-pointer"
-					>
-						{isSubmitting ? "Creating..." : "Create Task"}
-					</Button>
-				</DialogFooter>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="ghost"
+							onClick={() => handleOpenChange(false)}
+							className="cursor-pointer"
+							disabled={isSubmitting}
+						>
+							Cancel
+						</Button>
+						<Button
+							type="submit"
+							disabled={!title.trim() || isSubmitting}
+							className="cursor-pointer"
+						>
+							{isSubmitting ? "Creating..." : "Create Task"}
+						</Button>
+					</DialogFooter>
+				</form>
 			</DialogContent>
 		</Dialog>
 	);

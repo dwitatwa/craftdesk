@@ -264,6 +264,8 @@ export function FileExplorer({
 
 		const handleEscape = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
+				event.preventDefault();
+				event.stopPropagation();
 				setContextMenuState(null);
 			}
 		};
@@ -273,13 +275,13 @@ export function FileExplorer({
 		};
 
 		window.addEventListener("pointerdown", handlePointerDown);
-		window.addEventListener("keydown", handleEscape);
+		window.addEventListener("keydown", handleEscape, true);
 		window.addEventListener("resize", handleViewportChange);
 		window.addEventListener("scroll", handleViewportChange, true);
 
 		return () => {
 			window.removeEventListener("pointerdown", handlePointerDown);
-			window.removeEventListener("keydown", handleEscape);
+			window.removeEventListener("keydown", handleEscape, true);
 			window.removeEventListener("resize", handleViewportChange);
 			window.removeEventListener("scroll", handleViewportChange, true);
 		};
