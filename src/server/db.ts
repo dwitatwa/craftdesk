@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -23,7 +24,7 @@ import {
 } from "#/lib/craftdesk";
 import { isScopeRunning } from "#/server/terminal-manager";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = resolveDataDirectory();
 const DB_PATH = path.join(DATA_DIR, "craftdesk.sqlite");
 
 const DEFAULT_COLUMNS = ["Backlog", "To Do", "In Progress", "Done"] as const;
@@ -98,6 +99,24 @@ const DEFAULT_ALPHA_TASKS = [
 ] as const;
 
 let dbInstance: DatabaseSync | null = null;
+
+function resolveDataDirectory() {
+	const configuredPath = process.env.CRAFTDESK_DATA_DIR?.trim();
+
+	if (configuredPath) {
+		if (configuredPath === "~") {
+			return os.homedir();
+		}
+
+		if (configuredPath.startsWith("~/")) {
+			return path.join(os.homedir(), configuredPath.slice(2));
+		}
+
+		return path.resolve(configuredPath);
+	}
+
+	return path.join(process.cwd(), "data");
+}
 
 function nowIso() {
 	return new Date().toISOString();

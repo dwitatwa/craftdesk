@@ -1,7 +1,22 @@
 {
   "name": "craftdesk",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "craftdesk": "./bin/craftdesk.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "package.json",
+    "vite.config.ts",
+    "tsconfig.json",
+    "components.json",
+    "biome.json",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22.12.0"
   },

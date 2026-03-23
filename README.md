@@ -9,6 +9,41 @@ npm install
 npm run dev
 ```
 
+# Linux CLI Install
+
+Craftdesk now includes a Linux-only bootstrap CLI intended to be installed globally and then used to set up a user-owned app copy.
+
+## Install The CLI
+
+From a local checkout or private Git source:
+
+```bash
+npm install -g /path/to/craftdesk
+```
+
+This bootstrap step still requires an existing compatible Node.js runtime because npm itself needs Node in order to install the CLI. Craftdesk requires Node `>=22.12.0`.
+
+## CLI Commands
+
+```bash
+craftdesk install
+craftdesk start
+craftdesk stop
+craftdesk delete
+```
+
+`craftdesk install` does the following on Linux:
+
+1. Checks for required system tools such as `bash`, `git`, `npm`, Python, and build tooling needed for native modules.
+2. Installs missing Linux packages with `apt`, `dnf`, or `pacman` when available.
+3. Copies the packaged Craftdesk source into `~/.local/share/craftdesk/app`.
+4. Runs `npm ci` when a lockfile is available, otherwise `npm install`, and then runs `npm run build` for the installed app copy.
+5. Stores installer-managed data in `~/.local/share/craftdesk/data` and migrates legacy `runtime/data` installs automatically when possible.
+
+App code is stored under `~/.local/share/craftdesk/app`, data under `~/.local/share/craftdesk/data`, runtime files under `~/.local/share/craftdesk/runtime`, and logs under `~/.local/share/craftdesk/logs/server.log`.
+
+For local development, the app still falls back to `./data` unless `CRAFTDESK_DATA_DIR` is set explicitly.
+
 # Building For Production
 
 To build this application for production:
