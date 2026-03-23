@@ -211,7 +211,7 @@ function TaskDetailView() {
 		}
 	};
 
-	const detailWidth = detailPanelWidth ?? MIN_DETAIL_PANEL_WIDTH;
+	const detailWidth = detailPanelWidth ?? getDefaultDetailPanelWidthStyle();
 
 	return (
 		<div ref={splitContainerRef} className="flex h-full flex-1 overflow-hidden">
@@ -361,6 +361,10 @@ function clampDetailPanelWidth(width: number, containerWidth: number) {
 	);
 
 	return Math.min(Math.max(width, MIN_DETAIL_PANEL_WIDTH), maxWidth);
+}
+
+function getDefaultDetailPanelWidthStyle() {
+	return `clamp(${MIN_DETAIL_PANEL_WIDTH}px, ${DEFAULT_DETAIL_PANEL_RATIO * 100}%, max(${MIN_DETAIL_PANEL_WIDTH}px, calc(100% - ${MIN_TERMINAL_PANEL_WIDTH}px)))`;
 }
 
 function formatTimestamp(value: string) {
