@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Files, GitBranch, Layers, Settings } from "lucide-react";
+import type React from "react";
 import { Button } from "#/components/ui/button";
 import { FileExplorer } from "#/components/workspace/file-explorer";
 import type { ProjectFileSelectionState } from "#/lib/craftdesk";
@@ -13,6 +14,7 @@ type SidebarView = "explorer" | "git";
 interface SidebarProps {
 	className?: string;
 	activeProject?: ActiveProjectContext | null;
+	style?: React.CSSProperties;
 	selectedGitChange: GitSelectedChange | null;
 	onSelectGitChange: (change: GitSelectedChange | null) => void;
 	onBeforeProjectFileOpen: (
@@ -28,6 +30,7 @@ interface SidebarProps {
 export function Sidebar({
 	className,
 	activeProject = null,
+	style,
 	selectedGitChange,
 	onSelectGitChange,
 	onBeforeProjectFileOpen,
@@ -38,10 +41,9 @@ export function Sidebar({
 }: SidebarProps) {
 	return (
 		<aside
-			className={cn(
-				"flex h-screen w-80 flex-col border-r bg-sidebar",
-				className,
-			)}
+			id="project-sidebar"
+			className={cn("flex h-full min-w-0 flex-col bg-sidebar", className)}
+			style={style}
 		>
 			<div className="h-20 border-b px-6 flex items-center justify-between">
 				<Link

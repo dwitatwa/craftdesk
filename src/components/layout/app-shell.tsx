@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Folder, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import type React from "react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -34,6 +34,10 @@ export interface ActiveProjectContext {
 
 type WorkspacePane = "project" | "file" | "git";
 type SidebarView = "explorer" | "git";
+
+const DEFAULT_SIDEBAR_WIDTH = 320;
+const MIN_SIDEBAR_WIDTH = 260;
+const MIN_WORKSPACE_CONTENT_WIDTH = 560;
 
 function createEmptyProjectFileSelection(): ProjectFileSelectionState {
 	return {
@@ -203,12 +207,93 @@ function ProjectWorkspaceShell({
 	const [isProjectFileDirty, setIsProjectFileDirty] = useState(false);
 	const [activeWorkspacePane, setActiveWorkspacePane] =
 		useState<WorkspacePane>("project");
+	const splitContainerRef = useRef<HTMLDivElement | null>(null);
+	const sidebarResizeStateRef = useRef<{
+		containerLeft: number;
+		containerWidth: number;
+	} | null>(null);
 	const selectedGitChangeRef = useRef(selectedGitChange);
 	const selectedProjectFileRef = useRef(selectedProjectFile);
 	const isProjectFileDirtyRef = useRef(isProjectFileDirty);
+	const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
+	const [isResizingSidebar, setIsResizingSidebar] = useState(false);
 	selectedGitChangeRef.current = selectedGitChange;
 	selectedProjectFileRef.current = selectedProjectFile;
 	isProjectFileDirtyRef.current = isProjectFileDirty;
+
+	useEffect(() => {
+		if (!showSidebar) {
+			setSidebarWidth(null);
+			return;
+		}
+
+		const container = splitContainerRef.current;
+
+		if (!container || typeof ResizeObserver === "undefined") {
+			return;
+		}
+
+		const syncWidth = (containerWidth: number) => {
+			setSidebarWidth((currentWidth) =>
+				clampSidebarWidth(
+					currentWidth ?? DEFAULT_SIDEBAR_WIDTH,
+					containerWidth,
+				),
+			);
+		};
+
+		syncWidth(container.getBoundingClientRect().width);
+
+		const resizeObserver = new ResizeObserver(([entry]) => {
+			syncWidth(entry.contentRect.width);
+		});
+
+		resizeObserver.observe(container);
+
+		return () => {
+			resizeObserver.disconnect();
+		};
+	}, [showSidebar]);
+
+	useEffect(() => {
+		if (!isResizingSidebar) {
+			return;
+		}
+
+		const handlePointerMove = (event: PointerEvent) => {
+			const resizeState = sidebarResizeStateRef.current;
+
+			if (!resizeState) {
+				return;
+			}
+
+			setSidebarWidth(
+				clampSidebarWidth(
+					event.clientX - resizeState.containerLeft,
+					resizeState.containerWidth,
+				),
+			);
+		};
+
+		const stopResizing = () => {
+			sidebarResizeStateRef.current = null;
+			setIsResizingSidebar(false);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+		};
+
+		window.addEventListener("pointermove", handlePointerMove);
+		window.addEventListener("pointerup", stopResizing);
+		window.addEventListener("pointercancel", stopResizing);
+
+		return () => {
+			window.removeEventListener("pointermove", handlePointerMove);
+			window.removeEventListener("pointerup", stopResizing);
+			window.removeEventListener("pointercancel", stopResizing);
+			document.body.style.cursor = "";
+			document.body.style.userSelect = "";
+		};
+	}, [isResizingSidebar]);
 
 	const confirmDiscardProjectFileChanges = useCallback(() => {
 		if (!isProjectFileDirtyRef.current) {
@@ -315,6 +400,80 @@ function ProjectWorkspaceShell({
 		setIsProjectFileDirty(false);
 	}, []);
 
+	const handleSidebarResizeStart = useCallback(
+		(event: React.PointerEvent<HTMLButtonElement>) => {
+			if (event.button !== 0 || !showSidebar) {
+				return;
+			}
+
+			const container = splitContainerRef.current;
+
+			if (!container) {
+				return;
+			}
+
+			const rect = container.getBoundingClientRect();
+
+			sidebarResizeStateRef.current = {
+				containerLeft: rect.left,
+				containerWidth: rect.width,
+			};
+
+			setSidebarWidth((currentWidth) =>
+				clampSidebarWidth(currentWidth ?? DEFAULT_SIDEBAR_WIDTH, rect.width),
+			);
+			setIsResizingSidebar(true);
+			document.body.style.cursor = "col-resize";
+			document.body.style.userSelect = "none";
+			event.currentTarget.setPointerCapture(event.pointerId);
+			event.preventDefault();
+		},
+		[showSidebar],
+	);
+
+	const handleSidebarResizeDoubleClick = useCallback(() => {
+		const container = splitContainerRef.current;
+
+		if (!container || !showSidebar) {
+			return;
+		}
+
+		setSidebarWidth(
+			clampSidebarWidth(
+				DEFAULT_SIDEBAR_WIDTH,
+				container.getBoundingClientRect().width,
+			),
+		);
+	}, [showSidebar]);
+
+	const handleSidebarResizeKeyDown = useCallback(
+		(event: React.KeyboardEvent<HTMLButtonElement>) => {
+			const container = splitContainerRef.current;
+
+			if (!container || !showSidebar) {
+				return;
+			}
+
+			const containerWidth = container.getBoundingClientRect().width;
+			const step = event.shiftKey ? 48 : 24;
+			const currentWidth = clampSidebarWidth(
+				sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
+				containerWidth,
+			);
+
+			if (event.key === "ArrowLeft") {
+				event.preventDefault();
+				setSidebarWidth(clampSidebarWidth(currentWidth - step, containerWidth));
+			}
+
+			if (event.key === "ArrowRight") {
+				event.preventDefault();
+				setSidebarWidth(clampSidebarWidth(currentWidth + step, containerWidth));
+			}
+		},
+		[showSidebar, sidebarWidth],
+	);
+
 	const isGitWorkspaceVisible =
 		showSidebar &&
 		activeProject &&
@@ -327,22 +486,47 @@ function ProjectWorkspaceShell({
 		!isProjectPickerOpen &&
 		activeWorkspacePane === "file" &&
 		hasProjectFileSelection(selectedProjectFile);
+	const resolvedSidebarWidth = sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH;
 
 	return (
-		<>
+		<div
+			ref={splitContainerRef}
+			className="flex min-w-0 flex-1 overflow-hidden"
+		>
 			{showSidebar && (
-				<Sidebar
-					activeProject={activeProject}
-					onBeforeProjectFileOpen={handleBeforeProjectFileOpen}
-					selectedGitChange={selectedGitChange}
-					onSelectGitChange={handleGitChangeSelection}
-					activeSidebarView={activeSidebarView}
-					onSidebarViewChange={setActiveSidebarView}
-					onProjectFileSelectionChange={handleProjectFileSelectionChange}
-					onOpenProjectPicker={onOpenProjectPicker}
-				/>
+				<div
+					className="relative shrink-0"
+					style={{ width: resolvedSidebarWidth }}
+				>
+					<Sidebar
+						activeProject={activeProject}
+						className="h-full"
+						style={{ width: "100%" }}
+						onBeforeProjectFileOpen={handleBeforeProjectFileOpen}
+						selectedGitChange={selectedGitChange}
+						onSelectGitChange={handleGitChangeSelection}
+						activeSidebarView={activeSidebarView}
+						onSidebarViewChange={setActiveSidebarView}
+						onProjectFileSelectionChange={handleProjectFileSelectionChange}
+						onOpenProjectPicker={onOpenProjectPicker}
+					/>
+					<div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-px translate-x-1/2 bg-border/80" />
+					<button
+						type="button"
+						className="absolute inset-y-0 right-0 z-20 w-3 translate-x-1/2 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+						onPointerDown={handleSidebarResizeStart}
+						onDoubleClick={handleSidebarResizeDoubleClick}
+						onKeyDown={handleSidebarResizeKeyDown}
+						aria-controls="project-sidebar project-workspace"
+						aria-label="Resize workspace sidebar"
+						tabIndex={0}
+					/>
+				</div>
 			)}
-			<div className="flex flex-1 flex-col overflow-hidden">
+			<div
+				id="project-workspace"
+				className="flex min-w-0 flex-1 flex-col overflow-hidden"
+			>
 				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background/50">
 					<div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#1A1A1A_1px,transparent_1px)] [background-size:24px_24px] opacity-20" />
 					<div className="relative flex h-full min-h-0 flex-col">
@@ -366,8 +550,17 @@ function ProjectWorkspaceShell({
 					</div>
 				</main>
 			</div>
-		</>
+		</div>
 	);
+}
+
+function clampSidebarWidth(width: number, containerWidth: number) {
+	const maxWidth = Math.max(
+		MIN_SIDEBAR_WIDTH,
+		containerWidth - MIN_WORKSPACE_CONTENT_WIDTH,
+	);
+
+	return Math.min(Math.max(width, MIN_SIDEBAR_WIDTH), maxWidth);
 }
 
 function ProjectItem({
