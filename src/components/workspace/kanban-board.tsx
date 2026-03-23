@@ -67,7 +67,7 @@ function Column({
 	};
 
 	return (
-		<div className="flex flex-col w-72 h-full gap-4 shrink-0">
+		<div className="flex h-full min-h-0 w-72 shrink-0 flex-col gap-4">
 			<div className="flex items-center justify-between px-2">
 				<div className="flex items-center gap-2">
 					<h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground/80">
@@ -91,7 +91,7 @@ function Column({
 
 			<ul
 				className={cn(
-					"m-0 list-none flex flex-col gap-3 h-full overflow-y-auto rounded-xl border border-transparent p-0 pr-1 pb-4 scrollbar-thin scrollbar-thumb-border transition-colors hover:scrollbar-thumb-muted-foreground/30",
+					"m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto rounded-xl border border-transparent p-0 pr-1 pb-4 scrollbar-thin scrollbar-thumb-border transition-colors hover:scrollbar-thumb-muted-foreground/30",
 					activeDropColumnId === column.id && "border-primary/40 bg-primary/5",
 				)}
 				aria-label={`${column.title} tasks`}
@@ -345,7 +345,7 @@ export function KanbanBoard({
 	};
 
 	return (
-		<div className="flex flex-1 gap-6 p-6 h-full overflow-x-auto scrollbar-thin scrollbar-thumb-border">
+		<div className="flex h-full min-h-0 flex-1 gap-6 overflow-x-auto p-6 scrollbar-thin scrollbar-thumb-border">
 			{boardColumns.length > 0 ? (
 				boardColumns.map((column) => (
 					<Column

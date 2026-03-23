@@ -1,12 +1,21 @@
-import { FileText, LoaderCircle, X } from "lucide-react";
+import { Eye, FileText, LoaderCircle, Save, SquarePen, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
-import type { ProjectFileSelectionState } from "#/lib/craftdesk";
+import { Textarea } from "#/components/ui/textarea";
+import type {
+	ProjectFileSelectionState,
+	TextProjectFileContent,
+} from "#/lib/craftdesk";
+import { cn } from "#/lib/utils";
+import { updateProjectFile } from "#/server/craftdesk";
 import type { ActiveProjectContext } from "../layout/app-shell";
 
 interface FilePreviewViewProps {
 	activeProject: ActiveProjectContext | null;
 	onClose: () => void;
+	onDirtyChange: (isDirty: boolean) => void;
+	onTextFileSaved: (file: TextProjectFileContent) => void;
 	selection: ProjectFileSelectionState;
 }
 
@@ -23,14 +32,108 @@ function getPreviewLines(content: string) {
 		: [{ id: "line-1-empty", lineNumber: 1, content: "" }];
 }
 
+function formatFileSize(size: number) {
+	if (size < 1024) {
+		return `${size} B`;
+	}
+
+	if (size < 1024 * 1024) {
+		return `${(size / 1024).toFixed(1)} KB`;
+	}
+
+	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function FilePreviewView({
 	activeProject,
 	onClose,
+	onDirtyChange,
+	onTextFileSaved,
 	selection,
 }: FilePreviewViewProps) {
-	const previewLines = selection.file
-		? getPreviewLines(selection.file.content)
-		: [{ id: "line-1-empty", lineNumber: 1, content: "" }];
+	const activeTextFile =
+		selection.file?.kind === "text" ? selection.file : null;
+	const [draftContent, setDraftContent] = useState(
+		activeTextFile?.content ?? "",
+	);
+	const [savedContent, setSavedContent] = useState(
+		activeTextFile?.content ?? "",
+	);
+	const [mode, setMode] = useState<"write" | "preview">("write");
+	const [isSaving, setIsSaving] = useState(false);
+	const [saveError, setSaveError] = useState("");
+	const lineNumberRef = useRef<HTMLDivElement | null>(null);
+	const previewLines = getPreviewLines(draftContent);
+	const hasChanges = !!activeTextFile && draftContent !== savedContent;
+
+	useEffect(() => {
+		setDraftContent(activeTextFile?.content ?? "");
+		setSavedContent(activeTextFile?.content ?? "");
+		setMode("write");
+		setIsSaving(false);
+		setSaveError("");
+	}, [activeTextFile?.content, activeTextFile?.relativePath]);
+
+	useEffect(() => {
+		onDirtyChange(hasChanges);
+
+		return () => {
+			onDirtyChange(false);
+		};
+	}, [hasChanges, onDirtyChange]);
+
+	useEffect(() => {
+		if (!hasChanges) {
+			return;
+		}
+
+		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+			event.preventDefault();
+			event.returnValue = "";
+		};
+
+		window.addEventListener("beforeunload", handleBeforeUnload);
+
+		return () => {
+			window.removeEventListener("beforeunload", handleBeforeUnload);
+		};
+	}, [hasChanges]);
+
+	const handleSave = async () => {
+		if (!activeProject || !activeTextFile || isSaving || !hasChanges) {
+			return;
+		}
+
+		setIsSaving(true);
+		setSaveError("");
+
+		try {
+			const normalizedContent = draftContent.replace(/\r\n/g, "\n");
+			const updatedFile = await updateProjectFile({
+				data: {
+					content: normalizedContent,
+					projectId: activeProject.id,
+					relativePath: activeTextFile.relativePath,
+				},
+			});
+
+			if (updatedFile.kind !== "text") {
+				throw new Error("Only text files can be edited in the file pane.");
+			}
+
+			setDraftContent(updatedFile.content);
+			setSavedContent(updatedFile.content);
+			onTextFileSaved(updatedFile);
+		} catch (error) {
+			setSaveError(
+				error instanceof Error
+					? error.message
+					: "Unable to save the file right now.",
+			);
+		} finally {
+			setIsSaving(false);
+		}
+	};
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
@@ -48,10 +151,59 @@ export function FilePreviewView({
 						</p>
 					) : null}
 				</div>
-				<div className="hidden items-center gap-2 rounded-full border border-white/6 bg-white/[0.03] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/55 md:inline-flex">
-					<FileText className="size-3" />
-					Read Only
-				</div>
+				{activeTextFile ? (
+					<div className="flex items-center gap-2">
+						<div className="inline-flex rounded-lg border border-white/8 bg-white/[0.03] p-1">
+							<button
+								type="button"
+								className={cn(
+									"inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] leading-none transition-colors",
+									mode === "write"
+										? "bg-white/8 text-foreground"
+										: "text-muted-foreground hover:text-foreground",
+								)}
+								onClick={() => setMode("write")}
+							>
+								<SquarePen className="size-3 shrink-0" />
+								Write
+							</button>
+							<button
+								type="button"
+								className={cn(
+									"inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] leading-none transition-colors",
+									mode === "preview"
+										? "bg-white/8 text-foreground"
+										: "text-muted-foreground hover:text-foreground",
+								)}
+								onClick={() => setMode("preview")}
+							>
+								<Eye className="size-3 shrink-0" />
+								Preview
+							</button>
+						</div>
+						<Button
+							className="h-8 min-w-18 rounded-lg border-white/10 bg-white/[0.03] px-3 text-[10px] font-mono uppercase tracking-[0.14em] text-foreground hover:bg-white/8"
+							disabled={!hasChanges || isSaving}
+							onClick={() => {
+								void handleSave();
+							}}
+							size="xs"
+							variant="outline"
+						>
+							{isSaving ? (
+								<LoaderCircle className="size-3 animate-spin" />
+							) : (
+								<Save className="size-3" />
+							)}
+							Save
+						</Button>
+					</div>
+				) : (
+					<div className="hidden items-center gap-2 rounded-full border border-white/6 bg-white/[0.03] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/55 md:inline-flex">
+						<FileText className="size-3" />
+						Read Only
+					</div>
+				)}
 				<Button
 					variant="ghost"
 					size="icon-sm"
@@ -80,19 +232,99 @@ export function FilePreviewView({
 							</p>
 						</div>
 					</div>
-				) : selection.file ? (
-					<div className="min-w-full">
-						<div className="grid min-w-full grid-cols-[72px_minmax(0,1fr)] font-mono text-[12px] leading-6">
-							{previewLines.map((line) => (
-								<div className="contents" key={line.id}>
-									<div className="select-none border-r border-white/5 bg-[#09090B]/55 px-4 py-0.5 text-right text-muted-foreground/35">
-										{line.lineNumber}
+				) : activeTextFile ? (
+					<div className="flex h-full min-h-0 flex-col">
+						{mode === "write" ? (
+							<div className="flex min-h-0 flex-1 bg-[#09090b]/20 pb-4">
+								<div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-white/6 bg-[#050507]/70">
+									<div
+										ref={lineNumberRef}
+										aria-hidden="true"
+										className="min-h-0 w-[72px] overflow-hidden border-r border-white/5 bg-[#09090B]/75 py-4 pr-3 text-right font-mono text-[13px] leading-6 text-muted-foreground/35 select-none"
+									>
+										{previewLines.map((line) => (
+											<div key={line.id}>{line.lineNumber}</div>
+										))}
 									</div>
-									<pre className="overflow-x-auto border-b border-white/[0.02] px-5 py-0.5 text-foreground/90">
-										{line.content || " "}
-									</pre>
+									<Textarea
+										className="h-full min-h-[260px] resize-none border-0 bg-transparent py-4 font-mono text-[13px] leading-6 whitespace-pre shadow-none focus-visible:ring-0"
+										onChange={(event) => {
+											setDraftContent(event.target.value);
+											if (saveError) {
+												setSaveError("");
+											}
+										}}
+										onKeyDown={(event) => {
+											if ((event.metaKey || event.ctrlKey) && event.key === "s") {
+												event.preventDefault();
+												void handleSave();
+											}
+										}}
+										onScroll={(event) => {
+											if (lineNumberRef.current) {
+												lineNumberRef.current.scrollTop =
+													event.currentTarget.scrollTop;
+											}
+										}}
+										placeholder="Edit this file..."
+										spellCheck={false}
+										value={draftContent}
+										wrap="off"
+									/>
 								</div>
-							))}
+							</div>
+						) : (
+							<div className="min-w-full">
+								<div className="grid min-w-full grid-cols-[72px_minmax(0,1fr)] font-mono text-[12px] leading-5">
+									{previewLines.map((line) => (
+										<div className="contents" key={line.id}>
+											<div className="select-none border-r border-white/5 bg-[#09090B]/55 px-4 py-px text-right text-muted-foreground/35">
+												{line.lineNumber}
+											</div>
+											<pre className="overflow-x-auto border-b border-white/[0.02] px-5 py-px text-foreground/90">
+												{line.content || " "}
+											</pre>
+										</div>
+									))}
+								</div>
+							</div>
+						)}
+						{saveError ? (
+							<div className="border-t border-white/5 px-4 py-2 text-[11px] text-red-300">
+								{saveError}
+							</div>
+						) : null}
+					</div>
+				) : selection.file?.kind === "image" ? (
+					<div className="flex h-full items-center justify-center p-6">
+						<div className="flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/8 bg-[#0B0B0D]">
+							<div className="flex items-center justify-between border-b border-white/6 px-5 py-3 text-xs text-muted-foreground">
+								<span>{selection.file.mimeType}</span>
+								<span>{formatFileSize(selection.file.size)}</span>
+							</div>
+							<div className="flex min-h-0 flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_45%),linear-gradient(135deg,rgba(255,255,255,0.03),rgba(255,255,255,0))] p-6">
+								<img
+									alt={`Preview of ${selection.file.name}`}
+									className="max-h-full max-w-full rounded-2xl object-contain shadow-[0_20px_70px_rgba(0,0,0,0.45)]"
+									src={`data:${selection.file.mimeType};base64,${selection.file.base64Content}`}
+								/>
+							</div>
+						</div>
+					</div>
+				) : selection.file?.kind === "binary" ? (
+					<div className="flex h-full items-center justify-center p-8">
+						<div className="max-w-md rounded-2xl border border-white/6 bg-white/[0.02] p-6 text-center">
+							<p className="text-sm font-semibold text-foreground">
+								Preview unavailable
+							</p>
+							<p className="mt-2 text-sm text-muted-foreground">
+								This file was imported correctly, but Craftdesk cannot preview
+								this binary format yet.
+							</p>
+							<p className="mt-4 text-xs uppercase tracking-[0.18em] text-muted-foreground/55">
+								{selection.file.mimeType ?? "Unknown binary"} •{" "}
+								{formatFileSize(selection.file.size)}
+							</p>
 						</div>
 					</div>
 				) : (

@@ -20,6 +20,7 @@ import { GitDiffView } from "#/components/workspace/git-diff-view";
 import type {
 	ProjectFileSelectionState,
 	ProjectSummary,
+	TextProjectFileContent,
 } from "#/lib/craftdesk";
 import type { GitSelectedChange } from "#/lib/git";
 import { cn } from "#/lib/utils";
@@ -27,7 +28,7 @@ import { Sidebar } from "./sidebar";
 
 export interface ActiveProjectContext {
 	id: string;
-	name: string; 
+	name: string;
 	path: string;
 }
 
@@ -199,15 +200,40 @@ function ProjectWorkspaceShell({
 		useState<SidebarView>("explorer");
 	const [selectedProjectFile, setSelectedProjectFile] =
 		useState<ProjectFileSelectionState>(createEmptyProjectFileSelection);
+	const [isProjectFileDirty, setIsProjectFileDirty] = useState(false);
 	const [activeWorkspacePane, setActiveWorkspacePane] =
 		useState<WorkspacePane>("project");
 	const selectedGitChangeRef = useRef(selectedGitChange);
 	const selectedProjectFileRef = useRef(selectedProjectFile);
+	const isProjectFileDirtyRef = useRef(isProjectFileDirty);
 	selectedGitChangeRef.current = selectedGitChange;
 	selectedProjectFileRef.current = selectedProjectFile;
+	isProjectFileDirtyRef.current = isProjectFileDirty;
+
+	const confirmDiscardProjectFileChanges = useCallback(() => {
+		if (!isProjectFileDirtyRef.current) {
+			return true;
+		}
+
+		const currentRelativePath =
+			selectedProjectFileRef.current.relativePath || "this file";
+		const shouldDiscard = window.confirm(
+			`Discard unsaved changes to ${currentRelativePath}?`,
+		);
+
+		if (shouldDiscard) {
+			setIsProjectFileDirty(false);
+		}
+
+		return shouldDiscard;
+	}, []);
 
 	const handleGitChangeSelection = useCallback(
 		(change: GitSelectedChange | null) => {
+			if (change && !confirmDiscardProjectFileChanges()) {
+				return;
+			}
+
 			setSelectedGitChange(change);
 			setActiveWorkspacePane((currentPane) => {
 				if (change) {
@@ -223,7 +249,7 @@ function ProjectWorkspaceShell({
 					: "project";
 			});
 		},
-		[],
+		[confirmDiscardProjectFileChanges],
 	);
 
 	const handleProjectFileSelectionChange = useCallback(
@@ -254,8 +280,39 @@ function ProjectWorkspaceShell({
 	}, []);
 
 	const handleCloseProjectFile = useCallback(() => {
+		if (!confirmDiscardProjectFileChanges()) {
+			return;
+		}
+
 		setSelectedProjectFile(createEmptyProjectFileSelection());
 		setActiveWorkspacePane(selectedGitChangeRef.current ? "git" : "project");
+		setIsProjectFileDirty(false);
+	}, [confirmDiscardProjectFileChanges]);
+
+	const handleBeforeProjectFileOpen = useCallback(
+		(currentRelativePath: string, _nextRelativePath: string) => {
+			if (!isProjectFileDirtyRef.current || !currentRelativePath) {
+				return true;
+			}
+
+			return confirmDiscardProjectFileChanges();
+		},
+		[confirmDiscardProjectFileChanges],
+	);
+
+	const handleProjectFileDirtyChange = useCallback((isDirty: boolean) => {
+		setIsProjectFileDirty(isDirty);
+	}, []);
+
+	const handleProjectFileSaved = useCallback((file: TextProjectFileContent) => {
+		setSelectedProjectFile((currentSelection) => ({
+			...currentSelection,
+			error: "",
+			file,
+			isLoading: false,
+			relativePath: file.relativePath,
+		}));
+		setIsProjectFileDirty(false);
 	}, []);
 
 	const isGitWorkspaceVisible =
@@ -276,6 +333,7 @@ function ProjectWorkspaceShell({
 			{showSidebar && (
 				<Sidebar
 					activeProject={activeProject}
+					onBeforeProjectFileOpen={handleBeforeProjectFileOpen}
 					selectedGitChange={selectedGitChange}
 					onSelectGitChange={handleGitChangeSelection}
 					activeSidebarView={activeSidebarView}
@@ -298,7 +356,9 @@ function ProjectWorkspaceShell({
 							<FilePreviewView
 								activeProject={activeProject}
 								onClose={handleCloseProjectFile}
+								onDirtyChange={handleProjectFileDirtyChange}
 								selection={selectedProjectFile}
+								onTextFileSaved={handleProjectFileSaved}
 							/>
 						) : (
 							children

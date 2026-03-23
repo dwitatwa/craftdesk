@@ -15,6 +15,10 @@ interface SidebarProps {
 	activeProject?: ActiveProjectContext | null;
 	selectedGitChange: GitSelectedChange | null;
 	onSelectGitChange: (change: GitSelectedChange | null) => void;
+	onBeforeProjectFileOpen: (
+		currentRelativePath: string,
+		nextRelativePath: string,
+	) => Promise<boolean> | boolean;
 	activeSidebarView: SidebarView;
 	onSidebarViewChange: (view: SidebarView) => void;
 	onProjectFileSelectionChange: (selection: ProjectFileSelectionState) => void;
@@ -26,6 +30,7 @@ export function Sidebar({
 	activeProject = null,
 	selectedGitChange,
 	onSelectGitChange,
+	onBeforeProjectFileOpen,
 	activeSidebarView,
 	onSidebarViewChange,
 	onProjectFileSelectionChange,
@@ -101,6 +106,7 @@ export function Sidebar({
 							<FileExplorer
 								key={activeProject.id}
 								activeProject={activeProject}
+								onBeforeFileOpen={onBeforeProjectFileOpen}
 								onSelectionChange={onProjectFileSelectionChange}
 							/>
 						</div>

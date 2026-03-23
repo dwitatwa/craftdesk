@@ -4,6 +4,7 @@ import {
 	FileText,
 	Folder,
 	FolderOpen,
+	ImageIcon,
 	LoaderCircle,
 	RefreshCcw,
 	Trash2,
@@ -46,6 +47,10 @@ import type { ActiveProjectContext } from "../layout/app-shell";
 
 interface FileExplorerProps {
 	activeProject: ActiveProjectContext;
+	onBeforeFileOpen?: (
+		currentRelativePath: string,
+		nextRelativePath: string,
+	) => Promise<boolean> | boolean;
 	onSelectionChange: (selection: ProjectFileSelectionState) => void;
 }
 
@@ -56,7 +61,30 @@ interface DirectoryState {
 	isLoaded: boolean;
 }
 
+interface ImportedProjectFile {
+	base64Content: string;
+	name: string;
+	relativePath: string;
+}
+
 const ROOT_PATH = "";
+const CLIPBOARD_FILE_FALLBACK_PREFIX = "pasted-file";
+const IMAGE_FILE_EXTENSIONS_BY_MIME = new Map([
+	["image/apng", "apng"],
+	["image/avif", "avif"],
+	["image/bmp", "bmp"],
+	["image/gif", "gif"],
+	["image/jpeg", "jpg"],
+	["image/png", "png"],
+	["image/webp", "webp"],
+]);
+const IMAGE_FILE_EXTENSIONS = new Set([
+	...IMAGE_FILE_EXTENSIONS_BY_MIME.values(),
+	"ico",
+	"jpeg",
+	"jpg",
+	"svg",
+]);
 
 function createDirectoryState(): DirectoryState {
 	return {
@@ -102,22 +130,69 @@ function getErrorMessage(error: unknown, fallbackMessage: string) {
 }
 
 async function readImportedFile(file: File) {
-	const content = await file.text();
+	const arrayBuffer = await file.arrayBuffer();
+	const relativePath = getImportedFilePath(file);
 
 	return {
-		content,
-		name: file.name,
-		relativePath: normalizeRelativePath(
-			"webkitRelativePath" in file &&
-				typeof file.webkitRelativePath === "string"
-				? file.webkitRelativePath || file.name
-				: file.name,
-		),
+		base64Content: arrayBufferToBase64(arrayBuffer),
+		name: relativePath.split("/").pop() ?? relativePath,
+		relativePath,
 	};
+}
+
+function getImportedFilePath(file: File) {
+	const preferredPath =
+		"webkitRelativePath" in file && typeof file.webkitRelativePath === "string"
+			? file.webkitRelativePath
+			: file.name;
+	const normalizedPath = normalizeRelativePath(preferredPath);
+
+	if (normalizedPath) {
+		return normalizedPath;
+	}
+
+	return createClipboardFallbackFileName(file.type);
+}
+
+function createClipboardFallbackFileName(mimeType: string) {
+	const fileExtension = IMAGE_FILE_EXTENSIONS_BY_MIME.get(mimeType);
+	const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+	return fileExtension
+		? `${CLIPBOARD_FILE_FALLBACK_PREFIX}-${timestamp}.${fileExtension}`
+		: `${CLIPBOARD_FILE_FALLBACK_PREFIX}-${timestamp}`;
+}
+
+function arrayBufferToBase64(arrayBuffer: ArrayBuffer) {
+	const bytes = new Uint8Array(arrayBuffer);
+	const chunkSize = 0x8000;
+	let binary = "";
+
+	for (let index = 0; index < bytes.length; index += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+	}
+
+	return btoa(binary);
+}
+
+function getFileExtension(relativePath: string) {
+	const normalizedPath = normalizeRelativePath(relativePath);
+	const lastDotIndex = normalizedPath.lastIndexOf(".");
+
+	if (lastDotIndex === -1) {
+		return "";
+	}
+
+	return normalizedPath.slice(lastDotIndex + 1).toLowerCase();
+}
+
+function isImageFilePath(relativePath: string) {
+	return IMAGE_FILE_EXTENSIONS.has(getFileExtension(relativePath));
 }
 
 export function FileExplorer({
 	activeProject,
+	onBeforeFileOpen,
 	onSelectionChange,
 }: FileExplorerProps) {
 	const projectId = activeProject.id;
@@ -145,8 +220,9 @@ export function FileExplorer({
 		name: string;
 		relativePath: string;
 	} | null>(null);
-	const [importedFileContent, setImportedFileContent] = useState("");
-	const [importedFileName, setImportedFileName] = useState("");
+	const [importedFile, setImportedFile] = useState<ImportedProjectFile | null>(
+		null,
+	);
 	const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
 	const [newFilePath, setNewFilePath] = useState("");
 	const [createError, setCreateError] = useState("");
@@ -266,6 +342,18 @@ export function FileExplorer({
 
 	const loadFile = async (relativePath: string) => {
 		const normalizedPath = normalizeRelativePath(relativePath);
+
+		if (onBeforeFileOpen) {
+			const shouldContinue = await onBeforeFileOpen(
+				selectedFilePath,
+				normalizedPath,
+			);
+
+			if (!shouldContinue) {
+				return;
+			}
+		}
+
 		setSelectedFilePath(normalizedPath);
 		setSelectedFile(null);
 		onSelectionChange({
@@ -405,8 +493,7 @@ export function FileExplorer({
 		try {
 			const importedFile = await readImportedFile(importedFiles[0]);
 
-			setImportedFileContent(importedFile.content);
-			setImportedFileName(importedFile.name);
+			setImportedFile(importedFile);
 			setNewFilePath(importedFile.relativePath);
 		} catch (error) {
 			setCreateError(getErrorMessage(error, "Failed to import file."));
@@ -418,7 +505,7 @@ export function FileExplorer({
 	const handleCreateFile = async () => {
 		const normalizedPath = normalizeRelativePath(newFilePath.trim());
 
-		if (!importedFileContent && !importedFileName) {
+		if (!importedFile) {
 			setCreateError("Drop or paste a file first.");
 			return;
 		}
@@ -435,7 +522,7 @@ export function FileExplorer({
 			await createProjectFile({
 				data: {
 					projectId,
-					content: importedFileContent || undefined,
+					base64Content: importedFile.base64Content,
 					relativePath: normalizedPath,
 				},
 			});
@@ -452,8 +539,7 @@ export function FileExplorer({
 			}
 
 			setIsCreateFormOpen(false);
-			setImportedFileContent("");
-			setImportedFileName("");
+			setImportedFile(null);
 			setNewFilePath("");
 			await loadFile(normalizedPath);
 		} catch (error) {
@@ -597,7 +683,11 @@ export function FileExplorer({
 						});
 					}}
 				>
-					<FileText className="size-3.5 shrink-0 text-muted-foreground/70" />
+					{isImageFilePath(entry.relativePath) ? (
+						<ImageIcon className="size-3.5 shrink-0 text-sky-300/80" />
+					) : (
+						<FileText className="size-3.5 shrink-0 text-muted-foreground/70" />
+					)}
 					<span className="truncate">{entry.name}</span>
 				</button>
 			);
@@ -697,8 +787,7 @@ export function FileExplorer({
 				onOpenChange={(isOpen) => {
 					setIsCreateFormOpen(isOpen);
 					if (!isOpen) {
-						setImportedFileContent("");
-						setImportedFileName("");
+						setImportedFile(null);
 						setIsDragTargetActive(false);
 						setNewFilePath("");
 						setCreateError("");
@@ -773,9 +862,9 @@ export function FileExplorer({
 									<p className="text-xs text-muted-foreground">
 										The imported file name becomes the project path.
 									</p>
-									{importedFileName ? (
+									{importedFile?.name ? (
 										<p className="text-xs text-primary">
-											Imported: {importedFileName}
+											Imported: {importedFile.name}
 										</p>
 									) : null}
 								</div>
@@ -790,8 +879,7 @@ export function FileExplorer({
 							variant="ghost"
 							onClick={() => {
 								setIsCreateFormOpen(false);
-								setImportedFileContent("");
-								setImportedFileName("");
+								setImportedFile(null);
 								setIsDragTargetActive(false);
 								setNewFilePath("");
 								setCreateError("");

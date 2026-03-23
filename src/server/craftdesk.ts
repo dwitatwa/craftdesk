@@ -14,6 +14,7 @@ import type {
 	ProjectLookupInput,
 	SaveProjectInput,
 	TaskLookupInput,
+	UpdateProjectFileInput,
 	UpdateTaskNotesInput,
 } from "#/lib/craftdesk";
 
@@ -79,6 +80,13 @@ export const deleteProjectFile = createServerFn({ method: "POST" })
 			"#/server/project-files"
 		);
 		return deleteProjectFileOnDisk(data);
+	});
+
+export const updateProjectFile = createServerFn({ method: "POST" })
+	.inputValidator((input: UpdateProjectFileInput) => input)
+	.handler(async ({ data }) => {
+		const { updateProjectFileContent } = await import("#/server/project-files");
+		return updateProjectFileContent(data);
 	});
 
 export const createColumn = createServerFn({ method: "POST" })

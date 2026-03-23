@@ -38,11 +38,32 @@ export interface ProjectFileEntry {
 	hasChildren?: boolean;
 }
 
-export interface ProjectFileContent {
+interface ProjectFileContentBase {
 	name: string;
 	relativePath: string;
+	size: number;
+}
+
+export interface TextProjectFileContent extends ProjectFileContentBase {
+	kind: "text";
 	content: string;
 }
+
+export interface ImageProjectFileContent extends ProjectFileContentBase {
+	kind: "image";
+	base64Content: string;
+	mimeType: string;
+}
+
+export interface BinaryProjectFileContent extends ProjectFileContentBase {
+	kind: "binary";
+	mimeType: string | null;
+}
+
+export type ProjectFileContent =
+	| TextProjectFileContent
+	| ImageProjectFileContent
+	| BinaryProjectFileContent;
 
 export interface ProjectFileSelectionState {
 	file: ProjectFileContent | null;
@@ -120,6 +141,11 @@ export interface ProjectFileMutationInput {
 
 export interface CreateProjectFileInput extends ProjectFileMutationInput {
 	content?: string;
+	base64Content?: string;
+}
+
+export interface UpdateProjectFileInput extends ProjectFileMutationInput {
+	content: string;
 }
 
 export interface TaskLookupInput {
