@@ -2,6 +2,7 @@ import {
 	LoaderCircle,
 	Maximize2,
 	Minus,
+	Play,
 	RotateCcw,
 	Square,
 	Terminal as TerminalIcon,
@@ -22,6 +23,7 @@ interface TerminalProps {
 	headerHeight?: string;
 	isCollapsed?: boolean;
 	onToggleCollapse?: () => void;
+	autoStart?: boolean;
 	scope: TerminalScope;
 }
 
@@ -38,6 +40,7 @@ export function Terminal({
 	headerHeight = "h-14",
 	isCollapsed = false,
 	onToggleCollapse,
+	autoStart = true,
 	scope,
 }: TerminalProps) {
 	const hostRef = useRef<HTMLDivElement | null>(null);
@@ -91,12 +94,16 @@ export function Terminal({
 			return;
 		}
 
-		controller.attach(mountElement);
+		controller.attach(mountElement, { autoStart });
 
 		return () => {
 			controller.detach(mountElement);
 		};
-	}, [cwd, isCollapsed, projectId, scopeId, scopeType]);
+	}, [autoStart, cwd, isCollapsed, projectId, scopeId, scopeType]);
+
+	const handleStart = async () => {
+		await controllerRef.current?.start();
+	};
 
 	const handleRestart = async () => {
 		await controllerRef.current?.restart();
@@ -107,6 +114,7 @@ export function Terminal({
 	};
 
 	const { error, isConnecting, session } = viewState;
+	const showStartPrompt = !autoStart && !session?.sessionId && !isConnecting;
 	const statusLabel = session?.status ?? (isConnecting ? "connecting" : "idle");
 	const scopeLabel = scope.scopeType === "task" ? "task" : "project";
 	const isHeaderToggleEnabled =
@@ -163,6 +171,19 @@ export function Terminal({
 					<div className="flex min-w-0 items-center gap-3">{headerContent}</div>
 				)}
 				<div className="flex items-center gap-1 shrink-0">
+					{showStartPrompt && (
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-7 border-white/10 bg-white/[0.04] px-2.5 text-xs text-zinc-200 hover:border-white/15 hover:bg-white/[0.08] hover:text-white"
+							onClick={() => {
+								void handleStart();
+							}}
+						>
+							<Play className="size-3.5 fill-current" />
+							Start
+						</Button>
+					)}
 					{onToggleCollapse && collapseTrigger === "button" && (
 						<Button
 							variant="ghost"
@@ -184,7 +205,7 @@ export function Terminal({
 						onClick={() => {
 							void handleRestart();
 						}}
-						disabled={isConnecting}
+						disabled={isConnecting || !session?.sessionId}
 					>
 						<RotateCcw className="size-3.5" />
 					</Button>
@@ -205,6 +226,30 @@ export function Terminal({
 			{!isCollapsed && (
 				<div className="relative flex-1 min-h-0 terminal-surface">
 					<div ref={hostRef} className="h-full w-full" />
+
+					{showStartPrompt && (
+						<div className="absolute inset-0 flex items-center justify-center p-6">
+							<div className="flex max-w-sm flex-col items-center rounded-xl border border-dashed border-white/10 bg-black/20 px-6 py-5 text-center backdrop-blur-sm">
+								<TerminalIcon className="size-5 text-zinc-300" />
+								<p className="mt-3 text-sm font-medium text-zinc-100">
+									Terminal is idle
+								</p>
+								<p className="mt-1 text-xs text-zinc-400">
+									Start it manually when you want to open a task shell.
+								</p>
+								<Button
+									size="sm"
+									className="mt-4 h-8"
+									onClick={() => {
+										void handleStart();
+									}}
+								>
+									<Play className="size-3.5 fill-current" />
+									Start terminal
+								</Button>
+							</div>
+						</div>
+					)}
 
 					{(isConnecting || error || session?.warnings.length) && (
 						<div className="absolute right-4 top-4 z-10 flex max-w-[min(32rem,calc(100%-2rem))] flex-col gap-2">

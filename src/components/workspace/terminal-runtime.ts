@@ -87,18 +87,22 @@ class PersistentTerminalController {
 		};
 	}
 
-	attach(mountElement: HTMLElement) {
+	attach(mountElement: HTMLElement, options?: { autoStart?: boolean }) {
 		this.mountElement = mountElement;
 		this.mountHostElement();
 		this.observeResize();
-		void this.ensureStarted()
-			.then(() => {
-				this.focus();
-				return this.resizeToFit();
-			})
-			.catch(() => {
-				// Error state is already managed inside the controller startup flow.
-			});
+
+		if (
+			options?.autoStart === false &&
+			!this.terminal &&
+			!this.startupPromise
+		) {
+			return;
+		}
+
+		void this.start().catch(() => {
+			// Error state is already managed inside the controller startup flow.
+		});
 	}
 
 	detach(mountElement: HTMLElement) {
@@ -115,6 +119,12 @@ class PersistentTerminalController {
 		if (hostElement && hostElement.parentElement !== getParkingLot()) {
 			getParkingLot().appendChild(hostElement);
 		}
+	}
+
+	async start() {
+		await this.ensureStarted();
+		this.focus();
+		await this.resizeToFit();
 	}
 
 	async restart() {
@@ -224,11 +234,11 @@ class PersistentTerminalController {
 			return this.startupPromise;
 		}
 
-		this.startupPromise = this.start();
+		this.startupPromise = this.createTerminalSession();
 		return this.startupPromise;
 	}
 
-	private async start() {
+	private async createTerminalSession() {
 		this.setConnecting(true);
 		this.setError(null);
 

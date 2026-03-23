@@ -300,6 +300,7 @@ function TaskDetailView() {
 
 					<div id="task-terminal-panel" className="flex min-w-0 flex-1">
 						<Terminal
+							autoStart={false}
 							className="flex-1"
 							headerHeight="h-20"
 							title="Terminal"
