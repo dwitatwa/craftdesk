@@ -27,7 +27,7 @@ import { Sidebar } from "./sidebar";
 
 export interface ActiveProjectContext {
 	id: string;
-	name: string;
+	name: string; 
 	path: string;
 }
 

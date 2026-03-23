@@ -5,7 +5,7 @@ import {
 	MoveRight,
 	X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ActiveProjectContext } from "#/components/layout/app-shell";
 import { Button } from "#/components/ui/button";
@@ -36,55 +36,110 @@ export function GitDiffView({
 	onClose,
 	selectedChange,
 }: GitDiffViewProps) {
+	const activeProjectPath = activeProject?.path ?? "";
 	const [diff, setDiff] = useState<GitDiffResult | null>(null);
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
+	const activeDiffKey = getGitDiffRequestKey(activeProjectPath, selectedChange);
+	const activeDiffKeyRef = useRef(activeDiffKey);
+	const diffRef = useRef(diff);
+	const loadedDiffKeyRef = useRef("");
+	const diffRequestRef = useRef<{
+		diffKey: string;
+		promise: Promise<GitDiffResult>;
+	} | null>(null);
+	activeDiffKeyRef.current = activeDiffKey;
+	diffRef.current = diff;
+
+	const loadDiff = async (
+		diffKey: string,
+		change: GitSelectedChange,
+		options: {
+			force?: boolean;
+			reset?: boolean;
+		} = {},
+	) => {
+		const existingRequest = diffRequestRef.current;
+
+		if (!options.force && existingRequest?.diffKey === diffKey) {
+			return existingRequest.promise;
+		}
+
+		if (options.reset) {
+			setDiff(null);
+		}
+
+		setError("");
+		setIsLoading(true);
+
+		const promise = getGitDiff({
+			data: {
+				cwd: activeProjectPath,
+				path: change.path,
+				originalPath: change.originalPath,
+				diffMode: change.diffMode,
+				code: change.code,
+			},
+		});
+		diffRequestRef.current = {
+			diffKey,
+			promise,
+		};
+
+		try {
+			const nextDiff = await promise;
+
+			if (activeDiffKeyRef.current !== diffKey) {
+				return nextDiff;
+			}
+
+			loadedDiffKeyRef.current = diffKey;
+			setDiff(nextDiff);
+
+			return nextDiff;
+		} catch (cause) {
+			if (activeDiffKeyRef.current === diffKey) {
+				setError(
+					cause instanceof Error ? cause.message : "Failed to load file diff.",
+				);
+			}
+
+			throw cause;
+		} finally {
+			if (diffRequestRef.current?.promise === promise) {
+				diffRequestRef.current = null;
+			}
+
+			if (activeDiffKeyRef.current === diffKey) {
+				setIsLoading(false);
+			}
+		}
+	};
 
 	useEffect(() => {
-		setDiff(null);
-		setError("");
-
-		if (!activeProject || !selectedChange) {
+		if (!activeDiffKey || !selectedChange) {
+			loadedDiffKeyRef.current = "";
+			diffRequestRef.current = null;
+			setDiff(null);
+			setError("");
 			setIsLoading(false);
 			return;
 		}
 
-		let cancelled = false;
-		setIsLoading(true);
+		if (loadedDiffKeyRef.current === activeDiffKey && diffRef.current) {
+			return;
+		}
 
-		void getGitDiff({
-			data: {
-				cwd: activeProject.path,
-				path: selectedChange.path,
-				originalPath: selectedChange.originalPath,
-				diffMode: selectedChange.diffMode,
-				code: selectedChange.code,
-			},
-		})
-			.then((nextDiff) => {
-				if (!cancelled) {
-					setDiff(nextDiff);
-				}
-			})
-			.catch((cause) => {
-				if (!cancelled) {
-					setError(
-						cause instanceof Error
-							? cause.message
-							: "Failed to load file diff.",
-					);
-				}
-			})
-			.finally(() => {
-				if (!cancelled) {
-					setIsLoading(false);
-				}
-			});
+		if (diffRequestRef.current?.diffKey === activeDiffKey) {
+			setError("");
+			setIsLoading(true);
+			return;
+		}
 
-		return () => {
-			cancelled = true;
-		};
-	}, [activeProject, selectedChange]);
+		void loadDiff(activeDiffKey, selectedChange, { reset: true }).catch(() => {
+			// Error state is handled inside loadDiff.
+		});
+	}, [activeDiffKey, selectedChange]);
 
 	const rows = useMemo(
 		() => parseUnifiedDiff(diff?.content ?? ""),
@@ -299,6 +354,23 @@ function EmptyState({
 			</div>
 		</div>
 	);
+}
+
+function getGitDiffRequestKey(
+	activeProjectPath: string,
+	selectedChange: GitSelectedChange | null,
+) {
+	if (!activeProjectPath || !selectedChange) {
+		return "";
+	}
+
+	return [
+		activeProjectPath,
+		selectedChange.path,
+		selectedChange.originalPath ?? "",
+		selectedChange.diffMode,
+		selectedChange.code,
+	].join("::");
 }
 
 function parseUnifiedDiff(content: string): ParsedDiffRow[] {

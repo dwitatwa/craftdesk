@@ -58,6 +58,7 @@ export function GitSidebar({
 	selectedChange,
 	onSelectChange,
 }: GitSidebarProps) {
+	const activeProjectPath = activeProject?.path ?? "";
 	const [overview, setOverview] = useState<GitRepositoryOverview | null>(null);
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
@@ -65,83 +66,129 @@ export function GitSidebar({
 	const [sectionOpenState, setSectionOpenState] = useState(
 		createInitialSectionState,
 	);
+	const activeProjectPathRef = useRef(activeProjectPath);
+	const loadedProjectPathRef = useRef("");
+	const overviewRequestRef = useRef<{
+		projectPath: string;
+		promise: Promise<GitRepositoryOverview>;
+	} | null>(null);
 	const selectedChangeRef = useRef(selectedChange);
+	const onSelectChangeRef = useRef(onSelectChange);
+	const overviewRef = useRef(overview);
+	activeProjectPathRef.current = activeProjectPath;
 	selectedChangeRef.current = selectedChange;
+	onSelectChangeRef.current = onSelectChange;
+	overviewRef.current = overview;
 
-	useEffect(() => {
-		setOverview(null);
-		setError("");
-
-		if (!activeProject) {
+	const syncSelectedChange = (nextOverview: GitRepositoryOverview) => {
+		if (!selectedChangeRef.current) {
 			return;
 		}
 
-		let cancelled = false;
+		onSelectChangeRef.current(
+			resolveSelectedChange(selectedChangeRef.current, nextOverview),
+		);
+	};
+
+	const loadOverview = async (
+		projectPath: string,
+		options: {
+			force?: boolean;
+			reset?: boolean;
+		} = {},
+	) => {
+		const existingRequest = overviewRequestRef.current;
+
+		if (!options.force && existingRequest?.projectPath === projectPath) {
+			return existingRequest.promise;
+		}
+
+		if (options.reset) {
+			setOverview(null);
+		}
+
+		setError("");
 		setIsLoading(true);
 
-		void getGitRepositoryOverview({
+		const promise = getGitRepositoryOverview({
 			data: {
-				cwd: activeProject.path,
+				cwd: projectPath,
 			},
-		})
-			.then((nextOverview) => {
-				if (cancelled) {
-					return;
-				}
+		});
+		overviewRequestRef.current = {
+			projectPath,
+			promise,
+		};
 
-				setOverview(nextOverview);
-				if (selectedChangeRef.current) {
-					onSelectChange(
-						resolveSelectedChange(selectedChangeRef.current, nextOverview),
-					);
-				}
-			})
-			.catch((cause) => {
-				if (cancelled) {
-					return;
-				}
+		try {
+			const nextOverview = await promise;
 
+			if (activeProjectPathRef.current !== projectPath) {
+				return nextOverview;
+			}
+
+			loadedProjectPathRef.current = projectPath;
+			setOverview(nextOverview);
+			syncSelectedChange(nextOverview);
+
+			return nextOverview;
+		} catch (cause) {
+			if (activeProjectPathRef.current === projectPath) {
 				setError(
 					cause instanceof Error ? cause.message : "Failed to load Git data.",
 				);
-			})
-			.finally(() => {
-				if (!cancelled) {
-					setIsLoading(false);
-				}
-			});
+			}
 
-		return () => {
-			cancelled = true;
-		};
-	}, [activeProject, onSelectChange]);
+			throw cause;
+		} finally {
+			if (overviewRequestRef.current?.promise === promise) {
+				overviewRequestRef.current = null;
+			}
 
-	const handleRefresh = async () => {
-		if (!activeProject) {
+			if (activeProjectPathRef.current === projectPath) {
+				setIsLoading(false);
+			}
+		}
+	};
+
+	useEffect(() => {
+		if (!activeProjectPath) {
+			loadedProjectPathRef.current = "";
+			overviewRequestRef.current = null;
+			setOverview(null);
+			setError("");
+			setIsLoading(false);
 			return;
 		}
 
-		setError("");
-		setIsLoading(true);
+		if (
+			loadedProjectPathRef.current === activeProjectPath &&
+			overviewRef.current
+		) {
+			syncSelectedChange(overviewRef.current);
+			return;
+		}
+
+		if (overviewRequestRef.current?.projectPath === activeProjectPath) {
+			setError("");
+			setIsLoading(true);
+			return;
+		}
+
+		void loadOverview(activeProjectPath, { reset: true }).catch(() => {
+			// Error state is handled inside loadOverview.
+		});
+	}, [activeProjectPath]);
+
+	const handleRefresh = async () => {
+		if (!activeProjectPath) {
+			return;
+		}
 
 		try {
-			const nextOverview = await getGitRepositoryOverview({
-				data: {
-					cwd: activeProject.path,
-				},
-			});
-			setOverview(nextOverview);
-			if (selectedChangeRef.current) {
-				onSelectChange(
-					resolveSelectedChange(selectedChangeRef.current, nextOverview),
-				);
-			}
-		} catch (cause) {
-			setError(
-				cause instanceof Error ? cause.message : "Failed to refresh Git data.",
-			);
-		} finally {
-			setIsLoading(false);
+			await loadOverview(activeProjectPath, { force: true });
+		} catch {
+			// Error state is handled inside loadOverview.
 		}
 	};
 
@@ -149,7 +196,7 @@ export function GitSidebar({
 		change: GitChange,
 		action: "stage" | "unstage" | "discard",
 	) => {
-		if (!activeProject) {
+		if (!activeProjectPath) {
 			return;
 		}
 
@@ -159,7 +206,7 @@ export function GitSidebar({
 		try {
 			await mutateGitChange({
 				data: {
-					cwd: activeProject.path,
+					cwd: activeProjectPath,
 					path: change.path,
 					action,
 				},
@@ -177,7 +224,7 @@ export function GitSidebar({
 	};
 
 	const handleGitGroupAction = async (action: "stage-all" | "unstage-all") => {
-		if (!activeProject) {
+		if (!activeProjectPath) {
 			return;
 		}
 
@@ -188,7 +235,7 @@ export function GitSidebar({
 		try {
 			await mutateGitChange({
 				data: {
-					cwd: activeProject.path,
+					cwd: activeProjectPath,
 					path: ".",
 					action,
 				},
@@ -209,7 +256,7 @@ export function GitSidebar({
 		message: string,
 		action: "commit" | "commit-push",
 	) => {
-		if (!activeProject || !message.trim()) {
+		if (!activeProjectPath || !message.trim()) {
 			return;
 		}
 
@@ -219,7 +266,7 @@ export function GitSidebar({
 		try {
 			await mutateGitChange({
 				data: {
-					cwd: activeProject.path,
+					cwd: activeProjectPath,
 					path: ".",
 					action,
 					commitMessage: message,
