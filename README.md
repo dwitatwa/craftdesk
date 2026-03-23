@@ -1,261 +1,115 @@
-Welcome to Craftdesk! 
+# Craftdesk
 
-# Getting Started
+Craftdesk is a Linux-first desktop-like web IDE for managing projects, tasks, files, terminal sessions, and Git from a single local app.
 
-To run this application:
+The npm package name is `craftdeskide`. The installed CLI command is `craftdesk`.
+
+## Requirements
+
+- Linux only
+- Node.js `>=22.12.0`
+- npm
+
+Some systems may also need native build prerequisites during `npm install -g craftdeskide` because the package depends on `node-pty`:
+
+- `python3`
+- `make`
+- `g++`
+
+## Install From npm
 
 ```bash
-npm install
-npm run dev
+npm install -g craftdeskide
 ```
 
-# Linux CLI Install
-
-Craftdesk now includes a Linux-only bootstrap CLI intended to be installed globally and then used to prepare a user-owned runtime/data directory for the packaged app.
-
-## Install The CLI
-
-From a local checkout or private Git source:
+After the package is installed, prepare the local runtime:
 
 ```bash
-npm install -g /path/to/craftdesk
+craftdesk install
 ```
 
-This bootstrap step still requires an existing compatible Node.js runtime because npm itself needs Node in order to install the CLI. Craftdesk requires Node `>=22.12.0`.
+This command:
 
-The published npm package is intended to ship the prebuilt app runtime from `.output`, not the project `src/` tree. Because the package still depends on `node-pty`, some Linux systems may also need native build prerequisites available during `npm install -g`, for example `python3`, `make`, and `g++`.
+1. Checks required Linux tools such as `bash` and `git`
+2. Installs missing Linux packages with `apt`, `dnf`, or `pacman` when possible
+3. Prepares Craftdesk data and runtime directories under your home directory
+4. Migrates older installs from `~/.local/share/craftdesk/runtime/data` when possible
 
-## CLI Commands
+## Start The App
 
 ```bash
+craftdesk start
+```
+
+By default, Craftdesk runs on:
+
+```text
+http://127.0.0.1:4000
+```
+
+You can choose a different port:
+
+```bash
+craftdesk start --port=4010
+```
+
+## Stop Or Remove The App
+
+Stop the running app:
+
+```bash
+craftdesk stop
+```
+
+Delete Craftdesk runtime data and local state:
+
+```bash
+craftdesk delete
+```
+
+This removes files under `~/.local/share/craftdesk`. It does not uninstall the global npm package itself.
+
+To remove the CLI package too:
+
+```bash
+npm uninstall -g craftdeskide
+```
+
+## Runtime Paths
+
+Craftdesk uses these paths:
+
+- Package runtime: global npm install location
+- Data: `~/.local/share/craftdesk/data`
+- Runtime files: `~/.local/share/craftdesk/runtime`
+- Logs: `~/.local/share/craftdesk/logs/server.log`
+- PID file: `~/.local/share/craftdesk/run/craftdesk.pid`
+
+## Common Commands
+
+```bash
+craftdesk help
 craftdesk install
 craftdesk start
 craftdesk stop
 craftdesk delete
 ```
 
-`craftdesk install` does the following on Linux:
+## Troubleshooting
 
-1. Checks for required Linux runtime tools such as `bash`, `git`, and optional folder picker support.
-2. Installs missing Linux packages with `apt`, `dnf`, or `pacman` when available.
-3. Validates that the globally installed CLI package already contains the prebuilt Craftdesk runtime.
-4. Stores installer-managed data in `~/.local/share/craftdesk/data` and migrates legacy `runtime/data` installs automatically when possible.
+If `npm install -g craftdeskide` fails while building `node-pty`, install native build tools first.
 
-The built app runtime is loaded from the globally installed npm package. Data is stored under `~/.local/share/craftdesk/data`, runtime files under `~/.local/share/craftdesk/runtime`, and logs under `~/.local/share/craftdesk/logs/server.log`.
-
-For local development, the app still falls back to `./data` unless `CRAFTDESK_DATA_DIR` is set explicitly.
-
-## Publish Workflow
-
-To publish a CLI package without shipping the repo source tree:
+Ubuntu or Debian:
 
 ```bash
-npm run build
-npm pack --dry-run
-npm publish
+sudo apt update
+sudo apt install -y python3 make g++
 ```
 
-`prepack` also runs `npm run build`, so `npm pack` and `npm publish` refresh `.output` before packaging. The published tarball includes the CLI and built runtime artifacts, not `src/`.
+If `craftdesk install` reports missing Linux tools, let it install them or install them manually and retry.
 
-# Building For Production
-
-To build this application for production:
+If the server exits immediately after `craftdesk start`, check:
 
 ```bash
-npm run build
+~/.local/share/craftdesk/logs/server.log
 ```
-
-## Testing
-
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
-
-```bash
-npm run test
-```
-
-## Styling
-
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `npm install @tailwindcss/vite tailwindcss -D`
-
-## Linting & Formatting
-
-This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
-
-
-```bash
-npm run lint
-npm run format
-npm run check
-```
-
-
-## Shadcn
-
-Add components using the latest version of [Shadcn](https://ui.shadcn.com/).
-
-```bash
-pnpm dlx shadcn@latest add button
-```
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
