@@ -21,7 +21,6 @@ export const Route = createFileRoute("/projects/$projectId/tasks/$taskId")({
 const DEFAULT_DETAIL_PANEL_RATIO = 0.48;
 const MIN_DETAIL_PANEL_WIDTH = 360;
 const MIN_TERMINAL_PANEL_WIDTH = 420;
-const DIVIDER_WIDTH = 12;
 
 function TaskDetailView() {
 	const { task } = Route.useLoaderData();
@@ -192,7 +191,7 @@ function TaskDetailView() {
 					{/* Left Side: Details */}
 					<div
 						id="task-detail-panel"
-						className="flex min-w-0 flex-col overflow-y-auto bg-background custom-scrollbar"
+						className="relative flex min-w-0 flex-col overflow-y-auto bg-background custom-scrollbar"
 						style={{ width: detailWidth }}
 					>
 						{/* Header - Consistent with Sidebar and Terminal */}
@@ -282,13 +281,10 @@ function TaskDetailView() {
 								/>
 							</div>
 						</div>
-					</div>
-
-					<div className="relative flex w-3 shrink-0 items-stretch justify-center bg-background/80">
-						<div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80" />
+						<div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-px translate-x-1/2 bg-border/80" />
 						<button
 							type="button"
-							className="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+							className="absolute inset-y-0 right-0 z-20 w-3 translate-x-1/2 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
 							onPointerDown={handleDividerPointerDown}
 							onDoubleClick={handleDividerDoubleClick}
 							onKeyDown={handleDividerKeyDown}
@@ -331,7 +327,7 @@ function TaskDetailView() {
 function clampDetailPanelWidth(width: number, containerWidth: number) {
 	const maxWidth = Math.max(
 		MIN_DETAIL_PANEL_WIDTH,
-		containerWidth - MIN_TERMINAL_PANEL_WIDTH - DIVIDER_WIDTH,
+		containerWidth - MIN_TERMINAL_PANEL_WIDTH,
 	);
 
 	return Math.min(Math.max(width, MIN_DETAIL_PANEL_WIDTH), maxWidth);
