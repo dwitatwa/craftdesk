@@ -115,6 +115,12 @@ export interface DeleteTaskInput {
 	taskId: string;
 }
 
+export interface UpdateTaskInput {
+	taskId: string;
+	title: string;
+	notes: string;
+}
+
 export interface MoveTaskInput {
 	projectId: string;
 	taskId: string;

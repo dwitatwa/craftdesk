@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Terminal, Trash2 } from "lucide-react";
+import { Pencil, Terminal, Trash2 } from "lucide-react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import {
@@ -13,18 +13,24 @@ import {
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
 import { cn } from "#/lib/utils";
+import { EditTaskModal } from "./edit-task-modal";
 
 interface TaskCardProps {
 	id: string;
 	projectId: string;
 	title: string;
 	notes?: string;
+	columnTitle?: string;
 	className?: string;
 	draggable?: boolean;
 	isDragging?: boolean;
 	isRunning?: boolean;
 	onDragStart?: (event: DragEvent<HTMLElement>) => void;
 	onDragEnd?: () => void;
+	onUpdateTask: (
+		taskId: string,
+		input: { title: string; notes: string },
+	) => Promise<void> | void;
 	onDelete: (taskId: string) => Promise<void> | void;
 }
 
@@ -33,16 +39,19 @@ export function TaskCard({
 	projectId,
 	title,
 	notes,
+	columnTitle,
 	className,
 	draggable,
 	isDragging,
 	isRunning,
 	onDragStart,
 	onDragEnd,
+	onUpdateTask,
 	onDelete,
 }: TaskCardProps) {
 	const navigate = useNavigate();
 	const cardRef = useRef<HTMLDivElement>(null);
+	const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [isClickSuppressed, setIsClickSuppressed] = useState(false);
@@ -107,20 +116,30 @@ export function TaskCard({
 					isDragging && "opacity-45",
 					className,
 				)}
-				draggable={draggable}
-				onDragStart={handleTaskDragStart}
-				onDragEnd={handleTaskDragEnd}
 			>
 				<div
 					ref={cardRef}
 					className={cn(
-						"relative isolate flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card bg-clip-padding shadow-sm transition-all duration-150 cursor-grab active:cursor-grabbing",
+						"relative isolate flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card bg-clip-padding shadow-sm transition-all duration-150",
 						"hover:border-primary/50 hover:bg-white/[0.02]",
 					)}
 				>
 					<div className="p-3 space-y-3">
-						{/* Top Row: ID and Delete */}
-						<div className="flex items-center justify-between">
+						{/* Top Row: ID and Status */}
+						<button
+							type="button"
+							aria-label={`Drag ${title}`}
+							className={cn(
+								"flex w-full items-center justify-between rounded-md border-0 bg-transparent p-0 text-left",
+								draggable && "cursor-grab active:cursor-grabbing",
+							)}
+							draggable={draggable}
+							onClick={(event) => {
+								event.preventDefault();
+							}}
+							onDragStart={handleTaskDragStart}
+							onDragEnd={handleTaskDragEnd}
+						>
 							<div className="flex items-center gap-2">
 								<span
 									className={cn(
@@ -142,19 +161,8 @@ export function TaskCard({
 									</span>
 								)}
 							</div>
-							<button
-								type="button"
-								onClick={(e) => {
-									e.stopPropagation();
-									e.preventDefault();
-									setIsDeleteDialogOpen(true);
-								}}
-								className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded hover:border-red-500/20 hover:bg-red-500/5 cursor-pointer uppercase tracking-tighter"
-							>
-								<Trash2 className="size-3" />
-								<span>Delete</span>
-							</button>
-						</div>
+							<div />
+						</button>
 
 						{/* Title Area */}
 						<button
@@ -177,8 +185,43 @@ export function TaskCard({
 							)}
 						</button>
 					</div>
+					<div className="flex items-center justify-end gap-1 border-t border-border/70 px-3 py-2">
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								e.preventDefault();
+								setIsEditModalOpen(true);
+							}}
+							className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-white/5 cursor-pointer uppercase tracking-tighter"
+						>
+							<Pencil className="size-3" />
+							<span>Edit</span>
+						</button>
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								e.preventDefault();
+								setIsDeleteDialogOpen(true);
+							}}
+							className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded hover:border-red-500/20 hover:bg-red-500/5 cursor-pointer uppercase tracking-tighter"
+						>
+							<Trash2 className="size-3" />
+							<span>Delete</span>
+						</button>
+					</div>
 				</div>
 			</li>
+
+			<EditTaskModal
+				isOpen={isEditModalOpen}
+				onOpenChange={setIsEditModalOpen}
+				columnTitle={columnTitle}
+				initialTitle={title}
+				initialNotes={notes ?? ""}
+				onSave={(input) => onUpdateTask(id, input)}
+			/>
 
 			<AlertDialog
 				open={isDeleteDialogOpen}

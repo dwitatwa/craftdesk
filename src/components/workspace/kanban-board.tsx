@@ -24,6 +24,10 @@ interface ColumnProps {
 		title: string;
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
+	onUpdateTask: (
+		taskId: string,
+		input: { title: string; notes: string },
+	) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
 	onDragOverColumn: (event: DragEvent<HTMLElement>, columnId: string) => void;
 	onDragLeaveColumn: (event: DragEvent<HTMLElement>, columnId: string) => void;
@@ -42,6 +46,7 @@ function Column({
 	column,
 	onCreateTask,
 	onDeleteColumn,
+	onUpdateTask,
 	onDeleteTask,
 	onDragOverColumn,
 	onDragLeaveColumn,
@@ -94,24 +99,26 @@ function Column({
 					"flex min-h-0 flex-col overflow-hidden rounded-xl border border-transparent transition-colors",
 					activeDropColumnId === column.id && "border-primary/40 bg-primary/5",
 				)}
-				onDragOver={(event) => onDragOverColumn(event, column.id)}
-				onDragLeave={(event) => onDragLeaveColumn(event, column.id)}
-				onDrop={(event) => onDropOnColumn(event, column.id)}
 			>
 				<ul
 					className="custom-scrollbar m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto p-0 pr-1 pb-4 [scrollbar-gutter:stable]"
 					aria-label={`${column.title} tasks`}
+					onDragOver={(event) => onDragOverColumn(event, column.id)}
+					onDragLeave={(event) => onDragLeaveColumn(event, column.id)}
+					onDrop={(event) => onDropOnColumn(event, column.id)}
 				>
 					{column.tasks.map((task) => (
 						<TaskCard
 							key={task.id}
 							{...task}
+							columnTitle={column.title}
 							draggable
 							isDragging={draggedTaskId === task.id}
 							onDragStart={(event) =>
 								onDragStartTask(event, task.id, column.id)
 							}
 							onDragEnd={onDragEndTask}
+							onUpdateTask={onUpdateTask}
 							onDelete={onDeleteTask}
 						/>
 					))}
@@ -176,6 +183,10 @@ interface KanbanBoardProps {
 		title: string;
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
+	onUpdateTask: (
+		taskId: string,
+		input: { title: string; notes: string },
+	) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
 	onMoveTask: (taskId: string, targetColumnId: string) => Promise<void> | void;
 }
@@ -243,6 +254,7 @@ export function KanbanBoard({
 	columns,
 	onCreateTask,
 	onDeleteColumn,
+	onUpdateTask,
 	onDeleteTask,
 	onMoveTask,
 }: KanbanBoardProps) {
@@ -344,6 +356,7 @@ export function KanbanBoard({
 						column={column}
 						onCreateTask={onCreateTask}
 						onDeleteColumn={onDeleteColumn}
+						onUpdateTask={onUpdateTask}
 						onDeleteTask={onDeleteTask}
 						onDragOverColumn={handleDragOverColumn}
 						onDragLeaveColumn={handleDragLeaveColumn}

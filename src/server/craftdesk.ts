@@ -15,6 +15,7 @@ import type {
 	SaveProjectInput,
 	TaskLookupInput,
 	UpdateProjectFileInput,
+	UpdateTaskInput,
 	UpdateTaskNotesInput,
 } from "#/lib/craftdesk";
 
@@ -117,6 +118,13 @@ export const updateTaskNotes = createServerFn({ method: "POST" })
 			"#/server/db"
 		);
 		return updateTaskNotesInDb(data);
+	});
+
+export const updateTask = createServerFn({ method: "POST" })
+	.inputValidator((input: UpdateTaskInput) => input)
+	.handler(async ({ data }) => {
+		const { updateTask: updateTaskInDb } = await import("#/server/db");
+		return updateTaskInDb(data);
 	});
 
 export const deleteTask = createServerFn({ method: "POST" })

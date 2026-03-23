@@ -18,6 +18,7 @@ import {
 	type SaveProjectInput,
 	slugifyProjectId,
 	type TaskDetail,
+	type UpdateTaskInput,
 } from "#/lib/craftdesk";
 import { isScopeRunning } from "#/server/terminal-manager";
 
@@ -893,6 +894,29 @@ export function updateTaskNotes(input: { taskId: string; notes: string }) {
     SET notes = ?, updated_at = ?
     WHERE id = ?
   `).run(notes, timestamp, input.taskId);
+}
+
+export function updateTask(input: UpdateTaskInput) {
+	const db = getDb();
+	const title = input.title.trim();
+	const notes = input.notes.replace(/\r\n/g, "\n");
+	const timestamp = nowIso();
+
+	if (!title) {
+		throw new Error("Task title is required.");
+	}
+
+	const result = db
+		.prepare(`
+      UPDATE tasks
+      SET title = ?, notes = ?, updated_at = ?
+      WHERE id = ?
+    `)
+		.run(title, notes, timestamp, input.taskId);
+
+	if (result.changes === 0) {
+		throw new Error("Task not found.");
+	}
 }
 
 export function moveTask(input: MoveTaskInput) {
