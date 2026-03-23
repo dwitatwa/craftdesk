@@ -46,7 +46,7 @@ type GitSidebarSectionId = "changes" | "branches" | "remotes" | "stashes";
 
 function createInitialSectionState(): Record<GitSidebarSectionId, boolean> {
 	return {
-		changes: false,
+		changes: true,
 		branches: false,
 		remotes: false,
 		stashes: false,
