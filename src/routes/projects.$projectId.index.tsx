@@ -3,7 +3,6 @@ import { EyeOff, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
-import { CreateTaskModal } from "#/components/workspace/create-task-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { Terminal } from "#/components/workspace/terminal";
 import { cn } from "#/lib/utils";
@@ -44,7 +43,6 @@ function ProjectDetailView() {
 		containerBottom: number;
 		containerHeight: number;
 	} | null>(null);
-	const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
 	const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
 	const [isUpdatingDoneVisibility, setIsUpdatingDoneVisibility] =
 		useState(false);
@@ -52,7 +50,6 @@ function ProjectDetailView() {
 	const [terminalHeight, setTerminalHeight] = useState(DEFAULT_TERMINAL_HEIGHT);
 	const [isResizingTerminal, setIsResizingTerminal] = useState(false);
 
-	const primaryColumn = workspace?.columns[0];
 	const doneColumn = workspace?.columns.find(
 		(column) => column.title === "Done",
 	);
@@ -358,15 +355,6 @@ function ProjectDetailView() {
 								<Plus className="size-3.5" />
 								Add Column
 							</Button>
-							<Button
-								size="sm"
-								className="h-8 gap-2 text-xs font-medium cursor-pointer"
-								onClick={() => setIsCreateTaskModalOpen(true)}
-								disabled={!primaryColumn}
-							>
-								<Plus className="size-3.5" />
-								New Task
-							</Button>
 						</div>
 					</div>
 
@@ -433,20 +421,6 @@ function ProjectDetailView() {
 					</div>
 				</div>
 			)}
-
-			<CreateTaskModal
-				isOpen={isCreateTaskModalOpen}
-				onOpenChange={setIsCreateTaskModalOpen}
-				columnTitle={primaryColumn?.title}
-				onCreate={(input) =>
-					primaryColumn
-						? handleCreateTask({
-								columnId: primaryColumn.id,
-								title: input.title,
-							})
-						: Promise.resolve()
-				}
-			/>
 
 			<CreateColumnModal
 				isOpen={isCreateColumnModalOpen}
