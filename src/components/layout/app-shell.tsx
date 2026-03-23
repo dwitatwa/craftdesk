@@ -112,14 +112,14 @@ export function AppShell({
 			<Dialog open={isProjectPickerOpen} onOpenChange={setIsProjectPickerOpen}>
 				<DialogContent
 					hideClose
-					className="max-w-xl p-0 gap-0 overflow-hidden border border-white/5 bg-[#09090B] shadow-2xl"
+					className="max-w-xl gap-0 overflow-hidden border border-white/10 bg-card/95 p-0 shadow-[0_28px_90px_rgba(0,0,0,0.58)] ring-1 ring-white/8 backdrop-blur-sm"
 				>
 					{/* Search Header */}
-					<div className="relative flex items-center border-b border-white/5 px-4 h-12">
+					<div className="relative flex h-12 items-center border-b border-white/8 bg-white/[0.03] px-4">
 						<Search className="size-4 text-muted-foreground/50 mr-3" />
 						<Input
 							placeholder="Search workspaces..."
-							className="flex-1 h-full bg-transparent border-none focus-visible:ring-0 text-sm p-0 placeholder:text-muted-foreground/30"
+							className="h-full flex-1 border-none bg-transparent p-0 text-sm focus-visible:ring-0 placeholder:text-muted-foreground/45"
 							value={searchQuery}
 							onChange={(e) => setSearchQuery(e.target.value)}
 							autoFocus
@@ -142,7 +142,7 @@ export function AppShell({
 
 					{/* List Area */}
 					<div className="max-h-[380px] overflow-y-auto custom-scrollbar p-1.5">
-						<div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/30">
+						<div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/45">
 							Recent Workspaces
 						</div>
 
@@ -160,7 +160,7 @@ export function AppShell({
 							</div>
 						) : (
 							<div className="flex flex-col items-center justify-center py-12 text-center">
-								<p className="text-xs text-muted-foreground/40 italic">
+								<p className="text-xs italic text-muted-foreground/55">
 									{searchQuery
 										? "No matching workspaces found."
 										: "No workspaces added yet."}
@@ -175,19 +175,19 @@ export function AppShell({
 							ERROR: {addProjectError}
 						</div>
 					)}
-					<div className="px-4 py-2 border-t border-white/5 bg-white/[0.02] flex items-center justify-between">
-						<div className="text-[9px] text-muted-foreground/40 font-mono uppercase tracking-widest">
+					<div className="flex items-center justify-between border-t border-white/8 bg-white/[0.04] px-4 py-2">
+						<div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50">
 							{filteredProjects.length} total projects
 						</div>
 						<div className="flex items-center gap-3">
-							<div className="flex items-center gap-1 text-[9px] text-muted-foreground/30">
-								<kbd className="px-1 rounded bg-white/5 border border-white/5">
+							<div className="flex items-center gap-1 text-[9px] text-muted-foreground/40">
+								<kbd className="rounded border border-white/10 bg-white/[0.07] px-1">
 									↑↓
 								</kbd>
 								<span>Navigate</span>
 							</div>
-							<div className="flex items-center gap-1 text-[9px] text-muted-foreground/30">
-								<kbd className="px-1 rounded bg-white/5 border border-white/5">
+							<div className="flex items-center gap-1 text-[9px] text-muted-foreground/40">
+								<kbd className="rounded border border-white/10 bg-white/[0.07] px-1">
 									Enter
 								</kbd>
 								<span>Select</span>
