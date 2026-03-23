@@ -48,7 +48,14 @@ function CraftdeskApp() {
 	};
 
 	return (
-		<AppShell showSidebar={false} onDeleteProject={handleDeleteProject}>
+		<AppShell
+			showSidebar={false}
+			projects={projects}
+			onAddProject={addProject}
+			isAddingProject={isAddingProject}
+			addProjectError={addProjectError}
+			onDeleteProject={handleDeleteProject}
+		>
 			<div className="flex-1 flex flex-col items-center justify-center p-8 max-w-5xl mx-auto w-full">
 				<div className="text-center space-y-4 mb-12">
 					<div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs font-mono text-primary">

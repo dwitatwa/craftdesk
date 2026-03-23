@@ -308,9 +308,7 @@ function ProjectDetailView() {
 						}
 					: null
 			}
-			onAddProject={async () => {
-				await addProject();
-			}}
+			onAddProject={addProject}
 			isAddingProject={isAddingProject}
 			addProjectError={addProjectError}
 			onDeleteProject={handleDeleteProject}

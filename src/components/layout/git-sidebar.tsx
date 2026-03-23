@@ -1,5 +1,4 @@
 import {
-	Check,
 	ChevronDown,
 	GitBranch,
 	GitCommitHorizontal,
