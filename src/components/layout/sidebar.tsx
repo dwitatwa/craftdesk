@@ -17,6 +17,7 @@ interface SidebarProps {
 	style?: React.CSSProperties;
 	selectedGitChange: GitSelectedChange | null;
 	onSelectGitChange: (change: GitSelectedChange | null) => void;
+	onGitOverviewRefresh?: () => void;
 	onBeforeProjectFileOpen: (
 		currentRelativePath: string,
 		nextRelativePath: string,
@@ -33,6 +34,7 @@ export function Sidebar({
 	style,
 	selectedGitChange,
 	onSelectGitChange,
+	onGitOverviewRefresh,
 	onBeforeProjectFileOpen,
 	activeSidebarView,
 	onSidebarViewChange,
@@ -123,6 +125,7 @@ export function Sidebar({
 								activeProject={activeProject}
 								selectedChange={selectedGitChange}
 								onSelectChange={onSelectGitChange}
+								onOverviewRefresh={onGitOverviewRefresh}
 							/>
 						</div>
 					</>

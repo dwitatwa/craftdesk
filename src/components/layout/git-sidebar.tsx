@@ -13,7 +13,13 @@ import {
 	Send,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useEffectEvent,
+	useRef,
+	useState,
+} from "react";
 
 import { Button } from "#/components/ui/button";
 import { Textarea } from "#/components/ui/textarea";
@@ -28,7 +34,11 @@ import type {
 	GitStashEntry,
 } from "#/lib/git";
 import { cn } from "#/lib/utils";
-import { getGitRepositoryOverview, mutateGitChange } from "#/server/git";
+import {
+	getGitRepositoryOverview,
+	mutateGitChange,
+	waitForGitRepositoryChange,
+} from "#/server/git";
 
 interface ActiveProjectContext {
 	id: string;
@@ -40,7 +50,12 @@ interface GitSidebarProps {
 	activeProject: ActiveProjectContext | null;
 	selectedChange: GitSelectedChange | null;
 	onSelectChange: (change: GitSelectedChange | null) => void;
+	onOverviewRefresh?: () => void;
 }
+
+const GIT_REPOSITORY_WAIT_TIMEOUT_MS = 25_000;
+const GIT_REPOSITORY_FALLBACK_REFRESH_MS = 30_000;
+const GIT_PENDING_MUTATION_RETRY_MS = 500;
 
 type GitSidebarSectionId = "changes" | "branches" | "remotes" | "stashes";
 
@@ -57,6 +72,7 @@ export function GitSidebar({
 	activeProject,
 	selectedChange,
 	onSelectChange,
+	onOverviewRefresh,
 }: GitSidebarProps) {
 	const activeProjectPath = activeProject?.path ?? "";
 	const [overview, setOverview] = useState<GitRepositoryOverview | null>(null);
@@ -74,82 +90,95 @@ export function GitSidebar({
 	} | null>(null);
 	const selectedChangeRef = useRef(selectedChange);
 	const onSelectChangeRef = useRef(onSelectChange);
+	const onOverviewRefreshRef = useRef(onOverviewRefresh);
 	const overviewRef = useRef(overview);
+	const pendingMutationKeyRef = useRef(pendingMutationKey);
+	const changeVersionRef = useRef(0);
 	activeProjectPathRef.current = activeProjectPath;
 	selectedChangeRef.current = selectedChange;
 	onSelectChangeRef.current = onSelectChange;
+	onOverviewRefreshRef.current = onOverviewRefresh;
 	overviewRef.current = overview;
+	pendingMutationKeyRef.current = pendingMutationKey;
 
-	const syncSelectedChange = (nextOverview: GitRepositoryOverview) => {
-		if (!selectedChangeRef.current) {
-			return;
-		}
+	const syncSelectedChange = useCallback(
+		(nextOverview: GitRepositoryOverview) => {
+			if (!selectedChangeRef.current) {
+				return;
+			}
 
-		onSelectChangeRef.current(
-			resolveSelectedChange(selectedChangeRef.current, nextOverview),
-		);
-	};
+			onSelectChangeRef.current(
+				resolveSelectedChange(selectedChangeRef.current, nextOverview),
+			);
+		},
+		[],
+	);
 
-	const loadOverview = async (
-		projectPath: string,
-		options: {
-			force?: boolean;
-			reset?: boolean;
-		} = {},
-	) => {
-		const existingRequest = overviewRequestRef.current;
+	const loadOverview = useCallback(
+		async (
+			projectPath: string,
+			options: {
+				force?: boolean;
+				reset?: boolean;
+			} = {},
+		) => {
+			const existingRequest = overviewRequestRef.current;
 
-		if (!options.force && existingRequest?.projectPath === projectPath) {
-			return existingRequest.promise;
-		}
+			if (!options.force && existingRequest?.projectPath === projectPath) {
+				return existingRequest.promise;
+			}
 
-		if (options.reset) {
-			setOverview(null);
-		}
+			if (options.reset) {
+				setOverview(null);
+			}
 
-		setError("");
-		setIsLoading(true);
+			setError("");
+			setIsLoading(true);
 
-		const promise = getGitRepositoryOverview({
-			data: {
-				cwd: projectPath,
-			},
-		});
-		overviewRequestRef.current = {
-			projectPath,
-			promise,
-		};
+			const promise = getGitRepositoryOverview({
+				data: {
+					cwd: projectPath,
+				},
+			});
+			overviewRequestRef.current = {
+				projectPath,
+				promise,
+			};
 
-		try {
-			const nextOverview = await promise;
+			try {
+				const nextOverview = await promise;
 
-			if (activeProjectPathRef.current !== projectPath) {
+				if (activeProjectPathRef.current !== projectPath) {
+					return nextOverview;
+				}
+
+				loadedProjectPathRef.current = projectPath;
+				setOverview(nextOverview);
+				changeVersionRef.current = nextOverview.changeVersion;
+				syncSelectedChange(nextOverview);
+				onOverviewRefreshRef.current?.();
+
 				return nextOverview;
-			}
+			} catch (cause) {
+				if (activeProjectPathRef.current === projectPath) {
+					setError(
+						cause instanceof Error ? cause.message : "Failed to load Git data.",
+					);
+				}
 
-			loadedProjectPathRef.current = projectPath;
-			setOverview(nextOverview);
-			syncSelectedChange(nextOverview);
+				throw cause;
+			} finally {
+				if (overviewRequestRef.current?.promise === promise) {
+					overviewRequestRef.current = null;
+				}
 
-			return nextOverview;
-		} catch (cause) {
-			if (activeProjectPathRef.current === projectPath) {
-				setError(
-					cause instanceof Error ? cause.message : "Failed to load Git data.",
-				);
+				if (activeProjectPathRef.current === projectPath) {
+					setIsLoading(false);
+				}
 			}
-
-			throw cause;
-		} finally {
-			if (overviewRequestRef.current?.promise === promise) {
-				overviewRequestRef.current = null;
-			}
-
-			if (activeProjectPathRef.current === projectPath) {
-				setIsLoading(false);
-			}
-		}
-	};
+		},
+		[syncSelectedChange],
+	);
 
 	useEffect(() => {
 		if (!activeProjectPath) {
@@ -158,6 +187,7 @@ export function GitSidebar({
 			setOverview(null);
 			setError("");
 			setIsLoading(false);
+			changeVersionRef.current = 0;
 			return;
 		}
 
@@ -178,6 +208,126 @@ export function GitSidebar({
 		void loadOverview(activeProjectPath, { reset: true }).catch(() => {
 			// Error state is handled inside loadOverview.
 		});
+	}, [activeProjectPath, loadOverview, syncSelectedChange]);
+
+	const refreshOverview = useEffectEvent(
+		async (projectPath: string, options?: { force?: boolean }) => {
+			try {
+				await loadOverview(projectPath, options);
+			} catch {
+				// Error state is handled inside loadOverview.
+			}
+		},
+	);
+
+	useEffect(() => {
+		if (!activeProjectPath) {
+			return;
+		}
+
+		let isCancelled = false;
+		let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+		const clearFallbackTimer = () => {
+			if (!fallbackTimer) {
+				return;
+			}
+
+			clearTimeout(fallbackTimer);
+			fallbackTimer = null;
+		};
+
+		const scheduleFallbackRefresh = () => {
+			clearFallbackTimer();
+			fallbackTimer = setTimeout(() => {
+				if (isCancelled) {
+					return;
+				}
+
+				if (
+					document.visibilityState !== "visible" ||
+					pendingMutationKeyRef.current
+				) {
+					scheduleFallbackRefresh();
+					return;
+				}
+
+				void refreshOverview(activeProjectPath, { force: true });
+				scheduleFallbackRefresh();
+			}, GIT_REPOSITORY_FALLBACK_REFRESH_MS);
+		};
+
+		const handleVisibilityRefresh = () => {
+			if (
+				document.visibilityState !== "visible" ||
+				pendingMutationKeyRef.current
+			) {
+				return;
+			}
+
+			void refreshOverview(activeProjectPath, { force: true });
+		};
+
+		const syncLoop = async () => {
+			while (!isCancelled) {
+				if (!overviewRef.current) {
+					await delay(GIT_PENDING_MUTATION_RETRY_MS);
+					continue;
+				}
+
+				if (document.visibilityState !== "visible") {
+					await delay(GIT_PENDING_MUTATION_RETRY_MS);
+					continue;
+				}
+
+				if (pendingMutationKeyRef.current) {
+					await delay(GIT_PENDING_MUTATION_RETRY_MS);
+					continue;
+				}
+
+				try {
+					const result = await waitForGitRepositoryChange({
+						data: {
+							cwd: activeProjectPath,
+							afterVersion: changeVersionRef.current,
+							timeoutMs: GIT_REPOSITORY_WAIT_TIMEOUT_MS,
+						},
+					});
+
+					if (
+						isCancelled ||
+						activeProjectPathRef.current !== activeProjectPath
+					) {
+						return;
+					}
+
+					if (!result.changed) {
+						continue;
+					}
+
+					changeVersionRef.current = result.version;
+					await refreshOverview(activeProjectPath, { force: true });
+				} catch {
+					if (isCancelled) {
+						return;
+					}
+
+					await delay(GIT_PENDING_MUTATION_RETRY_MS);
+				}
+			}
+		};
+
+		scheduleFallbackRefresh();
+		void syncLoop();
+		window.addEventListener("focus", handleVisibilityRefresh);
+		document.addEventListener("visibilitychange", handleVisibilityRefresh);
+
+		return () => {
+			isCancelled = true;
+			clearFallbackTimer();
+			window.removeEventListener("focus", handleVisibilityRefresh);
+			document.removeEventListener("visibilitychange", handleVisibilityRefresh);
+		};
 	}, [activeProjectPath]);
 
 	const handleRefresh = async () => {
@@ -893,25 +1043,44 @@ function findMatchingChange(
 	changes: GitChange[],
 	diffMode: GitDiffMode,
 ) {
-	if (!current || current.diffMode !== diffMode) {
+	if (!current) {
 		return null;
 	}
 
-	const matchingChange = changes.find(
+	const exactMatch = changes.find(
 		(change) =>
 			change.path === current.path &&
 			change.code === current.code &&
 			change.originalPath === current.originalPath,
 	);
 
-	if (!matchingChange) {
+	if (exactMatch) {
+		return {
+			...exactMatch,
+			diffMode,
+		};
+	}
+
+	const pathMatch = changes.find(
+		(change) =>
+			change.path === current.path &&
+			change.originalPath === current.originalPath,
+	);
+
+	if (!pathMatch) {
 		return null;
 	}
 
 	return {
-		...matchingChange,
+		...pathMatch,
 		diffMode,
 	};
+}
+
+function delay(timeoutMs: number) {
+	return new Promise<void>((resolve) => {
+		setTimeout(resolve, timeoutMs);
+	});
 }
 
 function getChangeToneClassName(code: string) {

@@ -15,6 +15,12 @@ export interface GitRepositoryOverviewInput {
 	cwd: string;
 }
 
+export interface GitRepositoryChangeWaitInput {
+	cwd: string;
+	afterVersion: number;
+	timeoutMs?: number;
+}
+
 export interface GitDiffInput {
 	cwd: string;
 	path: string;
@@ -26,7 +32,14 @@ export interface GitDiffInput {
 export interface GitChangeMutationInput {
 	cwd: string;
 	path: string;
-	action: "stage" | "unstage" | "discard" | "stage-all" | "unstage-all" | "commit" | "commit-push";
+	action:
+		| "stage"
+		| "unstage"
+		| "discard"
+		| "stage-all"
+		| "unstage-all"
+		| "commit"
+		| "commit-push";
 	commitMessage?: string;
 }
 
@@ -81,6 +94,7 @@ export interface GitStashEntry {
 export interface GitRepositoryOverview {
 	repoRoot: string;
 	repoName: string;
+	changeVersion: number;
 	branch: GitBranchSummary;
 	branches: GitBranchListEntry[];
 	commits: GitCommitPreview[];
@@ -88,6 +102,12 @@ export interface GitRepositoryOverview {
 	unstaged: GitChange[];
 	remotes: GitRemote[];
 	stashes: GitStashEntry[];
+}
+
+export interface GitRepositoryChangeWaitResult {
+	repoRoot: string;
+	version: number;
+	changed: boolean;
 }
 
 export interface GitDiffResult {

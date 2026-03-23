@@ -5,7 +5,7 @@ import {
 	MoveRight,
 	X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ActiveProjectContext } from "#/components/layout/app-shell";
 import { Button } from "#/components/ui/button";
@@ -16,6 +16,7 @@ import { getGitDiff } from "#/server/git";
 interface GitDiffViewProps {
 	activeProject: ActiveProjectContext | null;
 	onClose: () => void;
+	refreshVersion: number;
 	selectedChange: GitSelectedChange | null;
 }
 
@@ -34,6 +35,7 @@ interface ParsedDiffRow {
 export function GitDiffView({
 	activeProject,
 	onClose,
+	refreshVersion,
 	selectedChange,
 }: GitDiffViewProps) {
 	const activeProjectPath = activeProject?.path ?? "";
@@ -44,6 +46,7 @@ export function GitDiffView({
 	const activeDiffKeyRef = useRef(activeDiffKey);
 	const diffRef = useRef(diff);
 	const loadedDiffKeyRef = useRef("");
+	const loadedRefreshVersionRef = useRef(-1);
 	const diffRequestRef = useRef<{
 		diffKey: string;
 		promise: Promise<GitDiffResult>;
@@ -51,74 +54,81 @@ export function GitDiffView({
 	activeDiffKeyRef.current = activeDiffKey;
 	diffRef.current = diff;
 
-	const loadDiff = async (
-		diffKey: string,
-		change: GitSelectedChange,
-		options: {
-			force?: boolean;
-			reset?: boolean;
-		} = {},
-	) => {
-		const existingRequest = diffRequestRef.current;
+	const loadDiff = useCallback(
+		async (
+			diffKey: string,
+			change: GitSelectedChange,
+			options: {
+				force?: boolean;
+				reset?: boolean;
+			} = {},
+		) => {
+			const existingRequest = diffRequestRef.current;
 
-		if (!options.force && existingRequest?.diffKey === diffKey) {
-			return existingRequest.promise;
-		}
+			if (!options.force && existingRequest?.diffKey === diffKey) {
+				return existingRequest.promise;
+			}
 
-		if (options.reset) {
-			setDiff(null);
-		}
+			if (options.reset) {
+				setDiff(null);
+			}
 
-		setError("");
-		setIsLoading(true);
+			setError("");
+			setIsLoading(true);
 
-		const promise = getGitDiff({
-			data: {
-				cwd: activeProjectPath,
-				path: change.path,
-				originalPath: change.originalPath,
-				diffMode: change.diffMode,
-				code: change.code,
-			},
-		});
-		diffRequestRef.current = {
-			diffKey,
-			promise,
-		};
+			const promise = getGitDiff({
+				data: {
+					cwd: activeProjectPath,
+					path: change.path,
+					originalPath: change.originalPath,
+					diffMode: change.diffMode,
+					code: change.code,
+				},
+			});
+			diffRequestRef.current = {
+				diffKey,
+				promise,
+			};
 
-		try {
-			const nextDiff = await promise;
+			try {
+				const nextDiff = await promise;
 
-			if (activeDiffKeyRef.current !== diffKey) {
+				if (activeDiffKeyRef.current !== diffKey) {
+					return nextDiff;
+				}
+
+				loadedDiffKeyRef.current = diffKey;
+				loadedRefreshVersionRef.current = refreshVersion;
+				setDiff(nextDiff);
+
 				return nextDiff;
-			}
+			} catch (cause) {
+				if (activeDiffKeyRef.current === diffKey) {
+					setError(
+						cause instanceof Error
+							? cause.message
+							: "Failed to load file diff.",
+					);
+				}
 
-			loadedDiffKeyRef.current = diffKey;
-			setDiff(nextDiff);
+				throw cause;
+			} finally {
+				if (diffRequestRef.current?.promise === promise) {
+					diffRequestRef.current = null;
+				}
 
-			return nextDiff;
-		} catch (cause) {
-			if (activeDiffKeyRef.current === diffKey) {
-				setError(
-					cause instanceof Error ? cause.message : "Failed to load file diff.",
-				);
+				if (activeDiffKeyRef.current === diffKey) {
+					setIsLoading(false);
+				}
 			}
-
-			throw cause;
-		} finally {
-			if (diffRequestRef.current?.promise === promise) {
-				diffRequestRef.current = null;
-			}
-
-			if (activeDiffKeyRef.current === diffKey) {
-				setIsLoading(false);
-			}
-		}
-	};
+		},
+		[activeProjectPath, refreshVersion],
+	);
 
 	useEffect(() => {
 		if (!activeDiffKey || !selectedChange) {
 			loadedDiffKeyRef.current = "";
+			loadedRefreshVersionRef.current = -1;
 			diffRequestRef.current = null;
 			setDiff(null);
 			setError("");
@@ -126,7 +136,11 @@ export function GitDiffView({
 			return;
 		}
 
-		if (loadedDiffKeyRef.current === activeDiffKey && diffRef.current) {
+		if (
+			loadedDiffKeyRef.current === activeDiffKey &&
+			loadedRefreshVersionRef.current === refreshVersion &&
+			diffRef.current
+		) {
 			return;
 		}
 
@@ -139,7 +153,7 @@ export function GitDiffView({
 		void loadDiff(activeDiffKey, selectedChange, { reset: true }).catch(() => {
 			// Error state is handled inside loadDiff.
 		});
-	}, [activeDiffKey, selectedChange]);
+	}, [activeDiffKey, loadDiff, refreshVersion, selectedChange]);
 
 	const rows = useMemo(
 		() => parseUnifiedDiff(diff?.content ?? ""),

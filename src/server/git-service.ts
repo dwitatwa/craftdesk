@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, type FSWatcher, statSync, watch } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +14,8 @@ import type {
 	GitDiffInput,
 	GitDiffResult,
 	GitRemote,
+	GitRepositoryChangeWaitInput,
+	GitRepositoryChangeWaitResult,
 	GitRepositoryOverview,
 	GitRepositoryOverviewInput,
 	GitStashEntry,
@@ -21,6 +23,9 @@ import type {
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_MAX_BUFFER = 8 * 1024 * 1024;
+const DEFAULT_GIT_WATCH_TIMEOUT_MS = 25_000;
+const MAX_GIT_WATCH_TIMEOUT_MS = 30_000;
+const GIT_WATCH_DEBOUNCE_MS = 150;
 
 interface ExecError extends Error {
 	code?: number | string;
@@ -28,10 +33,28 @@ interface ExecError extends Error {
 	stderr?: string;
 }
 
+interface GitRepositoryWatcherWaiter {
+	afterVersion: number;
+	resolve: (result: GitRepositoryChangeWaitResult) => void;
+	timer: ReturnType<typeof setTimeout>;
+}
+
+interface GitRepositoryWatchState {
+	repoRoot: string;
+	gitDir: string;
+	version: number;
+	watchers: FSWatcher[];
+	waiters: GitRepositoryWatcherWaiter[];
+	debounceTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const repositoryWatchStates = new Map<string, GitRepositoryWatchState>();
+
 export async function loadGitRepositoryOverview(
 	input: GitRepositoryOverviewInput,
 ): Promise<GitRepositoryOverview> {
 	const repoRoot = await resolveGitRepositoryRoot(input.cwd);
+	const changeVersion = await ensureGitRepositoryWatchVersion(repoRoot);
 
 	const [branch, branches, commits, statusOutput, remotes, stashes] =
 		await Promise.all([
@@ -48,6 +71,7 @@ export async function loadGitRepositoryOverview(
 	return {
 		repoRoot,
 		repoName: path.basename(repoRoot),
+		changeVersion,
 		branch,
 		branches,
 		commits,
@@ -159,9 +183,55 @@ export async function applyGitChangeMutation(input: GitChangeMutationInput) {
 		}
 	}
 
+	signalGitRepositoryChange(repoRoot);
+
 	return {
 		ok: true,
 	};
+}
+
+export async function waitForGitRepositoryChange(
+	input: GitRepositoryChangeWaitInput,
+): Promise<GitRepositoryChangeWaitResult> {
+	const repoRoot = await resolveGitRepositoryRoot(input.cwd);
+	const watchState = await getOrCreateGitRepositoryWatchState(repoRoot);
+	const timeoutMs = Math.min(
+		Math.max(input.timeoutMs ?? DEFAULT_GIT_WATCH_TIMEOUT_MS, 100),
+		MAX_GIT_WATCH_TIMEOUT_MS,
+	);
+
+	if (watchState.version > input.afterVersion) {
+		return {
+			repoRoot,
+			version: watchState.version,
+			changed: true,
+		};
+	}
+
+	return new Promise<GitRepositoryChangeWaitResult>((resolve) => {
+		const waiter: GitRepositoryWatcherWaiter = {
+			afterVersion: input.afterVersion,
+			resolve: (result) => {
+				watchState.waiters = watchState.waiters.filter(
+					(item) => item !== waiter,
+				);
+				clearTimeout(waiter.timer);
+				resolve(result);
+			},
+			timer: setTimeout(() => {
+				watchState.waiters = watchState.waiters.filter(
+					(item) => item !== waiter,
+				);
+				resolve({
+					repoRoot,
+					version: watchState.version,
+					changed: false,
+				});
+			}, timeoutMs),
+		};
+
+		watchState.waiters.push(waiter);
+	});
 }
 
 export function parseGitStatusOutput(output: string) {
@@ -417,11 +487,134 @@ async function loadStashes(repoRoot: string): Promise<GitStashEntry[]> {
 		});
 }
 
+async function ensureGitRepositoryWatchVersion(repoRoot: string) {
+	const watchState = await getOrCreateGitRepositoryWatchState(repoRoot);
+	return watchState.version;
+}
+
+async function getOrCreateGitRepositoryWatchState(repoRoot: string) {
+	const existing = repositoryWatchStates.get(repoRoot);
+
+	if (existing) {
+		return existing;
+	}
+
+	const gitDir = await resolveGitDirectory(repoRoot);
+	const watchState: GitRepositoryWatchState = {
+		repoRoot,
+		gitDir,
+		version: 0,
+		watchers: [],
+		waiters: [],
+		debounceTimer: null,
+	};
+
+	watchState.watchers = createGitRepositoryWatchers(watchState);
+	repositoryWatchStates.set(repoRoot, watchState);
+	return watchState;
+}
+
+function createGitRepositoryWatchers(watchState: GitRepositoryWatchState) {
+	const watchers: FSWatcher[] = [];
+	const targetPaths = [watchState.repoRoot];
+
+	if (!isPathInside(watchState.repoRoot, watchState.gitDir)) {
+		targetPaths.push(watchState.gitDir);
+	}
+
+	for (const targetPath of targetPaths) {
+		try {
+			const watcher = watch(
+				targetPath,
+				{
+					persistent: false,
+					recursive: true,
+				},
+				() => {
+					scheduleGitRepositoryChange(watchState);
+				},
+			);
+
+			watcher.on("error", () => {
+				try {
+					watcher.close();
+				} catch {
+					// Ignore watcher close failures and rely on fallback refresh.
+				}
+
+				watchState.watchers = watchState.watchers.filter(
+					(item) => item !== watcher,
+				);
+			});
+
+			watchers.push(watcher);
+		} catch {
+			// Ignore watcher setup failures and rely on fallback refresh.
+		}
+	}
+
+	return watchers;
+}
+
+function scheduleGitRepositoryChange(watchState: GitRepositoryWatchState) {
+	if (watchState.debounceTimer) {
+		return;
+	}
+
+	watchState.debounceTimer = setTimeout(() => {
+		watchState.debounceTimer = null;
+		signalGitRepositoryChange(watchState.repoRoot);
+	}, GIT_WATCH_DEBOUNCE_MS);
+}
+
+function signalGitRepositoryChange(repoRoot: string) {
+	const watchState = repositoryWatchStates.get(repoRoot);
+
+	if (!watchState) {
+		return;
+	}
+
+	if (watchState.debounceTimer) {
+		clearTimeout(watchState.debounceTimer);
+		watchState.debounceTimer = null;
+	}
+
+	watchState.version += 1;
+	flushGitRepositoryWaiters(watchState);
+}
+
+function flushGitRepositoryWaiters(watchState: GitRepositoryWatchState) {
+	for (const waiter of [...watchState.waiters]) {
+		if (watchState.version <= waiter.afterVersion) {
+			continue;
+		}
+
+		waiter.resolve({
+			repoRoot: watchState.repoRoot,
+			version: watchState.version,
+			changed: true,
+		});
+	}
+}
+
 async function resolveGitRepositoryRoot(requestedCwd: string) {
 	const resolvedCwd = resolveWorkspacePath(requestedCwd);
 	const result = await runGit(["rev-parse", "--show-toplevel"], resolvedCwd);
 
 	return path.resolve(result.stdout.trim());
+}
+
+async function resolveGitDirectory(repoRoot: string) {
+	const result = await runGit(["rev-parse", "--absolute-git-dir"], repoRoot);
+	return path.resolve(repoRoot, result.stdout.trim());
+}
+
+function isPathInside(parentPath: string, targetPath: string) {
+	const relativePath = path.relative(parentPath, targetPath);
+	return (
+		relativePath === "" ||
+		(!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+	);
 }
 
 function resolveWorkspacePath(requestedCwd: string) {

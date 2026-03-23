@@ -54,13 +54,11 @@ function hasProjectFileSelection(selection: ProjectFileSelectionState) {
 
 function isCloseWorkspacePaneShortcut(event: KeyboardEvent) {
 	return (
-		(
-			!event.metaKey &&
+		(!event.metaKey &&
 			!event.ctrlKey &&
 			!event.altKey &&
 			!event.shiftKey &&
-			event.key === "Escape"
-		) ||
+			event.key === "Escape") ||
 		(!event.metaKey &&
 			!event.ctrlKey &&
 			event.altKey &&
@@ -217,6 +215,7 @@ function ProjectWorkspaceShell({
 }) {
 	const [selectedGitChange, setSelectedGitChange] =
 		useState<GitSelectedChange | null>(null);
+	const [gitRefreshVersion, setGitRefreshVersion] = useState(0);
 	const [activeSidebarView, setActiveSidebarView] =
 		useState<SidebarView>("explorer");
 	const [selectedProjectFile, setSelectedProjectFile] =
@@ -562,6 +561,9 @@ function ProjectWorkspaceShell({
 						onBeforeProjectFileOpen={handleBeforeProjectFileOpen}
 						selectedGitChange={selectedGitChange}
 						onSelectGitChange={handleGitChangeSelection}
+						onGitOverviewRefresh={() =>
+							setGitRefreshVersion((currentVersion) => currentVersion + 1)
+						}
 						activeSidebarView={activeSidebarView}
 						onSidebarViewChange={setActiveSidebarView}
 						onProjectFileSelectionChange={handleProjectFileSelectionChange}
@@ -591,6 +593,7 @@ function ProjectWorkspaceShell({
 							<GitDiffView
 								activeProject={activeProject}
 								onClose={handleCloseGitDiff}
+								refreshVersion={gitRefreshVersion}
 								selectedChange={selectedGitChange}
 							/>
 						) : isProjectFileVisible ? (
