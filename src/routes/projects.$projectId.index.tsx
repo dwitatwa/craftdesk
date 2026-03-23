@@ -1,22 +1,18 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { AppShell } from "#/components/layout/app-shell";
 import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
 import { CreateTaskModal } from "#/components/workspace/create-task-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { Terminal } from "#/components/workspace/terminal";
-import { useAddProject } from "#/components/workspace/use-add-project";
 import { cn } from "#/lib/utils";
 import {
 	createColumn,
 	createTask,
 	deleteColumn,
-	deleteProject,
 	deleteTask,
 	getProjectWorkspace,
-	listProjects,
 	moveTask,
 } from "#/server/craftdesk";
 
@@ -25,12 +21,8 @@ export const Route = createFileRoute("/projects/$projectId/")({
 		const workspace = await getProjectWorkspace({
 			data: { projectId: params.projectId },
 		});
-		const projects = await listProjects({
-			data: { sortBy: "name" },
-		});
 
 		return {
-			projects,
 			workspace,
 		};
 	},
@@ -42,7 +34,7 @@ const DEFAULT_TERMINAL_HEIGHT = 280;
 const MIN_EXPANDED_TERMINAL_HEIGHT = 180;
 
 function ProjectDetailView() {
-	const { projects, workspace } = Route.useLoaderData();
+	const { workspace } = Route.useLoaderData();
 	const router = useRouter();
 	const layoutRef = useRef<HTMLDivElement | null>(null);
 	const workspaceAreaRef = useRef<HTMLDivElement | null>(null);
@@ -61,10 +53,6 @@ function ProjectDetailView() {
 	const refreshData = async () => {
 		await router.invalidate();
 	};
-
-	const { addProject, addProjectError, isAddingProject } = useAddProject({
-		onProjectSaved: refreshData,
-	});
 
 	const handleCreateColumn = async (title: string) => {
 		if (!workspace) {
@@ -132,15 +120,6 @@ function ProjectDetailView() {
 			},
 		});
 		await refreshData();
-	};
-
-	const handleDeleteProject = async (projectId: string) => {
-		await deleteProject({ data: { projectId } });
-		await router.invalidate();
-
-		if (workspace?.project.id === projectId) {
-			await router.navigate({ to: "/" });
-		}
 	};
 
 	useEffect(() => {
@@ -297,141 +276,124 @@ function ProjectDetailView() {
 		: terminalHeight;
 
 	return (
-		<AppShell
-			projects={projects}
-			activeProject={
-				workspace
-					? {
-							id: workspace.project.id,
-							name: workspace.project.name,
-							path: workspace.project.path,
-						}
-					: null
-			}
-			onAddProject={addProject}
-			isAddingProject={isAddingProject}
-			addProjectError={addProjectError}
-			onDeleteProject={handleDeleteProject}
-		>
-			<div ref={layoutRef} className="flex-1 flex flex-col min-h-0">
-				{workspace ? (
-					<>
-						{/* Workspace Header Info */}
-						<div className="h-20 px-6 flex items-center justify-between border-b bg-background/30 backdrop-blur-sm">
-							<div className="flex flex-col justify-center">
-								<h1 className="text-xl font-bold tracking-tight">
-									{workspace.project.name}
-								</h1>
-								<p className="text-xs text-muted-foreground font-mono leading-none mt-1">
-									{workspace.project.path}
-								</p>
-							</div>
-							<div className="flex items-center gap-2">
-								<Button
-									variant="ghost"
-									size="sm"
-									className="h-8 gap-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
-									onClick={() => setIsCreateColumnModalOpen(true)}
-								>
-									<Plus className="size-3.5" />
-									Add Column
-								</Button>
-								<Button
-									size="sm"
-									className="h-8 gap-2 text-xs font-medium cursor-pointer"
-									onClick={() => setIsCreateTaskModalOpen(true)}
-									disabled={!primaryColumn}
-								>
-									<Plus className="size-3.5" />
-									New Task
-								</Button>
-							</div>
-						</div>
-
-						<div
-							ref={workspaceAreaRef}
-							className="relative flex-1 min-h-0 overflow-hidden"
-						>
-							{/* Board Area */}
-							<div className="relative z-0 h-full overflow-hidden pb-14">
-								<KanbanBoard
-									columns={workspace.columns}
-									onCreateTask={handleCreateTask}
-									onDeleteColumn={handleDeleteColumn}
-									onDeleteTask={handleDeleteTask}
-									onMoveTask={handleMoveTask}
-								/>
-							</div>
-
-							{/* Project Terminal */}
-							<div
-								className={cn(
-									"absolute inset-x-0 bottom-0 z-20 overflow-hidden border-t border-white/5 bg-[#09090B] shadow-[0_-12px_36px_rgba(0,0,0,0.42)]",
-									isResizingTerminal
-										? "transition-none"
-										: "transition-[height] duration-300 ease-in-out",
-								)}
-								style={{ height: renderedTerminalHeight }}
-							>
-								<button
-									type="button"
-									className="absolute inset-x-0 top-0 z-10 h-3 cursor-row-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-									onPointerDown={handleTerminalResizeStart}
-									onKeyDown={handleTerminalResizeKeyDown}
-									onDoubleClick={handleTerminalResizeDoubleClick}
-									aria-label="Resize terminal height"
-								/>
-								<Terminal
-									title="Terminal"
-									className="h-full"
-									collapseTrigger="header"
-									isCollapsed={isTerminalCollapsed}
-									onToggleCollapse={() =>
-										setIsTerminalCollapsed(!isTerminalCollapsed)
-									}
-									scope={{
-										scopeType: "project",
-										scopeId: workspace.project.id,
-										projectId: workspace.project.id,
-										cwd: workspace.project.path,
-									}}
-								/>
-							</div>
-						</div>
-					</>
-				) : (
-					<div className="flex flex-1 items-center justify-center p-8">
-						<div className="max-w-md rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
-							<h1 className="text-lg font-semibold">Project not found</h1>
-							<p className="mt-2 text-sm text-muted-foreground">
-								This workspace is not saved in SQLite yet. Add it from the
-								sidebar to create a board for it.
+		<div ref={layoutRef} className="flex-1 flex flex-col min-h-0">
+			{workspace ? (
+				<>
+					{/* Workspace Header Info */}
+					<div className="h-20 px-6 flex items-center justify-between border-b bg-background/30 backdrop-blur-sm">
+						<div className="flex flex-col justify-center">
+							<h1 className="text-xl font-bold tracking-tight">
+								{workspace.project.name}
+							</h1>
+							<p className="text-xs text-muted-foreground font-mono leading-none mt-1">
+								{workspace.project.path}
 							</p>
 						</div>
+						<div className="flex items-center gap-2">
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-8 gap-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
+								onClick={() => setIsCreateColumnModalOpen(true)}
+							>
+								<Plus className="size-3.5" />
+								Add Column
+							</Button>
+							<Button
+								size="sm"
+								className="h-8 gap-2 text-xs font-medium cursor-pointer"
+								onClick={() => setIsCreateTaskModalOpen(true)}
+								disabled={!primaryColumn}
+							>
+								<Plus className="size-3.5" />
+								New Task
+							</Button>
+						</div>
 					</div>
-				)}
 
-				<CreateTaskModal
-					isOpen={isCreateTaskModalOpen}
-					onOpenChange={setIsCreateTaskModalOpen}
-					columnTitle={primaryColumn?.title}
-					onCreate={(input) =>
-						primaryColumn
-							? handleCreateTask({
-									columnId: primaryColumn.id,
-									title: input.title,
-								})
-							: Promise.resolve()
-					}
-				/>
+					<div
+						ref={workspaceAreaRef}
+						className="relative flex-1 min-h-0 overflow-hidden"
+					>
+						{/* Board Area */}
+						<div className="relative z-0 h-full overflow-hidden pb-14">
+							<KanbanBoard
+								columns={workspace.columns}
+								onCreateTask={handleCreateTask}
+								onDeleteColumn={handleDeleteColumn}
+								onDeleteTask={handleDeleteTask}
+								onMoveTask={handleMoveTask}
+							/>
+						</div>
 
-				<CreateColumnModal
-					isOpen={isCreateColumnModalOpen}
-					onOpenChange={setIsCreateColumnModalOpen}
-					onCreate={handleCreateColumn}
-				/>
-			</div>
-		</AppShell>
+						{/* Project Terminal */}
+						<div
+							className={cn(
+								"absolute inset-x-0 bottom-0 z-20 overflow-hidden border-t border-white/5 bg-[#09090B] shadow-[0_-12px_36px_rgba(0,0,0,0.42)]",
+								isResizingTerminal
+									? "transition-none"
+									: "transition-[height] duration-300 ease-in-out",
+							)}
+							style={{ height: renderedTerminalHeight }}
+						>
+							<button
+								type="button"
+								className="absolute inset-x-0 top-0 z-10 h-3 cursor-row-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+								onPointerDown={handleTerminalResizeStart}
+								onKeyDown={handleTerminalResizeKeyDown}
+								onDoubleClick={handleTerminalResizeDoubleClick}
+								aria-label="Resize terminal height"
+							/>
+							<Terminal
+								title="Terminal"
+								className="h-full"
+								collapseTrigger="header"
+								isCollapsed={isTerminalCollapsed}
+								onToggleCollapse={() =>
+									setIsTerminalCollapsed(!isTerminalCollapsed)
+								}
+								scope={{
+									scopeType: "project",
+									scopeId: workspace.project.id,
+									projectId: workspace.project.id,
+									cwd: workspace.project.path,
+								}}
+							/>
+						</div>
+					</div>
+				</>
+			) : (
+				<div className="flex flex-1 items-center justify-center p-8">
+					<div className="max-w-md rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
+						<h1 className="text-lg font-semibold">Project not found</h1>
+						<p className="mt-2 text-sm text-muted-foreground">
+							This workspace is not saved in SQLite yet. Add it from the sidebar
+							to create a board for it.
+						</p>
+					</div>
+				</div>
+			)}
+
+			<CreateTaskModal
+				isOpen={isCreateTaskModalOpen}
+				onOpenChange={setIsCreateTaskModalOpen}
+				columnTitle={primaryColumn?.title}
+				onCreate={(input) =>
+					primaryColumn
+						? handleCreateTask({
+								columnId: primaryColumn.id,
+								title: input.title,
+							})
+						: Promise.resolve()
+				}
+			/>
+
+			<CreateColumnModal
+				isOpen={isCreateColumnModalOpen}
+				onOpenChange={setIsCreateColumnModalOpen}
+				onCreate={handleCreateColumn}
+			/>
+		</div>
 	);
 }
 
