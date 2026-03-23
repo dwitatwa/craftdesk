@@ -770,6 +770,12 @@ export function getProjectWorkspace(
 	};
 }
 
+export function getProjectSummary(projectId: string): ProjectSummary | null {
+	const row = toProjectSummaryRow(projectId);
+
+	return row ? mapProjectSummary(row) : null;
+}
+
 export function createColumn(input: CreateColumnInput) {
 	const db = getDb();
 	const title = input.title.trim();

@@ -1,24 +1,7 @@
+import { Link } from "@tanstack/react-router";
+import { Folder, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { GitDiffView } from "#/components/workspace/git-diff-view";
-import type { ProjectSummary } from "#/lib/craftdesk";
-import type { GitSelectedChange } from "#/lib/git";
-import { Sidebar } from "./sidebar";
-import {
-	Dialog,
-	DialogContent,
-} from "#/components/ui/dialog";
-import {
-	Folder,
-	LoaderCircle,
-	Plus,
-	Trash2,
-	Search,
-} from "lucide-react";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { cn } from "#/lib/utils";
-import { Link } from "@tanstack/react-router";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -29,6 +12,18 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
+import { Button } from "#/components/ui/button";
+import { Dialog, DialogContent } from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
+import { FilePreviewView } from "#/components/workspace/file-preview-view";
+import { GitDiffView } from "#/components/workspace/git-diff-view";
+import type {
+	ProjectFileSelectionState,
+	ProjectSummary,
+} from "#/lib/craftdesk";
+import type { GitSelectedChange } from "#/lib/git";
+import { cn } from "#/lib/utils";
+import { Sidebar } from "./sidebar";
 
 export interface ActiveProjectContext {
 	id: string;
@@ -36,15 +31,24 @@ export interface ActiveProjectContext {
 	path: string;
 }
 
+function createEmptyProjectFileSelection(): ProjectFileSelectionState {
+	return {
+		file: null,
+		relativePath: "",
+		isLoading: false,
+		error: "",
+	};
+}
+
 interface AppShellProps {
 	children: React.ReactNode;
 	showSidebar?: boolean;
 	projects?: ProjectSummary[];
 	activeProject?: ActiveProjectContext | null;
-	onAddProject?: () => Promise<unknown> | void;
+	onAddProject?: () => unknown;
 	isAddingProject?: boolean;
 	addProjectError?: string;
-	onDeleteProject?: (projectId: string) => Promise<void> | void;
+	onDeleteProject?: (projectId: string) => unknown;
 }
 
 export function AppShell({
@@ -59,21 +63,44 @@ export function AppShell({
 }: AppShellProps) {
 	const [selectedGitChange, setSelectedGitChange] =
 		useState<GitSelectedChange | null>(null);
-	const [isGitViewActive, setIsGitViewActive] = useState(false);
+	const [activeSidebarView, setActiveSidebarView] = useState<
+		"explorer" | "git"
+	>("explorer");
+	const [selectedProjectFile, setSelectedProjectFile] =
+		useState<ProjectFileSelectionState>(createEmptyProjectFileSelection);
 	const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
+	const activeProjectId = activeProject?.id ?? "";
 
 	useEffect(() => {
 		setSelectedGitChange(null);
-		setIsGitViewActive(false);
-	}, [activeProject]);
+		setActiveSidebarView("explorer");
+		setSelectedProjectFile(createEmptyProjectFileSelection());
+
+		if (!activeProjectId) {
+			return;
+		}
+	}, [activeProjectId]);
 
 	const isGitWorkspaceVisible =
-		showSidebar && activeProject && !isProjectPickerOpen && isGitViewActive && selectedGitChange;
+		showSidebar &&
+		activeProject &&
+		!isProjectPickerOpen &&
+		activeSidebarView === "git" &&
+		selectedGitChange;
+	const isProjectFileVisible =
+		showSidebar &&
+		activeProject &&
+		!isProjectPickerOpen &&
+		activeSidebarView === "explorer" &&
+		(selectedProjectFile.relativePath ||
+			selectedProjectFile.isLoading ||
+			selectedProjectFile.error);
 
-	const filteredProjects = projects.filter((project) =>
-		project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-		project.path.toLowerCase().includes(searchQuery.toLowerCase())
+	const filteredProjects = projects.filter(
+		(project) =>
+			project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+			project.path.toLowerCase().includes(searchQuery.toLowerCase()),
 	);
 
 	return (
@@ -83,8 +110,9 @@ export function AppShell({
 					activeProject={activeProject}
 					selectedGitChange={selectedGitChange}
 					onSelectGitChange={setSelectedGitChange}
-					isGitViewActive={isGitViewActive}
-					onGitViewToggle={() => setIsGitViewActive(!isGitViewActive)}
+					activeSidebarView={activeSidebarView}
+					onSidebarViewChange={setActiveSidebarView}
+					onProjectFileSelectionChange={setSelectedProjectFile}
 					onOpenProjectPicker={() => setIsProjectPickerOpen(true)}
 				/>
 			)}
@@ -96,7 +124,16 @@ export function AppShell({
 						{isGitWorkspaceVisible ? (
 							<GitDiffView
 								activeProject={activeProject}
+								onClose={() => setSelectedGitChange(null)}
 								selectedChange={selectedGitChange}
+							/>
+						) : isProjectFileVisible ? (
+							<FilePreviewView
+								activeProject={activeProject}
+								onClose={() =>
+									setSelectedProjectFile(createEmptyProjectFileSelection())
+								}
+								selection={selectedProjectFile}
 							/>
 						) : (
 							children
@@ -106,7 +143,10 @@ export function AppShell({
 			</div>
 
 			<Dialog open={isProjectPickerOpen} onOpenChange={setIsProjectPickerOpen}>
-				<DialogContent hideClose className="max-w-xl p-0 gap-0 overflow-hidden border border-white/5 bg-[#09090B] shadow-2xl">
+				<DialogContent
+					hideClose
+					className="max-w-xl p-0 gap-0 overflow-hidden border border-white/5 bg-[#09090B] shadow-2xl"
+				>
 					{/* Search Header */}
 					<div className="relative flex items-center border-b border-white/5 px-4 h-12">
 						<Search className="size-4 text-muted-foreground/50 mr-3" />
@@ -138,7 +178,7 @@ export function AppShell({
 						<div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/30">
 							Recent Workspaces
 						</div>
-						
+
 						{filteredProjects.length > 0 ? (
 							<div className="space-y-[1px]">
 								{filteredProjects.map((project) => (
@@ -154,7 +194,9 @@ export function AppShell({
 						) : (
 							<div className="flex flex-col items-center justify-center py-12 text-center">
 								<p className="text-xs text-muted-foreground/40 italic">
-									{searchQuery ? "No matching workspaces found." : "No workspaces added yet."}
+									{searchQuery
+										? "No matching workspaces found."
+										: "No workspaces added yet."}
 								</p>
 							</div>
 						)}
@@ -172,11 +214,15 @@ export function AppShell({
 						</div>
 						<div className="flex items-center gap-3">
 							<div className="flex items-center gap-1 text-[9px] text-muted-foreground/30">
-								<kbd className="px-1 rounded bg-white/5 border border-white/5">↑↓</kbd>
+								<kbd className="px-1 rounded bg-white/5 border border-white/5">
+									↑↓
+								</kbd>
 								<span>Navigate</span>
 							</div>
 							<div className="flex items-center gap-1 text-[9px] text-muted-foreground/30">
-								<kbd className="px-1 rounded bg-white/5 border border-white/5">Enter</kbd>
+								<kbd className="px-1 rounded bg-white/5 border border-white/5">
+									Enter
+								</kbd>
 								<span>Select</span>
 							</div>
 						</div>
@@ -205,9 +251,7 @@ function ProjectItem({
 			<div
 				className={cn(
 					"group relative flex items-center h-10 rounded px-2 transition-colors cursor-pointer",
-					isActive 
-						? "bg-primary/10" 
-						: "hover:bg-white/[0.03]"
+					isActive ? "bg-primary/10" : "hover:bg-white/[0.03]",
 				)}
 			>
 				{isActive && (
@@ -220,18 +264,26 @@ function ProjectItem({
 					onClick={onSelect}
 					className="flex-1 flex items-center gap-3 min-w-0 h-full"
 				>
-					<div className={cn(
-						"size-6 rounded flex items-center justify-center shrink-0",
-						isActive ? "text-primary" : "text-muted-foreground/40 group-hover:text-foreground/60"
-					)}>
+					<div
+						className={cn(
+							"size-6 rounded flex items-center justify-center shrink-0",
+							isActive
+								? "text-primary"
+								: "text-muted-foreground/40 group-hover:text-foreground/60",
+						)}
+					>
 						<Folder className="size-3.5" />
 					</div>
-					
+
 					<div className="flex items-baseline gap-2 min-w-0">
-						<span className={cn(
-							"text-xs font-semibold truncate",
-							isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
-						)}>
+						<span
+							className={cn(
+								"text-xs font-semibold truncate",
+								isActive
+									? "text-foreground"
+									: "text-muted-foreground group-hover:text-foreground",
+							)}
+						>
 							{project.name}
 						</span>
 						<span className="text-[10px] text-muted-foreground/20 font-mono truncate hidden sm:block">
@@ -253,13 +305,17 @@ function ProjectItem({
 				</Button>
 			</div>
 
-			<AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+			<AlertDialog
+				open={isDeleteDialogOpen}
+				onOpenChange={setIsDeleteDialogOpen}
+			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
 						<AlertDialogTitle>Delete Project</AlertDialogTitle>
 						<AlertDialogDescription>
-							Are you sure you want to remove "{project.name}" from your workspaces? 
-							This will not delete the files on your disk, only the Craftdesk board data.
+							Are you sure you want to remove "{project.name}" from your
+							workspaces? This will not delete the files on your disk, only the
+							Craftdesk board data.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>

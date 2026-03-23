@@ -3,16 +3,19 @@ import {
 	GitCompareArrows,
 	LoaderCircle,
 	MoveRight,
+	X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { ActiveProjectContext } from "#/components/layout/app-shell";
+import { Button } from "#/components/ui/button";
 import type { GitDiffResult, GitSelectedChange } from "#/lib/git";
 import { cn } from "#/lib/utils";
 import { getGitDiff } from "#/server/git";
 
 interface GitDiffViewProps {
 	activeProject: ActiveProjectContext | null;
+	onClose: () => void;
 	selectedChange: GitSelectedChange | null;
 }
 
@@ -30,6 +33,7 @@ interface ParsedDiffRow {
 
 export function GitDiffView({
 	activeProject,
+	onClose,
 	selectedChange,
 }: GitDiffViewProps) {
 	const [diff, setDiff] = useState<GitDiffResult | null>(null);
@@ -140,6 +144,15 @@ export function GitDiffView({
 						<div className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground">
 							{selectedChange.label}
 						</div>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							className="text-muted-foreground hover:text-foreground"
+							onClick={onClose}
+							title="Close diff view"
+						>
+							<X className="size-4" />
+						</Button>
 					</div>
 				</div>
 			</div>

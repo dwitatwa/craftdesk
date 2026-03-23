@@ -1,22 +1,23 @@
 import { Link } from "@tanstack/react-router";
-import {
-	GitBranch,
-	Layers,
-	Settings,
-} from "lucide-react";
+import { Files, GitBranch, Layers, Settings } from "lucide-react";
 import { Button } from "#/components/ui/button";
+import { FileExplorer } from "#/components/workspace/file-explorer";
+import type { ProjectFileSelectionState } from "#/lib/craftdesk";
 import type { GitSelectedChange } from "#/lib/git";
 import { cn } from "#/lib/utils";
 import type { ActiveProjectContext } from "./app-shell";
 import { GitSidebar } from "./git-sidebar";
+
+type SidebarView = "explorer" | "git";
 
 interface SidebarProps {
 	className?: string;
 	activeProject?: ActiveProjectContext | null;
 	selectedGitChange: GitSelectedChange | null;
 	onSelectGitChange: (change: GitSelectedChange | null) => void;
-	isGitViewActive: boolean;
-	onGitViewToggle: () => void;
+	activeSidebarView: SidebarView;
+	onSidebarViewChange: (view: SidebarView) => void;
+	onProjectFileSelectionChange: (selection: ProjectFileSelectionState) => void;
 	onOpenProjectPicker: () => void;
 }
 
@@ -25,8 +26,9 @@ export function Sidebar({
 	activeProject = null,
 	selectedGitChange,
 	onSelectGitChange,
-	isGitViewActive,
-	onGitViewToggle,
+	activeSidebarView,
+	onSidebarViewChange,
+	onProjectFileSelectionChange,
 	onOpenProjectPicker,
 }: SidebarProps) {
 	return (
@@ -53,10 +55,27 @@ export function Sidebar({
 						size="icon-xs"
 						className={cn(
 							"text-muted-foreground transition-colors",
-							isGitViewActive ? "text-primary bg-primary/10" : "hover:text-foreground"
+							activeSidebarView === "explorer"
+								? "text-primary bg-primary/10"
+								: "hover:text-foreground",
 						)}
-						onClick={onGitViewToggle}
-						title={isGitViewActive ? "View Kanban Board" : "View Git Changes"}
+						onClick={() => onSidebarViewChange("explorer")}
+						title="View File Explorer"
+						disabled={!activeProject}
+					>
+						<Files className="size-4" />
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon-xs"
+						className={cn(
+							"text-muted-foreground transition-colors",
+							activeSidebarView === "git"
+								? "text-primary bg-primary/10"
+								: "hover:text-foreground",
+						)}
+						onClick={() => onSidebarViewChange("git")}
+						title="View Git Changes"
 						disabled={!activeProject}
 					>
 						<GitBranch className="size-4" />
@@ -74,16 +93,17 @@ export function Sidebar({
 			</div>
 
 			<div className="min-h-0 flex-1">
-				{activeProject && isGitViewActive ? (
+				{activeProject && activeSidebarView === "git" ? (
 					<GitSidebar
 						activeProject={activeProject}
 						selectedChange={selectedGitChange}
 						onSelectChange={onSelectGitChange}
 					/>
 				) : activeProject ? (
-					<div className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
-						<p>Project is active. Click the branch icon to manage Git changes.</p>
-					</div>
+					<FileExplorer
+						activeProject={activeProject}
+						onSelectionChange={onProjectFileSelectionChange}
+					/>
 				) : (
 					<div className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
 						<p>No active project. Click the settings icon to open a project.</p>

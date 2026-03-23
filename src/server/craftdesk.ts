@@ -2,12 +2,15 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type {
 	CreateColumnInput,
+	CreateProjectFileInput,
 	CreateTaskInput,
 	DeleteColumnInput,
 	DeleteProjectInput,
 	DeleteTaskInput,
 	ListProjectsInput,
 	MoveTaskInput,
+	ProjectFileLookupInput,
+	ProjectFileMutationInput,
 	ProjectLookupInput,
 	SaveProjectInput,
 	TaskLookupInput,
@@ -42,6 +45,40 @@ export const getProjectWorkspace = createServerFn({ method: "GET" })
 			"#/server/db"
 		);
 		return getProjectWorkspaceFromDb(data.projectId);
+	});
+
+export const listProjectDirectory = createServerFn({ method: "GET" })
+	.inputValidator((input: ProjectFileLookupInput) => input)
+	.handler(async ({ data }) => {
+		const { listProjectDirectoryEntries } = await import(
+			"#/server/project-files"
+		);
+		return listProjectDirectoryEntries(data);
+	});
+
+export const readProjectFile = createServerFn({ method: "GET" })
+	.inputValidator((input: ProjectFileMutationInput) => input)
+	.handler(async ({ data }) => {
+		const { readProjectFileContent } = await import("#/server/project-files");
+		return readProjectFileContent(data);
+	});
+
+export const createProjectFile = createServerFn({ method: "POST" })
+	.inputValidator((input: CreateProjectFileInput) => input)
+	.handler(async ({ data }) => {
+		const { createProjectFile: createProjectFileOnDisk } = await import(
+			"#/server/project-files"
+		);
+		return createProjectFileOnDisk(data);
+	});
+
+export const deleteProjectFile = createServerFn({ method: "POST" })
+	.inputValidator((input: ProjectFileMutationInput) => input)
+	.handler(async ({ data }) => {
+		const { deleteProjectFile: deleteProjectFileOnDisk } = await import(
+			"#/server/project-files"
+		);
+		return deleteProjectFileOnDisk(data);
 	});
 
 export const createColumn = createServerFn({ method: "POST" })

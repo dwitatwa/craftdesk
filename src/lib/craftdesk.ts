@@ -31,6 +31,26 @@ export interface ProjectWorkspace {
 	columns: BoardColumn[];
 }
 
+export interface ProjectFileEntry {
+	name: string;
+	relativePath: string;
+	kind: "file" | "directory";
+	hasChildren?: boolean;
+}
+
+export interface ProjectFileContent {
+	name: string;
+	relativePath: string;
+	content: string;
+}
+
+export interface ProjectFileSelectionState {
+	file: ProjectFileContent | null;
+	relativePath: string;
+	isLoading: boolean;
+	error: string;
+}
+
 export interface TaskDetail {
 	id: string;
 	title: string;
@@ -86,6 +106,20 @@ export interface DeleteProjectInput {
 
 export interface ProjectLookupInput {
 	projectId: string;
+}
+
+export interface ProjectFileLookupInput {
+	projectId: string;
+	relativePath?: string;
+}
+
+export interface ProjectFileMutationInput {
+	projectId: string;
+	relativePath: string;
+}
+
+export interface CreateProjectFileInput extends ProjectFileMutationInput {
+	content?: string;
 }
 
 export interface TaskLookupInput {
