@@ -27,6 +27,10 @@ interface TaskCardProps {
 	isRunning?: boolean;
 	onDragStart?: (event: DragEvent<HTMLElement>) => void;
 	onDragEnd?: () => void;
+	onDragOver?: (event: DragEvent<HTMLLIElement>) => void;
+	onDrop?: (event: DragEvent<HTMLLIElement>) => void;
+	showDropIndicatorTop?: boolean;
+	showDropIndicatorBottom?: boolean;
 	onUpdateTask: (
 		taskId: string,
 		input: { title: string; notes: string },
@@ -46,6 +50,10 @@ export function TaskCard({
 	isRunning,
 	onDragStart,
 	onDragEnd,
+	onDragOver,
+	onDrop,
+	showDropIndicatorTop,
+	showDropIndicatorBottom,
 	onUpdateTask,
 	onDelete,
 }: TaskCardProps) {
@@ -111,12 +119,22 @@ export function TaskCard({
 	return (
 		<>
 			<li
+				data-task-drop-zone="true"
+				data-task-id={id}
+				onDragOver={onDragOver}
+				onDrop={onDrop}
 				className={cn(
-					"group list-none flex w-full shrink-0 overflow-hidden rounded-xl",
+					"group relative list-none flex w-full shrink-0 overflow-hidden rounded-xl",
 					isDragging && "opacity-45",
 					className,
 				)}
 			>
+				{showDropIndicatorTop ? (
+					<div className="pointer-events-none absolute inset-x-3 top-0 z-10 h-0.5 rounded-full bg-primary shadow-[0_0_0_1px_hsl(var(--background)),0_0_12px_hsl(var(--primary)/0.35)]" />
+				) : null}
+				{showDropIndicatorBottom ? (
+					<div className="pointer-events-none absolute inset-x-3 bottom-0 z-10 h-0.5 rounded-full bg-primary shadow-[0_0_0_1px_hsl(var(--background)),0_0_12px_hsl(var(--primary)/0.35)]" />
+				) : null}
 				<div
 					ref={cardRef}
 					className={cn(

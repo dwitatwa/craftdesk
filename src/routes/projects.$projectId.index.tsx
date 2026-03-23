@@ -122,7 +122,11 @@ function ProjectDetailView() {
 		await refreshData();
 	};
 
-	const handleMoveTask = async (taskId: string, targetColumnId: string) => {
+	const handleMoveTask = async (
+		taskId: string,
+		targetColumnId: string,
+		targetPosition: number,
+	) => {
 		if (!workspace) {
 			return;
 		}
@@ -132,6 +136,7 @@ function ProjectDetailView() {
 				projectId: workspace.project.id,
 				taskId,
 				targetColumnId,
+				targetPosition,
 			},
 		});
 		await refreshData();

@@ -125,6 +125,7 @@ export interface MoveTaskInput {
 	projectId: string;
 	taskId: string;
 	targetColumnId: string;
+	targetPosition: number;
 }
 
 export interface DeleteProjectInput {

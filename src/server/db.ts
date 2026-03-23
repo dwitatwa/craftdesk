@@ -956,45 +956,90 @@ export function moveTask(input: MoveTaskInput) {
 		throw new Error("Target column not found.");
 	}
 
-	if (task.column_id === targetColumn.id) {
-		return;
-	}
-
 	const timestamp = nowIso();
-	const nextPositionRow = db
+	const targetCountRow = db
 		.prepare(`
-      SELECT COALESCE(MAX(position), -1) AS position
+      SELECT COUNT(*) AS count
       FROM tasks
       WHERE column_id = ?
     `)
-		.get(targetColumn.id) as { position: number };
+		.get(targetColumn.id) as { count: number };
+
+	const rawTargetPosition = Math.max(0, input.targetPosition);
+	const targetPosition =
+		task.column_id === targetColumn.id
+			? Math.max(
+					0,
+					Math.min(
+						rawTargetPosition - (task.position < rawTargetPosition ? 1 : 0),
+						Math.max(0, targetCountRow.count - 1),
+					),
+				)
+			: Math.min(rawTargetPosition, targetCountRow.count);
+
+	if (task.column_id === targetColumn.id && targetPosition === task.position) {
+		return;
+	}
 
 	try {
 		db.exec("BEGIN");
 
-		db.prepare(`
-      UPDATE tasks
-      SET position = position - 1
-      WHERE column_id = ?
-        AND position > ?
-    `).run(task.column_id, task.position);
+		if (task.column_id === targetColumn.id) {
+			if (targetPosition < task.position) {
+				db.prepare(`
+          UPDATE tasks
+          SET position = position + 1
+          WHERE column_id = ?
+            AND position >= ?
+            AND position < ?
+        `).run(task.column_id, targetPosition, task.position);
+			} else {
+				db.prepare(`
+          UPDATE tasks
+          SET position = position - 1
+          WHERE column_id = ?
+            AND position > ?
+            AND position <= ?
+        `).run(task.column_id, task.position, targetPosition);
+			}
 
-		db.prepare(`
-      UPDATE tasks
-      SET
-        column_id = ?,
-        position = ?,
-        done_at = ?,
-        updated_at = ?
-      WHERE id = ? AND project_id = ?
-    `).run(
-			targetColumn.id,
-			nextPositionRow.position + 1,
-			targetColumn.title === "Done" ? timestamp : null,
-			timestamp,
-			input.taskId,
-			input.projectId,
-		);
+			db.prepare(`
+        UPDATE tasks
+        SET position = ?, updated_at = ?
+        WHERE id = ? AND project_id = ?
+      `).run(targetPosition, timestamp, input.taskId, input.projectId);
+		} else {
+			db.prepare(`
+        UPDATE tasks
+        SET position = position - 1
+        WHERE column_id = ?
+          AND position > ?
+      `).run(task.column_id, task.position);
+
+			db.prepare(`
+        UPDATE tasks
+        SET position = position + 1
+        WHERE column_id = ?
+          AND position >= ?
+      `).run(targetColumn.id, targetPosition);
+
+			db.prepare(`
+        UPDATE tasks
+        SET
+          column_id = ?,
+          position = ?,
+          done_at = ?,
+          updated_at = ?
+        WHERE id = ? AND project_id = ?
+      `).run(
+				targetColumn.id,
+				targetPosition,
+				targetColumn.title === "Done" ? timestamp : null,
+				timestamp,
+				input.taskId,
+				input.projectId,
+			);
+		}
 
 		db.exec("COMMIT");
 	} catch (error) {
