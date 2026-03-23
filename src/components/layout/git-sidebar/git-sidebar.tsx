@@ -3,12 +3,17 @@ import {
 	GitCompareArrows,
 	GitFork,
 	LoaderCircle,
+	Plus,
 	RefreshCcw,
 	ScrollText,
 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "#/components/ui/button";
+import {
+	GitSidebarBranchActionDialog,
+	GitSidebarCreateBranchDialog,
+} from "./git-sidebar-branch-dialogs";
 import { GitSidebarDiscardDialog } from "./git-sidebar-discard-dialog";
 import {
 	BranchRow,
@@ -35,11 +40,21 @@ export function GitSidebar({
 	const [sectionOpenState, setSectionOpenState] = useState(
 		createInitialSectionState,
 	);
+	const [isCreateBranchDialogOpen, setIsCreateBranchDialogOpen] =
+		useState(false);
+	const [branchActionState, setBranchActionState] = useState<{
+		action: "delete" | "merge";
+		branchName: string;
+	} | null>(null);
 	const {
 		discardTarget,
 		error,
+		handleCreateLocalBranch,
+		handleDeleteLocalBranch,
 		handleDiscardConfirm,
 		handleGitAction,
+		handleMergeBranchIntoCurrent,
+		handlePushCurrentBranch,
 		handleGitCommit,
 		handleGitGroupAction,
 		handleRefresh,
@@ -65,6 +80,16 @@ export function GitSidebar({
 
 	const changeCount =
 		(overview?.staged.length ?? 0) + (overview?.unstaged.length ?? 0);
+	const isCreateBranching = pendingMutationKey === "branch:create";
+	const isPushingCurrentBranch = pendingMutationKey === "branch:push";
+	const isAnyBranchMutationPending = pendingMutationKey.startsWith("branch:");
+	const currentBranchPushState = overview?.branch.upstream
+		? overview.branch.ahead > 0
+			? "ready"
+			: overview.branch.behind > 0
+				? "behind"
+				: "synced"
+		: "ready";
 
 	return (
 		<>
@@ -162,8 +187,39 @@ export function GitSidebar({
 								}
 								title={`Branches (${overview.branches.length})`}
 								icon={GitBranch}
+								rightElement={
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="shrink-0 text-muted-foreground hover:text-foreground"
+										onClick={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											setIsCreateBranchDialogOpen(true);
+										}}
+										disabled={isLoading || isAnyBranchMutationPending}
+										aria-label="Create local branch"
+										title="Create local branch"
+									>
+										<Plus className="size-3" />
+									</Button>
+								}
 							>
-								<BranchSummaryCard branch={overview.branch} />
+								<BranchSummaryCard
+									branch={overview.branch}
+									isPushing={isPushingCurrentBranch}
+									pushState={currentBranchPushState}
+									onPush={
+										isAnyBranchMutationPending ||
+										isLoading ||
+										currentBranchPushState !== "ready"
+											? undefined
+											: () => {
+													void handlePushCurrentBranch();
+												}
+									}
+								/>
 								<div className="mt-3 space-y-1.5">
 									<div className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
 										Recent Commits
@@ -182,7 +238,39 @@ export function GitSidebar({
 									</div>
 									{overview.branches.length > 0 ? (
 										overview.branches.map((branch) => (
-											<BranchRow key={branch.name} branch={branch} />
+											<BranchRow
+												key={branch.name}
+												branch={branch}
+												isDeleting={
+													pendingMutationKey === `branch:delete:${branch.name}`
+												}
+												isMerging={
+													pendingMutationKey === `branch:merge:${branch.name}`
+												}
+												onDelete={
+													branch.isCurrent ||
+													isAnyBranchMutationPending ||
+													isLoading
+														? undefined
+														: () =>
+																setBranchActionState({
+																	action: "delete",
+																	branchName: branch.name,
+																})
+												}
+												onMerge={
+													branch.isCurrent ||
+													overview.branch.detached ||
+													isAnyBranchMutationPending ||
+													isLoading
+														? undefined
+														: () =>
+																setBranchActionState({
+																	action: "merge",
+																	branchName: branch.name,
+																})
+												}
+											/>
 										))
 									) : (
 										<EmptyState label="No local branches were found." />
@@ -243,6 +331,43 @@ export function GitSidebar({
 				onOpenChange={(open) => {
 					if (!open && !isDiscarding) {
 						setDiscardTarget(null);
+					}
+				}}
+			/>
+			<GitSidebarCreateBranchDialog
+				isOpen={isCreateBranchDialogOpen}
+				isSubmitting={isCreateBranching}
+				onCreate={handleCreateLocalBranch}
+				onOpenChange={setIsCreateBranchDialogOpen}
+			/>
+			<GitSidebarBranchActionDialog
+				action={branchActionState?.action ?? "merge"}
+				branchName={branchActionState?.branchName ?? ""}
+				isOpen={Boolean(branchActionState)}
+				isSubmitting={
+					Boolean(branchActionState) &&
+					pendingMutationKey ===
+						`branch:${branchActionState?.action}:${branchActionState?.branchName}`
+				}
+				onConfirm={async () => {
+					if (!branchActionState) {
+						return;
+					}
+
+					const didComplete =
+						branchActionState.action === "delete"
+							? await handleDeleteLocalBranch(branchActionState.branchName)
+							: await handleMergeBranchIntoCurrent(
+									branchActionState.branchName,
+								);
+
+					if (didComplete) {
+						setBranchActionState(null);
+					}
+				}}
+				onOpenChange={(open) => {
+					if (!open && !isAnyBranchMutationPending) {
+						setBranchActionState(null);
 					}
 				}}
 			/>

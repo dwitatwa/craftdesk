@@ -43,6 +43,16 @@ export interface GitChangeMutationInput {
 	commitMessage?: string;
 }
 
+export interface GitBranchMutationInput {
+	cwd: string;
+	action:
+		| "create-local"
+		| "delete-local"
+		| "merge-into-current"
+		| "push-current";
+	branchName?: string;
+}
+
 export interface GitChange {
 	path: string;
 	originalPath: string | null;

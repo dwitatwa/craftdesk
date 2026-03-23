@@ -40,8 +40,7 @@ export function GitSidebarDiscardDialog({
 					<AlertDialogDescription>
 						{isDiscardingUntrackedFile
 							? "This file is untracked, so discarding it will permanently delete it from the project directory:"
-							: "This will remove the current unstaged changes from:"}
-						{" "}
+							: "This will remove the current unstaged changes from:"}{" "}
 						<span className="font-medium break-all">{discardTargetPath}</span>
 					</AlertDialogDescription>
 				</AlertDialogHeader>

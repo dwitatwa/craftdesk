@@ -5,9 +5,16 @@ import type {
 	GitSelectedChange,
 } from "#/lib/git";
 
-export type GitSidebarSectionId = "changes" | "branches" | "remotes" | "stashes";
+export type GitSidebarSectionId =
+	| "changes"
+	| "branches"
+	| "remotes"
+	| "stashes";
 
-export function createInitialSectionState(): Record<GitSidebarSectionId, boolean> {
+export function createInitialSectionState(): Record<
+	GitSidebarSectionId,
+	boolean
+> {
 	return {
 		changes: true,
 		branches: false,

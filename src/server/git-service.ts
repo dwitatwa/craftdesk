@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 
 import type {
 	GitBranchListEntry,
+	GitBranchMutationInput,
 	GitBranchSummary,
 	GitChange,
 	GitChangeKind,
@@ -180,6 +181,68 @@ export async function applyGitChangeMutation(input: GitChangeMutationInput) {
 			await execAsync(`rm -rf "${path.resolve(repoRoot, input.path)}"`);
 		} else {
 			await runGit(["restore", "--", input.path], repoRoot);
+		}
+	}
+
+	signalGitRepositoryChange(repoRoot);
+
+	return {
+		ok: true,
+	};
+}
+
+export async function applyGitBranchMutation(input: GitBranchMutationInput) {
+	const repoRoot = await resolveGitRepositoryRoot(input.cwd);
+
+	if (input.action === "create-local") {
+		const branchName = await requireValidBranchName(input.branchName);
+		await runGit(["branch", branchName], repoRoot);
+	} else if (input.action === "delete-local") {
+		const branchName = await requireValidBranchName(input.branchName);
+		const branchSummary = await loadBranchSummary(repoRoot);
+
+		if (branchSummary.detached) {
+			throw new Error("Cannot delete a branch while HEAD is detached.");
+		}
+
+		if (branchSummary.name === branchName) {
+			throw new Error("Cannot delete the current branch.");
+		}
+
+		await runGit(["branch", "-d", branchName], repoRoot);
+	} else if (input.action === "merge-into-current") {
+		const branchName = await requireValidBranchName(input.branchName);
+		const branchSummary = await loadBranchSummary(repoRoot);
+
+		if (branchSummary.detached) {
+			throw new Error("Cannot merge into a detached HEAD.");
+		}
+
+		if (branchSummary.name === branchName) {
+			throw new Error("Cannot merge the current branch into itself.");
+		}
+
+		await runGit(["merge", branchName], repoRoot);
+	} else if (input.action === "push-current") {
+		const branchSummary = await loadBranchSummary(repoRoot);
+
+		if (branchSummary.detached) {
+			throw new Error("Cannot push while HEAD is detached.");
+		}
+
+		if (branchSummary.upstream) {
+			await runGit(["push"], repoRoot);
+		} else {
+			const remotes = await loadRemotes(repoRoot);
+			const originRemote = remotes.find((remote) => remote.name === "origin");
+
+			if (!originRemote) {
+				throw new Error(
+					`Current branch "${branchSummary.name}" has no upstream and no "origin" remote is configured.`,
+				);
+			}
+
+			await runGit(["push", "-u", "origin", branchSummary.name], repoRoot);
 		}
 	}
 
@@ -641,6 +704,20 @@ function resolveWorkspacePath(requestedCwd: string) {
 	}
 
 	return resolvedPath;
+}
+
+async function requireValidBranchName(branchName: string | undefined) {
+	const trimmedBranchName = branchName?.trim();
+
+	if (!trimmedBranchName) {
+		throw new Error("Branch name is required.");
+	}
+
+	await runGit(
+		["check-ref-format", "--branch", trimmedBranchName],
+		process.cwd(),
+	);
+	return trimmedBranchName;
 }
 
 async function runGit(

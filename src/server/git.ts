@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import type {
+	GitBranchMutationInput,
 	GitChangeMutationInput,
 	GitDiffInput,
 	GitRepositoryChangeWaitInput,
@@ -34,4 +35,11 @@ export const mutateGitChange = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const { applyGitChangeMutation } = await import("#/server/git-service");
 		return applyGitChangeMutation(data);
+	});
+
+export const mutateGitBranch = createServerFn({ method: "POST" })
+	.inputValidator((input: GitBranchMutationInput) => input)
+	.handler(async ({ data }) => {
+		const { applyGitBranchMutation } = await import("#/server/git-service");
+		return applyGitBranchMutation(data);
 	});

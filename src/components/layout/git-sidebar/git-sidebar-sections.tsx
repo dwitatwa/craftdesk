@@ -321,9 +321,31 @@ export function ChangeGroup({
 
 export function BranchSummaryCard({
 	branch,
+	isPushing = false,
+	onPush,
+	pushState = "ready",
 }: {
 	branch: GitRepositoryOverview["branch"];
+	isPushing?: boolean;
+	onPush?: () => void;
+	pushState?: "ready" | "synced" | "behind";
 }) {
+	const pushLabel =
+		pushState === "synced"
+			? "Synced"
+			: pushState === "behind"
+				? "Behind"
+				: "Push";
+	const pushTitle = branch.detached
+		? "Push is unavailable while HEAD is detached"
+		: pushState === "synced"
+			? "This branch is already in sync with its upstream"
+			: pushState === "behind"
+				? "This branch is behind its upstream and has nothing to push"
+				: branch.upstream
+					? "Push current branch"
+					: "Publish current branch to origin";
+
 	return (
 		<div className="px-3 py-1">
 			<div className="flex items-center justify-between gap-3">
@@ -334,9 +356,27 @@ export function BranchSummaryCard({
 							(branch.detached ? "Detached HEAD" : "No upstream")}
 					</div>
 				</div>
-				<div className="flex shrink-0 gap-1.5 text-[9px] font-mono opacity-60">
-					<InlineMetric label="A" value={branch.ahead} />
-					<InlineMetric label="B" value={branch.behind} />
+				<div className="flex shrink-0 items-center gap-2">
+					<Button
+						type="button"
+						variant="secondary"
+						size="xs"
+						className="h-6 px-2 text-[10px] font-bold"
+						onClick={onPush}
+						disabled={!onPush || branch.detached || isPushing}
+						title={pushTitle}
+					>
+						{isPushing ? (
+							<LoaderCircle className="size-3 animate-spin" />
+						) : (
+							<Send className="size-3" />
+						)}
+						{pushLabel}
+					</Button>
+					<div className="flex gap-1.5 text-[9px] font-mono opacity-60">
+						<InlineMetric label="A" value={branch.ahead} />
+						<InlineMetric label="B" value={branch.behind} />
+					</div>
 				</div>
 			</div>
 		</div>
@@ -369,11 +409,26 @@ export function CommitRow({ commit }: { commit: GitCommitPreview }) {
 	);
 }
 
-export function BranchRow({ branch }: { branch: GitBranchListEntry }) {
+export function BranchRow({
+	branch,
+	isDeleting = false,
+	isMerging = false,
+	onDelete,
+	onMerge,
+}: {
+	branch: GitBranchListEntry;
+	isDeleting?: boolean;
+	isMerging?: boolean;
+	onDelete?: () => void;
+	onMerge?: () => void;
+}) {
+	const showActions =
+		!branch.isCurrent && (onDelete || onMerge || isDeleting || isMerging);
+
 	return (
 		<div
 			className={cn(
-				"px-3 py-1 transition-colors cursor-pointer",
+				"group/branch px-3 py-1 transition-colors",
 				branch.isCurrent
 					? "bg-primary/20 text-primary-foreground"
 					: "hover:bg-white/[0.05]",
@@ -386,8 +441,55 @@ export function BranchRow({ branch }: { branch: GitBranchListEntry }) {
 						{branch.shortSha}
 					</div>
 				</div>
-				<div className="shrink-0 text-[9px] text-muted-foreground/40">
-					{branch.lastCommitRelativeDate}
+				<div className="flex shrink-0 items-center gap-2">
+					<div className="text-[9px] text-muted-foreground/40">
+						{branch.lastCommitRelativeDate}
+					</div>
+					{branch.isCurrent ? (
+						<div className="rounded-full border border-primary/30 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-primary">
+							Current
+						</div>
+					) : null}
+					{showActions ? (
+						<div className="flex items-center gap-1 opacity-0 pointer-events-none transition-opacity group-hover/branch:opacity-100 group-hover/branch:pointer-events-auto group-focus-within/branch:opacity-100 group-focus-within/branch:pointer-events-auto">
+							{onMerge ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="xs"
+									className="h-5 px-1.5 text-[10px] font-medium"
+									onClick={(event) => {
+										event.stopPropagation();
+										onMerge();
+									}}
+									disabled={isDeleting || isMerging}
+								>
+									{isMerging ? (
+										<LoaderCircle className="size-3 animate-spin" />
+									) : null}
+									Merge
+								</Button>
+							) : null}
+							{onDelete ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="xs"
+									className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground hover:text-red-500"
+									onClick={(event) => {
+										event.stopPropagation();
+										onDelete();
+									}}
+									disabled={isDeleting || isMerging}
+								>
+									{isDeleting ? (
+										<LoaderCircle className="size-3 animate-spin" />
+									) : null}
+									Delete
+								</Button>
+							) : null}
+						</div>
+					) : null}
 				</div>
 			</div>
 		</div>

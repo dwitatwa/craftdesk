@@ -7,12 +7,14 @@ import {
 } from "react";
 
 import type {
+	GitBranchMutationInput,
 	GitChange,
 	GitRepositoryOverview,
 	GitSelectedChange,
 } from "#/lib/git";
 import {
 	getGitRepositoryOverview,
+	mutateGitBranch,
 	mutateGitChange,
 	waitForGitRepositoryChange,
 } from "#/server/git";
@@ -409,11 +411,90 @@ export function useGitSidebarState({
 		[activeProjectPath, handleRefresh],
 	);
 
+	const runGitBranchMutation = useCallback(
+		async (
+			action: GitBranchMutationInput["action"],
+			options: {
+				branchName?: string;
+				mutationKey: string;
+				errorMessage: string;
+			},
+		) => {
+			if (!activeProjectPath) {
+				return false;
+			}
+
+			setPendingMutationKey(options.mutationKey);
+			setError("");
+
+			try {
+				await mutateGitBranch({
+					data: {
+						cwd: activeProjectPath,
+						action,
+						branchName: options.branchName,
+					},
+				});
+				await handleRefresh();
+				return true;
+			} catch (cause) {
+				setError(cause instanceof Error ? cause.message : options.errorMessage);
+				return false;
+			} finally {
+				setPendingMutationKey("");
+			}
+		},
+		[activeProjectPath, handleRefresh],
+	);
+
+	const handleCreateLocalBranch = useCallback(
+		async (branchName: string) =>
+			runGitBranchMutation("create-local", {
+				branchName,
+				mutationKey: "branch:create",
+				errorMessage: "Failed to create branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
+	const handleDeleteLocalBranch = useCallback(
+		async (branchName: string) =>
+			runGitBranchMutation("delete-local", {
+				branchName,
+				mutationKey: `branch:delete:${branchName}`,
+				errorMessage: "Failed to delete branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
+	const handleMergeBranchIntoCurrent = useCallback(
+		async (branchName: string) =>
+			runGitBranchMutation("merge-into-current", {
+				branchName,
+				mutationKey: `branch:merge:${branchName}`,
+				errorMessage: "Failed to merge branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
+	const handlePushCurrentBranch = useCallback(
+		async () =>
+			runGitBranchMutation("push-current", {
+				mutationKey: "branch:push",
+				errorMessage: "Failed to push branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
 	return {
 		discardTarget,
 		error,
 		handleDiscardConfirm,
 		handleGitAction,
+		handleCreateLocalBranch,
+		handleDeleteLocalBranch,
+		handleMergeBranchIntoCurrent,
+		handlePushCurrentBranch,
 		handleGitCommit,
 		handleGitGroupAction,
 		handleRefresh,
