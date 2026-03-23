@@ -103,7 +103,7 @@ export function TaskCard({
 		<>
 			<li
 				className={cn(
-					"group list-none flex w-full overflow-hidden rounded-xl",
+					"group list-none flex w-full shrink-0 overflow-hidden rounded-xl",
 					isDragging && "opacity-45",
 					className,
 				)}

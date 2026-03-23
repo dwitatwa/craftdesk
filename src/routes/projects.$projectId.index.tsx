@@ -316,7 +316,7 @@ function ProjectDetailView() {
 						className="relative flex-1 min-h-0 overflow-hidden"
 					>
 						{/* Board Area */}
-						<div className="relative z-0 h-full overflow-hidden pb-14">
+						<div className="relative z-0 flex h-full min-h-0 flex-col overflow-hidden pb-14">
 							<KanbanBoard
 								columns={workspace.columns}
 								onCreateTask={handleCreateTask}

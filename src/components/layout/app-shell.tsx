@@ -343,9 +343,9 @@ function ProjectWorkspaceShell({
 				/>
 			)}
 			<div className="flex flex-1 flex-col overflow-hidden">
-				<main className="relative flex-1 overflow-auto bg-background/50">
+				<main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background/50">
 					<div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#1A1A1A_1px,transparent_1px)] [background-size:24px_24px] opacity-20" />
-					<div className="relative flex h-full flex-col">
+					<div className="relative flex h-full min-h-0 flex-col">
 						{isGitWorkspaceVisible ? (
 							<GitDiffView
 								activeProject={activeProject}

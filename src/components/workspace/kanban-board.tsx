@@ -67,7 +67,7 @@ function Column({
 	};
 
 	return (
-		<div className="flex h-full min-h-0 w-72 shrink-0 flex-col gap-4">
+		<div className="grid h-full min-h-0 w-72 shrink-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
 			<div className="flex items-center justify-between px-2">
 				<div className="flex items-center gap-2">
 					<h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground/80">
@@ -89,16 +89,19 @@ function Column({
 				</div>
 			</div>
 
-			<ul
+			<div
 				className={cn(
-					"m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto rounded-xl border border-transparent p-0 pr-1 pb-4 scrollbar-thin scrollbar-thumb-border transition-colors hover:scrollbar-thumb-muted-foreground/30",
+					"flex min-h-0 flex-col overflow-hidden rounded-xl border border-transparent transition-colors",
 					activeDropColumnId === column.id && "border-primary/40 bg-primary/5",
 				)}
-				aria-label={`${column.title} tasks`}
 				onDragOver={(event) => onDragOverColumn(event, column.id)}
 				onDragLeave={(event) => onDragLeaveColumn(event, column.id)}
 				onDrop={(event) => onDropOnColumn(event, column.id)}
 			>
+				<ul
+					className="custom-scrollbar m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto p-0 pr-1 pb-4 [scrollbar-gutter:stable]"
+					aria-label={`${column.title} tasks`}
+				>
 				{column.tasks.map((task) => (
 					<TaskCard
 						key={task.id}
@@ -110,17 +113,18 @@ function Column({
 						onDelete={onDeleteTask}
 					/>
 				))}
-				<li>
-					<Button
-						variant="ghost"
-						className="w-full h-8 justify-start gap-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-border/50 hover:border-primary/30 mt-1 cursor-pointer"
-						onClick={() => setIsCreateModalOpen(true)}
+					<li>
+						<Button
+							variant="ghost"
+							className="w-full h-8 justify-start gap-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-border/50 hover:border-primary/30 mt-1 cursor-pointer"
+							onClick={() => setIsCreateModalOpen(true)}
 					>
 						<Plus className="size-3" />
 						Add Task
-					</Button>
-				</li>
-			</ul>
+						</Button>
+					</li>
+				</ul>
+			</div>
 
 			<CreateTaskModal
 				isOpen={isCreateModalOpen}
