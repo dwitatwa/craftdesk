@@ -312,6 +312,7 @@ function TaskDetailView() {
 								{/* Notes Panel - Flexible height */}
 								<div className="flex-1 flex flex-col min-h-[280px] rounded-xl border border-white/5 bg-white/[0.01] overflow-hidden">
 									<TaskNotesEditor
+										key={task.id}
 										taskId={task.id}
 										initialNotes={task.notes}
 										onSaved={async () => {

@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import type { DragEvent } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -174,6 +174,12 @@ interface KanbanBoardProps {
 	onMoveTask: (taskId: string, targetColumnId: string) => Promise<void> | void;
 }
 
+interface OptimisticMove {
+	sourceColumnId: string;
+	targetColumnId: string;
+	taskId: string;
+}
+
 function moveTaskLocally(
 	columns: BoardColumn[],
 	taskId: string,
@@ -245,7 +251,6 @@ export function KanbanBoard({
 	onDeleteTask,
 	onMoveTask,
 }: KanbanBoardProps) {
-	const [boardColumns, setBoardColumns] = useState(columns);
 	const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 	const [dragSourceColumnId, setDragSourceColumnId] = useState<string | null>(
 		null,
@@ -253,10 +258,17 @@ export function KanbanBoard({
 	const [activeDropColumnId, setActiveDropColumnId] = useState<string | null>(
 		null,
 	);
-
-	useEffect(() => {
-		setBoardColumns(columns);
-	}, [columns]);
+	const [optimisticMove, setOptimisticMove] = useState<OptimisticMove | null>(
+		null,
+	);
+	const boardColumns = optimisticMove
+		? moveTaskLocally(
+				columns,
+				optimisticMove.taskId,
+				optimisticMove.sourceColumnId,
+				optimisticMove.targetColumnId,
+			)
+		: columns;
 
 	const handleDragStartTask = (
 		event: DragEvent<HTMLElement>,
@@ -318,20 +330,17 @@ export function KanbanBoard({
 			return;
 		}
 
-		const previousColumns = boardColumns;
-		const nextColumns = moveTaskLocally(
-			boardColumns,
+		setOptimisticMove({
 			taskId,
 			sourceColumnId,
 			targetColumnId,
-		);
-
-		setBoardColumns(nextColumns);
+		});
 
 		try {
 			await onMoveTask(taskId, targetColumnId);
+			setOptimisticMove(null);
 		} catch {
-			setBoardColumns(previousColumns);
+			setOptimisticMove(null);
 		}
 	};
 

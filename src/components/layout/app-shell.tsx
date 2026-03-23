@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Folder, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -31,6 +31,9 @@ export interface ActiveProjectContext {
 	path: string;
 }
 
+type WorkspacePane = "project" | "file" | "git";
+type SidebarView = "explorer" | "git";
+
 function createEmptyProjectFileSelection(): ProjectFileSelectionState {
 	return {
 		file: null,
@@ -38,6 +41,10 @@ function createEmptyProjectFileSelection(): ProjectFileSelectionState {
 		isLoading: false,
 		error: "",
 	};
+}
+
+function hasProjectFileSelection(selection: ProjectFileSelectionState) {
+	return !!selection.relativePath || selection.isLoading || !!selection.error;
 }
 
 interface AppShellProps {
@@ -52,50 +59,17 @@ interface AppShellProps {
 }
 
 export function AppShell({
-	children,
-	showSidebar = true,
-	projects = [],
 	activeProject = null,
-	onAddProject,
-	isAddingProject = false,
 	addProjectError = "",
+	children,
+	isAddingProject = false,
+	onAddProject,
 	onDeleteProject,
+	projects = [],
+	showSidebar = true,
 }: AppShellProps) {
-	const [selectedGitChange, setSelectedGitChange] =
-		useState<GitSelectedChange | null>(null);
-	const [activeSidebarView, setActiveSidebarView] = useState<
-		"explorer" | "git"
-	>("explorer");
-	const [selectedProjectFile, setSelectedProjectFile] =
-		useState<ProjectFileSelectionState>(createEmptyProjectFileSelection);
 	const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
-	const activeProjectId = activeProject?.id ?? "";
-
-	useEffect(() => {
-		setSelectedGitChange(null);
-		setActiveSidebarView("explorer");
-		setSelectedProjectFile(createEmptyProjectFileSelection());
-
-		if (!activeProjectId) {
-			return;
-		}
-	}, [activeProjectId]);
-
-	const isGitWorkspaceVisible =
-		showSidebar &&
-		activeProject &&
-		!isProjectPickerOpen &&
-		activeSidebarView === "git" &&
-		selectedGitChange;
-	const isProjectFileVisible =
-		showSidebar &&
-		activeProject &&
-		!isProjectPickerOpen &&
-		activeSidebarView === "explorer" &&
-		(selectedProjectFile.relativePath ||
-			selectedProjectFile.isLoading ||
-			selectedProjectFile.error);
 
 	const filteredProjects = projects.filter(
 		(project) =>
@@ -105,42 +79,15 @@ export function AppShell({
 
 	return (
 		<div className="flex h-screen w-full overflow-hidden bg-background">
-			{showSidebar && (
-				<Sidebar
-					activeProject={activeProject}
-					selectedGitChange={selectedGitChange}
-					onSelectGitChange={setSelectedGitChange}
-					activeSidebarView={activeSidebarView}
-					onSidebarViewChange={setActiveSidebarView}
-					onProjectFileSelectionChange={setSelectedProjectFile}
-					onOpenProjectPicker={() => setIsProjectPickerOpen(true)}
-				/>
-			)}
-			<div className="flex flex-1 flex-col overflow-hidden">
-				<main className="flex-1 overflow-auto bg-background/50 relative">
-					{/* Dot Grid Overlay */}
-					<div className="absolute inset-0 pointer-events-none bg-[radial-gradient(#1A1A1A_1px,transparent_1px)] [background-size:24px_24px] opacity-20" />
-					<div className="relative h-full flex flex-col">
-						{isGitWorkspaceVisible ? (
-							<GitDiffView
-								activeProject={activeProject}
-								onClose={() => setSelectedGitChange(null)}
-								selectedChange={selectedGitChange}
-							/>
-						) : isProjectFileVisible ? (
-							<FilePreviewView
-								activeProject={activeProject}
-								onClose={() =>
-									setSelectedProjectFile(createEmptyProjectFileSelection())
-								}
-								selection={selectedProjectFile}
-							/>
-						) : (
-							children
-						)}
-					</div>
-				</main>
-			</div>
+			<ProjectWorkspaceShell
+				key={activeProject?.id ?? "no-project"}
+				activeProject={activeProject}
+				isProjectPickerOpen={isProjectPickerOpen}
+				onOpenProjectPicker={() => setIsProjectPickerOpen(true)}
+				showSidebar={showSidebar}
+			>
+				{children}
+			</ProjectWorkspaceShell>
 
 			<Dialog open={isProjectPickerOpen} onOpenChange={setIsProjectPickerOpen}>
 				<DialogContent
@@ -230,6 +177,136 @@ export function AppShell({
 				</DialogContent>
 			</Dialog>
 		</div>
+	);
+}
+
+function ProjectWorkspaceShell({
+	activeProject,
+	children,
+	isProjectPickerOpen,
+	onOpenProjectPicker,
+	showSidebar,
+}: {
+	activeProject: ActiveProjectContext | null;
+	children: React.ReactNode;
+	isProjectPickerOpen: boolean;
+	onOpenProjectPicker: () => void;
+	showSidebar: boolean;
+}) {
+	const [selectedGitChange, setSelectedGitChange] =
+		useState<GitSelectedChange | null>(null);
+	const [activeSidebarView, setActiveSidebarView] =
+		useState<SidebarView>("explorer");
+	const [selectedProjectFile, setSelectedProjectFile] =
+		useState<ProjectFileSelectionState>(createEmptyProjectFileSelection);
+	const [activeWorkspacePane, setActiveWorkspacePane] =
+		useState<WorkspacePane>("project");
+	const selectedGitChangeRef = useRef(selectedGitChange);
+	const selectedProjectFileRef = useRef(selectedProjectFile);
+	selectedGitChangeRef.current = selectedGitChange;
+	selectedProjectFileRef.current = selectedProjectFile;
+
+	const handleGitChangeSelection = useCallback(
+		(change: GitSelectedChange | null) => {
+			setSelectedGitChange(change);
+			setActiveWorkspacePane((currentPane) => {
+				if (change) {
+					return "git";
+				}
+
+				if (currentPane !== "git") {
+					return currentPane;
+				}
+
+				return hasProjectFileSelection(selectedProjectFileRef.current)
+					? "file"
+					: "project";
+			});
+		},
+		[],
+	);
+
+	const handleProjectFileSelectionChange = useCallback(
+		(selection: ProjectFileSelectionState) => {
+			setSelectedProjectFile(selection);
+			setActiveWorkspacePane((currentPane) => {
+				if (hasProjectFileSelection(selection)) {
+					return "file";
+				}
+
+				if (currentPane !== "file") {
+					return currentPane;
+				}
+
+				return selectedGitChangeRef.current ? "git" : "project";
+			});
+		},
+		[],
+	);
+
+	const handleCloseGitDiff = useCallback(() => {
+		setSelectedGitChange(null);
+		setActiveWorkspacePane(
+			hasProjectFileSelection(selectedProjectFileRef.current)
+				? "file"
+				: "project",
+		);
+	}, []);
+
+	const handleCloseProjectFile = useCallback(() => {
+		setSelectedProjectFile(createEmptyProjectFileSelection());
+		setActiveWorkspacePane(selectedGitChangeRef.current ? "git" : "project");
+	}, []);
+
+	const isGitWorkspaceVisible =
+		showSidebar &&
+		activeProject &&
+		!isProjectPickerOpen &&
+		activeWorkspacePane === "git" &&
+		!!selectedGitChange;
+	const isProjectFileVisible =
+		showSidebar &&
+		activeProject &&
+		!isProjectPickerOpen &&
+		activeWorkspacePane === "file" &&
+		hasProjectFileSelection(selectedProjectFile);
+
+	return (
+		<>
+			{showSidebar && (
+				<Sidebar
+					activeProject={activeProject}
+					selectedGitChange={selectedGitChange}
+					onSelectGitChange={handleGitChangeSelection}
+					activeSidebarView={activeSidebarView}
+					onSidebarViewChange={setActiveSidebarView}
+					onProjectFileSelectionChange={handleProjectFileSelectionChange}
+					onOpenProjectPicker={onOpenProjectPicker}
+				/>
+			)}
+			<div className="flex flex-1 flex-col overflow-hidden">
+				<main className="relative flex-1 overflow-auto bg-background/50">
+					<div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#1A1A1A_1px,transparent_1px)] [background-size:24px_24px] opacity-20" />
+					<div className="relative flex h-full flex-col">
+						{isGitWorkspaceVisible ? (
+							<GitDiffView
+								activeProject={activeProject}
+								onClose={handleCloseGitDiff}
+								selectedChange={selectedGitChange}
+							/>
+						) : isProjectFileVisible ? (
+							<FilePreviewView
+								activeProject={activeProject}
+								onClose={handleCloseProjectFile}
+								selection={selectedProjectFile}
+							/>
+						) : (
+							children
+						)}
+					</div>
+				</main>
+			</div>
+		</>
 	);
 }
 

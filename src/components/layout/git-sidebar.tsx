@@ -42,6 +42,17 @@ interface GitSidebarProps {
 	onSelectChange: (change: GitSelectedChange | null) => void;
 }
 
+type GitSidebarSectionId = "changes" | "branches" | "remotes" | "stashes";
+
+function createInitialSectionState(): Record<GitSidebarSectionId, boolean> {
+	return {
+		changes: false,
+		branches: false,
+		remotes: false,
+		stashes: false,
+	};
+}
+
 export function GitSidebar({
 	activeProject,
 	selectedChange,
@@ -51,16 +62,15 @@ export function GitSidebar({
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [pendingMutationKey, setPendingMutationKey] = useState("");
+	const [sectionOpenState, setSectionOpenState] = useState(
+		createInitialSectionState,
+	);
 	const selectedChangeRef = useRef(selectedChange);
-
-	useEffect(() => {
-		selectedChangeRef.current = selectedChange;
-	}, [selectedChange]);
+	selectedChangeRef.current = selectedChange;
 
 	useEffect(() => {
 		setOverview(null);
 		setError("");
-		onSelectChange(null);
 
 		if (!activeProject) {
 			return;
@@ -80,9 +90,11 @@ export function GitSidebar({
 				}
 
 				setOverview(nextOverview);
-				onSelectChange(
-					resolveSelectedChange(selectedChangeRef.current, nextOverview),
-				);
+				if (selectedChangeRef.current) {
+					onSelectChange(
+						resolveSelectedChange(selectedChangeRef.current, nextOverview),
+					);
+				}
 			})
 			.catch((cause) => {
 				if (cancelled) {
@@ -119,9 +131,11 @@ export function GitSidebar({
 				},
 			});
 			setOverview(nextOverview);
-			onSelectChange(
-				resolveSelectedChange(selectedChangeRef.current, nextOverview),
-			);
+			if (selectedChangeRef.current) {
+				onSelectChange(
+					resolveSelectedChange(selectedChangeRef.current, nextOverview),
+				);
+			}
 		} catch (cause) {
 			setError(
 				cause instanceof Error ? cause.message : "Failed to refresh Git data.",
@@ -260,6 +274,13 @@ export function GitSidebar({
 						/>
 
 						<SidebarSection
+							open={sectionOpenState.changes}
+							onOpenChange={(open) =>
+								setSectionOpenState((current) => ({
+									...current,
+									changes: open,
+								}))
+							}
 							title={`Changes${changeCount > 0 ? ` (${changeCount})` : ""}`}
 							icon={GitCompareArrows}
 							rightElement={
@@ -309,6 +330,13 @@ export function GitSidebar({
 						</SidebarSection>
 
 						<SidebarSection
+							open={sectionOpenState.branches}
+							onOpenChange={(open) =>
+								setSectionOpenState((current) => ({
+									...current,
+									branches: open,
+								}))
+							}
 							title={`Branches (${overview.branches.length})`}
 							icon={GitBranch}
 						>
@@ -340,6 +368,13 @@ export function GitSidebar({
 						</SidebarSection>
 
 						<SidebarSection
+							open={sectionOpenState.remotes}
+							onOpenChange={(open) =>
+								setSectionOpenState((current) => ({
+									...current,
+									remotes: open,
+								}))
+							}
 							title={`Remotes (${overview.remotes.length})`}
 							icon={GitFork}
 						>
@@ -353,6 +388,13 @@ export function GitSidebar({
 						</SidebarSection>
 
 						<SidebarSection
+							open={sectionOpenState.stashes}
+							onOpenChange={(open) =>
+								setSectionOpenState((current) => ({
+									...current,
+									stashes: open,
+								}))
+							}
 							title={`Stashes (${overview.stashes.length})`}
 							icon={ScrollText}
 						>
@@ -376,7 +418,10 @@ function CommitSection({
 	disabled = false,
 	isCommitting = false,
 }: {
-	onCommit: (message: string, action: "commit" | "commit-push") => Promise<void>;
+	onCommit: (
+		message: string,
+		action: "commit" | "commit-push",
+	) => Promise<void>;
 	disabled?: boolean;
 	isCommitting?: boolean;
 }) {
@@ -435,32 +480,41 @@ function CommitSection({
 }
 
 function SidebarSection({
+	open,
+	onOpenChange,
 	title,
 	icon: Icon,
-	defaultOpen = false,
 	rightElement,
 	children,
 }: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
 	title: string;
 	icon: React.ComponentType<{ className?: string }>;
-	defaultOpen?: boolean;
 	rightElement?: React.ReactNode;
 	children: React.ReactNode;
 }) {
 	return (
-		<details className="group" open={defaultOpen}>
-			<summary className="flex cursor-pointer list-none items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 hover:text-foreground transition-colors marker:hidden">
-				<span className="inline-flex items-center gap-1.5">
-					<ChevronDown className="size-3 transition-transform duration-200 -rotate-90 group-open:rotate-0" />
-					<Icon className="size-3" />
-					{title}
-				</span>
-				<div className="flex items-center gap-1">
-					{rightElement}
-				</div>
-			</summary>
-			<div className="pb-1">{children}</div>
-		</details>
+		<div className="group">
+			<div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:text-foreground">
+				<button
+					type="button"
+					className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none"
+					onClick={() => onOpenChange(!open)}
+				>
+					<ChevronDown
+						className={cn(
+							"size-3 transition-transform duration-200",
+							open ? "rotate-0" : "-rotate-90",
+						)}
+					/>
+					<Icon className="size-3 shrink-0" />
+					<span className="truncate">{title}</span>
+				</button>
+				<div className="flex items-center gap-1">{rightElement}</div>
+			</div>
+			{open ? <div className="pb-1">{children}</div> : null}
+		</div>
 	);
 }
 
@@ -479,7 +533,10 @@ function ChangeGroup({
 	selectedChange: GitSelectedChange | null;
 	onSelectChange: (change: GitSelectedChange) => void;
 	diffMode: GitDiffMode;
-	onAction: (change: GitChange, action: "stage" | "unstage" | "discard") => Promise<void>;
+	onAction: (
+		change: GitChange,
+		action: "stage" | "unstage" | "discard",
+	) => Promise<void>;
 	onGroupAction: (action: "stage-all" | "unstage-all") => Promise<void>;
 	pendingMutationKey: string;
 }) {
@@ -504,7 +561,8 @@ function ChangeGroup({
 						className="opacity-0 group-hover/header:opacity-100 h-4 w-4 text-muted-foreground/50 hover:text-foreground transition-opacity"
 						onClick={(e) => {
 							e.stopPropagation();
-							const action = diffMode === "staged" ? "unstage-all" : "stage-all";
+							const action =
+								diffMode === "staged" ? "unstage-all" : "stage-all";
 							void onGroupAction(action);
 						}}
 						disabled={isGroupMutating}
@@ -541,39 +599,52 @@ function ChangeGroup({
 										? "bg-sidebar-accent text-sidebar-accent-foreground"
 										: "hover:bg-sidebar-accent/40 text-muted-foreground hover:text-foreground",
 								)}
-								onClick={() => {
-									onSelectChange({
-										...change,
-										diffMode,
-									});
-								}}
-								title={change.path}
 							>
-								<span
-									className={cn(
-										"inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-[9px] font-bold",
-										getChangeToneClassName(change.code),
-									)}
+								<button
+									type="button"
+									className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
+									onClick={() => {
+										onSelectChange({
+											...change,
+											diffMode,
+										});
+									}}
+									title={change.path}
 								>
-									{change.code}
-								</span>
-								<div className="flex-1 min-w-0">
-									<div className="flex items-baseline gap-1.5 min-w-0">
-										<span className={cn(
-											"truncate text-[11px] font-medium leading-tight",
-											isSelected ? "text-sidebar-accent-foreground" : "text-foreground"
-										)}>
-											{change.path.split("/").pop()}
-										</span>
-										<span className={cn(
-											"truncate text-[9px] font-mono",
-											isSelected ? "text-sidebar-accent-foreground/50" : "text-muted-foreground/40"
-										)}>
-											{change.path.split("/").slice(0, -1).join("/")}
-										</span>
+									<span
+										className={cn(
+											"inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-[9px] font-bold",
+											getChangeToneClassName(change.code),
+										)}
+									>
+										{change.code}
+									</span>
+									<div className="flex-1 min-w-0">
+										<div className="flex items-baseline gap-1.5 min-w-0">
+											<span
+												className={cn(
+													"truncate text-[11px] font-medium leading-tight",
+													isSelected
+														? "text-sidebar-accent-foreground"
+														: "text-foreground",
+												)}
+											>
+												{change.path.split("/").pop()}
+											</span>
+											<span
+												className={cn(
+													"truncate text-[9px] font-mono",
+													isSelected
+														? "text-sidebar-accent-foreground/50"
+														: "text-muted-foreground/40",
+												)}
+											>
+												{change.path.split("/").slice(0, -1).join("/")}
+											</span>
+										</div>
 									</div>
-								</div>
-								<div className="hidden group-hover/item:flex items-center gap-1 shrink-0">
+								</button>
+								<div className="flex shrink-0 items-center gap-1 opacity-0 pointer-events-none transition-opacity group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto">
 									{diffMode === "unstaged" && (
 										<Button
 											type="button"
@@ -602,14 +673,17 @@ function ChangeGroup({
 										className="h-4 w-4 text-muted-foreground hover:text-foreground"
 										onClick={(e) => {
 											e.stopPropagation();
-											const action = diffMode === "staged" ? "unstage" : "stage";
+											const action =
+												diffMode === "staged" ? "unstage" : "stage";
 											void onAction(change, action);
 										}}
 										disabled={isMutating}
 										aria-label={
 											diffMode === "staged" ? "Unstage file" : "Stage file"
 										}
-										title={diffMode === "staged" ? "Unstage file" : "Stage file"}
+										title={
+											diffMode === "staged" ? "Unstage file" : "Stage file"
+										}
 									>
 										{isMutating ? (
 											<LoaderCircle className="size-2.5 animate-spin" />
@@ -661,7 +735,9 @@ function CommitRow({ commit }: { commit: GitCommitPreview }) {
 			<div className="flex items-center gap-2">
 				<GitCommitHorizontal className="size-3 shrink-0 text-muted-foreground/40" />
 				<div className="min-w-0 flex-1 flex items-center justify-between gap-2">
-					<div className="truncate text-[11px] font-medium">{commit.summary}</div>
+					<div className="truncate text-[11px] font-medium">
+						{commit.summary}
+					</div>
 					<div className="shrink-0 text-[9px] font-mono text-muted-foreground/40">
 						{commit.shortSha}
 					</div>
@@ -758,33 +834,11 @@ function resolveSelectedChange(
 	current: GitSelectedChange | null,
 	overview: GitRepositoryOverview,
 ) {
-	const nextSelected =
+	return (
 		findMatchingChange(current, overview.unstaged, "unstaged") ??
-		findMatchingChange(current, overview.staged, "staged");
-
-	if (nextSelected) {
-		return nextSelected;
-	}
-
-	const defaultUnstaged = overview.unstaged[0];
-
-	if (defaultUnstaged) {
-		return {
-			...defaultUnstaged,
-			diffMode: "unstaged" as const,
-		};
-	}
-
-	const defaultStaged = overview.staged[0];
-
-	if (defaultStaged) {
-		return {
-			...defaultStaged,
-			diffMode: "staged" as const,
-		};
-	}
-
-	return null;
+		findMatchingChange(current, overview.staged, "staged") ??
+		null
+	);
 }
 
 function findMatchingChange(

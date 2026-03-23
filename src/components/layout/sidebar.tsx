@@ -93,17 +93,31 @@ export function Sidebar({
 			</div>
 
 			<div className="min-h-0 flex-1">
-				{activeProject && activeSidebarView === "git" ? (
-					<GitSidebar
-						activeProject={activeProject}
-						selectedChange={selectedGitChange}
-						onSelectChange={onSelectGitChange}
-					/>
-				) : activeProject ? (
-					<FileExplorer
-						activeProject={activeProject}
-						onSelectionChange={onProjectFileSelectionChange}
-					/>
+				{activeProject ? (
+					<>
+						<div
+							className={cn("h-full", activeSidebarView === "git" && "hidden")}
+						>
+							<FileExplorer
+								key={activeProject.id}
+								activeProject={activeProject}
+								onSelectionChange={onProjectFileSelectionChange}
+							/>
+						</div>
+						<div
+							className={cn(
+								"h-full",
+								activeSidebarView === "explorer" && "hidden",
+							)}
+						>
+							<GitSidebar
+								key={activeProject.id}
+								activeProject={activeProject}
+								selectedChange={selectedGitChange}
+								onSelectChange={onSelectGitChange}
+							/>
+						</div>
+					</>
 				) : (
 					<div className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
 						<p>No active project. Click the settings icon to open a project.</p>

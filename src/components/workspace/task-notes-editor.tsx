@@ -1,5 +1,5 @@
 import { Eye, LoaderCircle, Save, SquarePen } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "#/components/ui/button";
@@ -24,83 +24,57 @@ export function TaskNotesEditor({
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveError, setSaveError] = useState<string | null>(null);
 
-	useEffect(() => {
-		setDraftNotes(initialNotes);
-		setSavedNotes(initialNotes);
-		setSaveError(null);
-	}, [initialNotes]);
-
 	const hasChanges = draftNotes !== savedNotes;
+
+	const persistNotes = useCallback(
+		async (notes: string) => {
+			setIsSaving(true);
+			setSaveError(null);
+
+			try {
+				const normalizedNotes = notes.replace(/\r\n/g, "\n");
+				await updateTaskNotes({
+					data: {
+						taskId,
+						notes: normalizedNotes,
+					},
+				});
+				setSavedNotes(normalizedNotes);
+				await onSaved?.();
+			} catch (error) {
+				setSaveError(
+					error instanceof Error
+						? error.message
+						: "Unable to save notes right now.",
+				);
+			} finally {
+				setIsSaving(false);
+			}
+		},
+		[onSaved, taskId],
+	);
 
 	const handleSave = async () => {
 		if (isSaving || !hasChanges) {
 			return;
 		}
 
-		setIsSaving(true);
-		setSaveError(null);
-
-		try {
-			const normalizedNotes = draftNotes.replace(/\r\n/g, "\n");
-			await updateTaskNotes({
-				data: {
-					taskId,
-					notes: normalizedNotes,
-				},
-			});
-			setSavedNotes(normalizedNotes);
-			await onSaved?.();
-		} catch (error) {
-			setSaveError(
-				error instanceof Error
-					? error.message
-					: "Unable to save notes right now.",
-			);
-		} finally {
-			setIsSaving(false);
-		}
+		await persistNotes(draftNotes);
 	};
 
 	useEffect(() => {
-		if (!hasChanges) {
+		if (!hasChanges || isSaving) {
 			return;
 		}
 
 		const timeoutId = window.setTimeout(() => {
-			void (async () => {
-				if (isSaving) {
-					return;
-				}
-
-				setIsSaving(true);
-				setSaveError(null);
-
-				try {
-					const normalizedNotes = draftNotes.replace(/\r\n/g, "\n");
-					await updateTaskNotes({
-						data: {
-							taskId,
-							notes: normalizedNotes,
-						},
-					});
-					setSavedNotes(normalizedNotes);
-					await onSaved?.();
-				} catch (error) {
-					setSaveError(
-						error instanceof Error
-							? error.message
-							: "Unable to save notes right now.",
-					);
-				} finally {
-					setIsSaving(false);
-				}
-			})();
+			void persistNotes(draftNotes);
 		}, 700);
 
 		return () => {
 			window.clearTimeout(timeoutId);
 		};
-	}, [draftNotes, hasChanges, isSaving, onSaved, taskId]);
+	}, [draftNotes, hasChanges, isSaving, persistNotes]);
 
 	return (
 		<div className="flex h-full flex-col">

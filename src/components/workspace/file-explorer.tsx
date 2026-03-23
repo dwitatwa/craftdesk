@@ -123,16 +123,20 @@ export function FileExplorer({
 	const projectId = activeProject.id;
 	const activeProjectIdRef = useRef(projectId);
 	const contextMenuRef = useRef<HTMLDivElement | null>(null);
+	activeProjectIdRef.current = projectId;
 	const [directories, setDirectories] = useState<
 		Record<string, DirectoryState>
-	>({
-		[ROOT_PATH]: createDirectoryState(),
-	});
+	>(() => ({
+		[ROOT_PATH]: {
+			...createDirectoryState(),
+			isLoading: true,
+		},
+	}));
 	const [expandedDirectories, setExpandedDirectories] = useState<
 		Record<string, boolean>
-	>({
+	>(() => ({
 		[ROOT_PATH]: true,
-	});
+	}));
 	const [selectedFilePath, setSelectedFilePath] = useState("");
 	const [selectedFile, setSelectedFile] = useState<ProjectFileContent | null>(
 		null,
@@ -168,10 +172,6 @@ export function FileExplorer({
 		  }
 		| null
 	>(null);
-
-	useEffect(() => {
-		activeProjectIdRef.current = projectId;
-	}, [projectId]);
 
 	useEffect(() => {
 		if (!contextMenuState) {
@@ -310,23 +310,6 @@ export function FileExplorer({
 	};
 
 	useEffect(() => {
-		setDirectories({
-			[ROOT_PATH]: {
-				...createDirectoryState(),
-				isLoading: true,
-			},
-		});
-		setExpandedDirectories({ [ROOT_PATH]: true });
-		setSelectedFilePath("");
-		setSelectedFile(null);
-		setDeleteTarget(null);
-		setImportedFileContent("");
-		setImportedFileName("");
-		setIsCreateFormOpen(false);
-		setNewFilePath("");
-		setCreateError("");
-		setIsDeleteDialogOpen(false);
-		setContextMenuState(null);
 		onSelectionChange({
 			file: null,
 			relativePath: "",
