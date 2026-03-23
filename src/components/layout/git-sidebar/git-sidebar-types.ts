@@ -10,5 +10,5 @@ export interface GitSidebarProps {
 	activeProject: ActiveProjectContext | null;
 	selectedChange: GitSelectedChange | null;
 	onSelectChange: (change: GitSelectedChange | null) => void;
-	onOverviewRefresh?: () => void;
+	onDiffRefresh?: () => void;
 }

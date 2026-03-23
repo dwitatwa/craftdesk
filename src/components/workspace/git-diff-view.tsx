@@ -45,6 +45,7 @@ export function GitDiffView({
 	const activeDiffKey = getGitDiffRequestKey(activeProjectPath, selectedChange);
 	const activeDiffKeyRef = useRef(activeDiffKey);
 	const diffRef = useRef(diff);
+	const refreshVersionRef = useRef(refreshVersion);
 	const loadedDiffKeyRef = useRef("");
 	const loadedRefreshVersionRef = useRef(-1);
 	const diffRequestRef = useRef<{
@@ -53,6 +54,7 @@ export function GitDiffView({
 	} | null>(null);
 	activeDiffKeyRef.current = activeDiffKey;
 	diffRef.current = diff;
+	refreshVersionRef.current = refreshVersion;
 
 	const loadDiff = useCallback(
 		async (
@@ -98,8 +100,10 @@ export function GitDiffView({
 				}
 
 				loadedDiffKeyRef.current = diffKey;
-				loadedRefreshVersionRef.current = refreshVersion;
-				setDiff(nextDiff);
+				loadedRefreshVersionRef.current = refreshVersionRef.current;
+				setDiff((currentDiff) =>
+					isSameDiffResult(currentDiff, nextDiff) ? currentDiff : nextDiff,
+				);
 
 				return nextDiff;
 			} catch (cause) {
@@ -122,7 +126,7 @@ export function GitDiffView({
 				}
 			}
 		},
-		[activeProjectPath, refreshVersion],
+		[activeProjectPath],
 	);
 
 	useEffect(() => {
@@ -150,7 +154,13 @@ export function GitDiffView({
 			return;
 		}
 
-		void loadDiff(activeDiffKey, selectedChange, { reset: true }).catch(() => {
+		void loadDiff(activeDiffKey, selectedChange, {
+			reset: shouldResetDiffView(
+				loadedDiffKeyRef.current,
+				activeDiffKey,
+				!!diffRef.current,
+			),
+		}).catch(() => {
 			// Error state is handled inside loadDiff.
 		});
 	}, [activeDiffKey, loadDiff, refreshVersion, selectedChange]);
@@ -227,14 +237,14 @@ export function GitDiffView({
 			</div>
 
 			<div className="min-h-0 flex-1 overflow-hidden">
-				{isLoading ? (
+				{isLoading && !diff ? (
 					<div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
 						<LoaderCircle className="size-4 animate-spin" />
 						Loading diff...
 					</div>
 				) : null}
 
-				{!isLoading && error ? (
+				{!diff && !isLoading && error ? (
 					<div className="flex h-full items-center justify-center p-8">
 						<EmptyState
 							title="Diff unavailable"
@@ -244,7 +254,7 @@ export function GitDiffView({
 					</div>
 				) : null}
 
-				{!isLoading && !error && diff?.isEmpty ? (
+				{!diff && !isLoading && !error ? (
 					<div className="flex h-full items-center justify-center p-8">
 						<EmptyState
 							title="No diff output"
@@ -253,8 +263,23 @@ export function GitDiffView({
 					</div>
 				) : null}
 
-				{!isLoading && !error && diff && !diff.isEmpty ? (
+				{diff?.isEmpty ? (
+					<div className="flex h-full items-center justify-center p-8">
+						<EmptyState
+							title="No diff output"
+							description="This selection does not currently produce a textual diff."
+						/>
+					</div>
+				) : null}
+
+				{diff && !diff.isEmpty ? (
 					<div className="grid h-full min-h-0 grid-cols-2 divide-x divide-white/5 bg-[#09090B]">
+						{isLoading ? (
+							<div className="pointer-events-none absolute right-4 top-4 z-10 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground backdrop-blur-sm">
+								<LoaderCircle className="size-3 animate-spin" />
+								Refreshing diff...
+							</div>
+						) : null}
 						<DiffPaneHeader label="Previous" />
 						<DiffPaneHeader label="Current" />
 						<div className="custom-scrollbar col-span-2 min-h-0 overflow-auto">
@@ -293,6 +318,31 @@ export function GitDiffView({
 				) : null}
 			</div>
 		</div>
+	);
+}
+
+export function shouldResetDiffView(
+	loadedDiffKey: string,
+	activeDiffKey: string,
+	hasDiff: boolean,
+) {
+	return loadedDiffKey !== activeDiffKey || !hasDiff;
+}
+
+export function isSameDiffResult(
+	currentDiff: GitDiffResult | null,
+	nextDiff: GitDiffResult,
+) {
+	if (!currentDiff) {
+		return false;
+	}
+
+	return (
+		currentDiff.path === nextDiff.path &&
+		currentDiff.diffMode === nextDiff.diffMode &&
+		currentDiff.isBinary === nextDiff.isBinary &&
+		currentDiff.isEmpty === nextDiff.isEmpty &&
+		currentDiff.content === nextDiff.content
 	);
 }
 

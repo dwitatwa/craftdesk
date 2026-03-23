@@ -561,7 +561,7 @@ function ProjectWorkspaceShell({
 						onBeforeProjectFileOpen={handleBeforeProjectFileOpen}
 						selectedGitChange={selectedGitChange}
 						onSelectGitChange={handleGitChangeSelection}
-						onGitOverviewRefresh={() =>
+						onGitDiffRefresh={() =>
 							setGitRefreshVersion((currentVersion) => currentVersion + 1)
 						}
 						activeSidebarView={activeSidebarView}

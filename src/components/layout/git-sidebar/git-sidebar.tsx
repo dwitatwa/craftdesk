@@ -9,10 +9,11 @@ import {
 import { useState } from "react";
 
 import { Button } from "#/components/ui/button";
-import { ChangeGroup } from "./git-sidebar-sections";
+import { GitSidebarDiscardDialog } from "./git-sidebar-discard-dialog";
 import {
 	BranchRow,
 	BranchSummaryCard,
+	ChangeGroup,
 	CommitRow,
 	CommitSection,
 	EmptyState,
@@ -20,7 +21,6 @@ import {
 	SidebarSection,
 	StashRow,
 } from "./git-sidebar-sections";
-import { GitSidebarDiscardDialog } from "./git-sidebar-discard-dialog";
 import type { GitSidebarProps } from "./git-sidebar-types";
 import { createInitialSectionState } from "./git-sidebar-utils";
 import { useGitSidebarState } from "./use-git-sidebar-state";
@@ -29,7 +29,7 @@ export function GitSidebar({
 	activeProject,
 	selectedChange,
 	onSelectChange,
-	onOverviewRefresh,
+	onDiffRefresh,
 }: GitSidebarProps) {
 	const activeProjectPath = activeProject?.path ?? "";
 	const [sectionOpenState, setSectionOpenState] = useState(
@@ -50,7 +50,7 @@ export function GitSidebar({
 		setDiscardTarget,
 	} = useGitSidebarState({
 		activeProjectPath,
-		onOverviewRefresh,
+		onDiffRefresh,
 		onSelectChange,
 		selectedChange,
 	});

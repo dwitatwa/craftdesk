@@ -6,7 +6,11 @@ import {
 	useState,
 } from "react";
 
-import type { GitChange, GitRepositoryOverview, GitSelectedChange } from "#/lib/git";
+import type {
+	GitChange,
+	GitRepositoryOverview,
+	GitSelectedChange,
+} from "#/lib/git";
 import {
 	getGitRepositoryOverview,
 	mutateGitChange,
@@ -22,14 +26,14 @@ interface UseGitSidebarStateOptions {
 	activeProjectPath: string;
 	selectedChange: GitSelectedChange | null;
 	onSelectChange: (change: GitSelectedChange | null) => void;
-	onOverviewRefresh?: () => void;
+	onDiffRefresh?: () => void;
 }
 
 export function useGitSidebarState({
 	activeProjectPath,
 	selectedChange,
 	onSelectChange,
-	onOverviewRefresh,
+	onDiffRefresh,
 }: UseGitSidebarStateOptions) {
 	const [overview, setOverview] = useState<GitRepositoryOverview | null>(null);
 	const [error, setError] = useState("");
@@ -44,31 +48,35 @@ export function useGitSidebarState({
 	} | null>(null);
 	const selectedChangeRef = useRef(selectedChange);
 	const onSelectChangeRef = useRef(onSelectChange);
-	const onOverviewRefreshRef = useRef(onOverviewRefresh);
+	const onDiffRefreshRef = useRef(onDiffRefresh);
 	const overviewRef = useRef(overview);
 	const pendingMutationKeyRef = useRef(pendingMutationKey);
 	const changeVersionRef = useRef(0);
 	activeProjectPathRef.current = activeProjectPath;
 	selectedChangeRef.current = selectedChange;
 	onSelectChangeRef.current = onSelectChange;
-	onOverviewRefreshRef.current = onOverviewRefresh;
+	onDiffRefreshRef.current = onDiffRefresh;
 	overviewRef.current = overview;
 	pendingMutationKeyRef.current = pendingMutationKey;
 
-	const syncSelectedChange = useCallback((nextOverview: GitRepositoryOverview) => {
-		if (!selectedChangeRef.current) {
-			return;
-		}
+	const syncSelectedChange = useCallback(
+		(nextOverview: GitRepositoryOverview) => {
+			if (!selectedChangeRef.current) {
+				return;
+			}
 
-		onSelectChangeRef.current(
-			resolveSelectedChange(selectedChangeRef.current, nextOverview),
-		);
-	}, []);
+			onSelectChangeRef.current(
+				resolveSelectedChange(selectedChangeRef.current, nextOverview),
+			);
+		},
+		[],
+	);
 
 	const loadOverview = useCallback(
 		async (
 			projectPath: string,
 			options: {
+				notifyDiff?: boolean;
 				force?: boolean;
 				reset?: boolean;
 			} = {},
@@ -107,7 +115,10 @@ export function useGitSidebarState({
 				setOverview(nextOverview);
 				changeVersionRef.current = nextOverview.changeVersion;
 				syncSelectedChange(nextOverview);
-				onOverviewRefreshRef.current?.();
+
+				if (options.notifyDiff) {
+					onDiffRefreshRef.current?.();
+				}
 
 				return nextOverview;
 			} catch (cause) {
@@ -163,7 +174,10 @@ export function useGitSidebarState({
 	}, [activeProjectPath, loadOverview, syncSelectedChange]);
 
 	const refreshOverview = useEffectEvent(
-		async (projectPath: string, options?: { force?: boolean }) => {
+		async (
+			projectPath: string,
+			options?: { force?: boolean; notifyDiff?: boolean },
+		) => {
 			try {
 				await loadOverview(projectPath, options);
 			} catch {
@@ -210,7 +224,10 @@ export function useGitSidebarState({
 		};
 
 		const handleVisibilityRefresh = () => {
-			if (document.visibilityState !== "visible" || pendingMutationKeyRef.current) {
+			if (
+				document.visibilityState !== "visible" ||
+				pendingMutationKeyRef.current
+			) {
 				return;
 			}
 
@@ -241,7 +258,10 @@ export function useGitSidebarState({
 					}
 
 					changeVersionRef.current = result.version;
-					await refreshOverview(activeProjectPath, { force: true });
+					await refreshOverview(activeProjectPath, {
+						force: true,
+						notifyDiff: true,
+					});
 				} catch {
 					if (isCancelled) {
 						return;
@@ -263,7 +283,7 @@ export function useGitSidebarState({
 			window.removeEventListener("focus", handleVisibilityRefresh);
 			document.removeEventListener("visibilitychange", handleVisibilityRefresh);
 		};
-	}, [activeProjectPath, refreshOverview]);
+	}, [activeProjectPath]);
 
 	const handleRefresh = useCallback(async () => {
 		if (!activeProjectPath) {
@@ -271,7 +291,10 @@ export function useGitSidebarState({
 		}
 
 		try {
-			await loadOverview(activeProjectPath, { force: true });
+			await loadOverview(activeProjectPath, {
+				force: true,
+				notifyDiff: true,
+			});
 		} catch {
 			// Error state is handled inside loadOverview.
 		}
@@ -375,7 +398,9 @@ export function useGitSidebarState({
 				await handleRefresh();
 			} catch (cause) {
 				setError(
-					cause instanceof Error ? cause.message : `Failed to perform ${action}.`,
+					cause instanceof Error
+						? cause.message
+						: `Failed to perform ${action}.`,
 				);
 			} finally {
 				setPendingMutationKey("");
@@ -393,7 +418,8 @@ export function useGitSidebarState({
 		handleGitGroupAction,
 		handleRefresh,
 		isDiscarding: discardTarget
-			? pendingMutationKey === `discard:${discardTarget.path}:${discardTarget.code}`
+			? pendingMutationKey ===
+				`discard:${discardTarget.path}:${discardTarget.code}`
 			: false,
 		isLoading,
 		overview,
