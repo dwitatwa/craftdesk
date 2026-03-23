@@ -455,3 +455,27 @@ export function stopTerminal(sessionId: string) {
 	refreshProjectSessionCount(session.projectId);
 	return serializeSession(session);
 }
+
+export function stopScopeTerminal(
+	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
+) {
+	const scopeKey = getScopeKey(input);
+	const sessionId = sessionIdByScopeKey.get(scopeKey);
+
+	if (!sessionId) {
+		return null;
+	}
+
+	const session = sessionsById.get(sessionId);
+
+	if (!session) {
+		sessionIdByScopeKey.delete(scopeKey);
+		return null;
+	}
+
+	if (session.status !== "running") {
+		return serializeSession(session);
+	}
+
+	return stopTerminal(session.id);
+}

@@ -65,3 +65,8 @@ export interface RestartTerminalInput {
 export interface StopTerminalInput {
 	sessionId: string;
 }
+
+export interface StopScopeTerminalInput {
+	scopeType: TerminalScopeType;
+	scopeId: string;
+}

@@ -5,6 +5,7 @@ import type {
 	ReadTerminalInput,
 	ResizeTerminalInput,
 	RestartTerminalInput,
+	StopScopeTerminalInput,
 	StopTerminalInput,
 	WriteTerminalInput,
 } from "#/lib/terminal";
@@ -61,4 +62,13 @@ export const stopTerminal = createServerFn({ method: "POST" })
 			"#/server/terminal-manager"
 		);
 		return stopScopedTerminal(data.sessionId);
+	});
+
+export const stopScopeTerminal = createServerFn({ method: "POST" })
+	.inputValidator((input: StopScopeTerminalInput) => input)
+	.handler(async ({ data }) => {
+		const { stopScopeTerminal: stopScopedTerminal } = await import(
+			"#/server/terminal-manager"
+		);
+		return stopScopedTerminal(data);
 	});

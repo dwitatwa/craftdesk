@@ -16,6 +16,7 @@ import {
 	moveTask,
 	updateTask,
 } from "#/server/craftdesk";
+import { stopScopeTerminal } from "#/server/terminal";
 
 export const Route = createFileRoute("/projects/$projectId/")({
 	loader: async ({ params }) => {
@@ -127,6 +128,16 @@ function ProjectDetailView() {
 	const handleDeleteTask = async (taskId: string) => {
 		await deleteTask({
 			data: { taskId },
+		});
+		await refreshData();
+	};
+
+	const handleStopTaskTerminal = async (taskId: string) => {
+		await stopScopeTerminal({
+			data: {
+				scopeType: "task",
+				scopeId: taskId,
+			},
 		});
 		await refreshData();
 	};
@@ -370,6 +381,7 @@ function ProjectDetailView() {
 								onDeleteColumn={handleDeleteColumn}
 								onUpdateTask={handleUpdateTask}
 								onDeleteTask={handleDeleteTask}
+								onStopTaskTerminal={handleStopTaskTerminal}
 								onMoveTask={handleMoveTask}
 							/>
 						</div>
