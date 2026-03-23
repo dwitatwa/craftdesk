@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import type { DragEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -102,25 +102,27 @@ function Column({
 					className="custom-scrollbar m-0 flex min-h-0 flex-1 list-none flex-col gap-3 overflow-y-auto p-0 pr-1 pb-4 [scrollbar-gutter:stable]"
 					aria-label={`${column.title} tasks`}
 				>
-				{column.tasks.map((task) => (
-					<TaskCard
-						key={task.id}
-						{...task}
-						draggable
-						isDragging={draggedTaskId === task.id}
-						onDragStart={(event) => onDragStartTask(event, task.id, column.id)}
-						onDragEnd={onDragEndTask}
-						onDelete={onDeleteTask}
-					/>
-				))}
+					{column.tasks.map((task) => (
+						<TaskCard
+							key={task.id}
+							{...task}
+							draggable
+							isDragging={draggedTaskId === task.id}
+							onDragStart={(event) =>
+								onDragStartTask(event, task.id, column.id)
+							}
+							onDragEnd={onDragEndTask}
+							onDelete={onDeleteTask}
+						/>
+					))}
 					<li>
 						<Button
 							variant="ghost"
 							className="w-full h-8 justify-start gap-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-border/50 hover:border-primary/30 mt-1 cursor-pointer"
 							onClick={() => setIsCreateModalOpen(true)}
-					>
-						<Plus className="size-3" />
-						Add Task
+						>
+							<Plus className="size-3" />
+							Add Task
 						</Button>
 					</li>
 				</ul>
@@ -178,12 +180,6 @@ interface KanbanBoardProps {
 	onMoveTask: (taskId: string, targetColumnId: string) => Promise<void> | void;
 }
 
-interface OptimisticMove {
-	sourceColumnId: string;
-	targetColumnId: string;
-	taskId: string;
-}
-
 function moveTaskLocally(
 	columns: BoardColumn[],
 	taskId: string,
@@ -202,14 +198,9 @@ function moveTaskLocally(
 	}
 
 	const movedTaskForTarget: BoardTask = {
-		id: originalTask.id,
-		title: originalTask.title,
-		notes: originalTask.notes,
-		projectId: originalTask.projectId,
+		...originalTask,
 		columnId: targetColumnId,
 		position: 0,
-		createdAt: originalTask.createdAt,
-		doneAt: originalTask.doneAt,
 	};
 
 	return columns.map((column) => {
@@ -255,6 +246,7 @@ export function KanbanBoard({
 	onDeleteTask,
 	onMoveTask,
 }: KanbanBoardProps) {
+	const [boardColumns, setBoardColumns] = useState(columns);
 	const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 	const [dragSourceColumnId, setDragSourceColumnId] = useState<string | null>(
 		null,
@@ -262,17 +254,10 @@ export function KanbanBoard({
 	const [activeDropColumnId, setActiveDropColumnId] = useState<string | null>(
 		null,
 	);
-	const [optimisticMove, setOptimisticMove] = useState<OptimisticMove | null>(
-		null,
-	);
-	const boardColumns = optimisticMove
-		? moveTaskLocally(
-				columns,
-				optimisticMove.taskId,
-				optimisticMove.sourceColumnId,
-				optimisticMove.targetColumnId,
-			)
-		: columns;
+
+	useEffect(() => {
+		setBoardColumns(columns);
+	}, [columns]);
 
 	const handleDragStartTask = (
 		event: DragEvent<HTMLElement>,
@@ -334,17 +319,19 @@ export function KanbanBoard({
 			return;
 		}
 
-		setOptimisticMove({
+		const previousColumns = boardColumns;
+		const nextColumns = moveTaskLocally(
+			previousColumns,
 			taskId,
 			sourceColumnId,
 			targetColumnId,
-		});
+		);
+		setBoardColumns(nextColumns);
 
 		try {
 			await onMoveTask(taskId, targetColumnId);
-			setOptimisticMove(null);
 		} catch {
-			setOptimisticMove(null);
+			setBoardColumns(previousColumns);
 		}
 	};
 
