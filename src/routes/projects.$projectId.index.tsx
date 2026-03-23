@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { EyeOff, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
@@ -13,6 +13,7 @@ import {
 	deleteColumn,
 	deleteTask,
 	getProjectWorkspace,
+	hideCurrentDoneTask,
 	moveTask,
 	updateTask,
 } from "#/server/craftdesk";
@@ -45,14 +46,39 @@ function ProjectDetailView() {
 	} | null>(null);
 	const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
 	const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
+	const [isUpdatingDoneVisibility, setIsUpdatingDoneVisibility] =
+		useState(false);
 	const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(true);
 	const [terminalHeight, setTerminalHeight] = useState(DEFAULT_TERMINAL_HEIGHT);
 	const [isResizingTerminal, setIsResizingTerminal] = useState(false);
 
 	const primaryColumn = workspace?.columns[0];
+	const doneColumn = workspace?.columns.find(
+		(column) => column.title === "Done",
+	);
+	const hasVisibleDoneTask = Boolean(doneColumn?.tasks.length);
 
 	const refreshData = async () => {
 		await router.invalidate();
+	};
+
+	const handleHideCurrentDoneTask = async () => {
+		if (!workspace || isUpdatingDoneVisibility) {
+			return;
+		}
+
+		setIsUpdatingDoneVisibility(true);
+
+		try {
+			await hideCurrentDoneTask({
+				data: {
+					projectId: workspace.project.id,
+				},
+			});
+			await refreshData();
+		} finally {
+			setIsUpdatingDoneVisibility(false);
+		}
 	};
 
 	const handleCreateColumn = async (title: string) => {
@@ -310,6 +336,19 @@ function ProjectDetailView() {
 							</p>
 						</div>
 						<div className="flex items-center gap-2">
+							<Button
+								variant="ghost"
+								size="sm"
+								className={cn(
+									"h-8 gap-2 text-xs font-medium",
+									"text-muted-foreground hover:text-foreground",
+								)}
+								onClick={handleHideCurrentDoneTask}
+								disabled={isUpdatingDoneVisibility || !hasVisibleDoneTask}
+							>
+								<EyeOff className="size-3.5" />
+								Hide Current Done Tasks
+							</Button>
 							<Button
 								variant="ghost"
 								size="sm"

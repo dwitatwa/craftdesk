@@ -11,6 +11,7 @@ import {
 	type DeleteProjectInput,
 	type DeleteTaskInput,
 	deriveProjectNameFromPath,
+	type HideCurrentDoneTaskInput,
 	type ListProjectsInput,
 	type MoveTaskInput,
 	type ProjectSummary,
@@ -158,6 +159,7 @@ function initializeSchema(db: DatabaseSync) {
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
+      hide_in_done_column INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
@@ -173,6 +175,12 @@ function initializeSchema(db: DatabaseSync) {
 function runMigrations(db: DatabaseSync) {
 	ensureColumnExists(db, "tasks", "created_at", "TEXT");
 	ensureColumnExists(db, "tasks", "done_at", "TEXT");
+	ensureColumnExists(
+		db,
+		"tasks",
+		"hide_in_done_column",
+		"INTEGER NOT NULL DEFAULT 0",
+	);
 	removeStatusColumnIfPresent(db);
 	const didAddTaskPosition = ensureTaskPositionColumnExists(db);
 	ensureTaskNotesColumn(db);
@@ -236,8 +244,14 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
 	const columns = getTableColumns(db, "tasks");
 	const hasPosition = columns.some((column) => column.name === "position");
 	const hasNotes = columns.some((column) => column.name === "notes");
+	const hasHideInDoneColumn = columns.some(
+		(column) => column.name === "hide_in_done_column",
+	);
 	const noteSource = hasNotes ? "notes" : "description";
 	const positionSource = hasPosition ? "position" : "0";
+	const hideInDoneColumnSource = hasHideInDoneColumn
+		? "hide_in_done_column"
+		: "0";
 
 	if (!columns.some((column) => column.name === "status")) {
 		return;
@@ -255,6 +269,7 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
+      hide_in_done_column INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
@@ -269,6 +284,7 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       notes,
       created_at,
       done_at,
+      hide_in_done_column,
       updated_at
     )
     SELECT
@@ -280,6 +296,7 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       ${noteSource},
       created_at,
       done_at,
+      ${hideInDoneColumnSource},
       updated_at
     FROM tasks;
 
@@ -318,8 +335,11 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
 	const hasDescription = columns.some(
 		(column) => column.name === "description",
 	);
+	const hasHideInDoneColumn = columns.some(
+		(column) => column.name === "hide_in_done_column",
+	);
 
-	if (hasNotes && !hasDescription) {
+	if (hasNotes && !hasDescription && hasHideInDoneColumn) {
 		return;
 	}
 
@@ -328,6 +348,9 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
 		: hasDescription
 			? "description"
 			: "''";
+	const hideInDoneColumnSource = hasHideInDoneColumn
+		? "hide_in_done_column"
+		: "0";
 
 	db.exec(`
     BEGIN TRANSACTION;
@@ -341,6 +364,7 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
+      hide_in_done_column INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY (column_id) REFERENCES board_columns(id) ON DELETE CASCADE
@@ -355,6 +379,7 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
       notes,
       created_at,
       done_at,
+      hide_in_done_column,
       updated_at
     )
     SELECT
@@ -366,6 +391,7 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
       ${notesSource},
       created_at,
       done_at,
+      ${hideInDoneColumnSource},
       updated_at
     FROM tasks;
 
@@ -726,7 +752,8 @@ export function getProjectWorkspace(
         column_id,
         position,
         created_at,
-        done_at
+        done_at,
+        hide_in_done_column
       FROM tasks
       WHERE project_id = ?
       ORDER BY column_id ASC, position ASC, created_at ASC, id ASC
@@ -740,9 +767,13 @@ export function getProjectWorkspace(
 		position: number;
 		created_at: string;
 		done_at: string | null;
+		hide_in_done_column: number;
 	}>;
 
-	const tasksByColumnId = new Map<string, BoardColumn["tasks"]>();
+	const tasksByColumnId = new Map<
+		string,
+		Array<BoardColumn["tasks"][number] & { hideInDoneColumn: boolean }>
+	>();
 
 	for (const task of tasks) {
 		const existingTasks = tasksByColumnId.get(task.column_id) ?? [];
@@ -755,6 +786,7 @@ export function getProjectWorkspace(
 			position: task.position,
 			createdAt: task.created_at,
 			doneAt: task.done_at,
+			hideInDoneColumn: Boolean(task.hide_in_done_column),
 			isRunning: isScopeRunning({ scopeType: "task", scopeId: task.id }),
 		});
 		tasksByColumnId.set(task.column_id, existingTasks);
@@ -766,7 +798,9 @@ export function getProjectWorkspace(
 			id: column.id,
 			title: column.title,
 			position: column.position,
-			tasks: tasksByColumnId.get(column.id) ?? [],
+			tasks: (tasksByColumnId.get(column.id) ?? [])
+				.filter((task) => !(column.title === "Done" && task.hideInDoneColumn))
+				.map(({ hideInDoneColumn: _hideInDoneColumn, ...task }) => task),
 		})),
 	};
 }
@@ -869,8 +903,9 @@ export function createTask(input: CreateTaskInput) {
       notes,
       created_at,
       done_at,
+      hide_in_done_column,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`).run(
 		nextTaskId(db),
 		input.projectId,
@@ -880,6 +915,7 @@ export function createTask(input: CreateTaskInput) {
 		"",
 		timestamp,
 		null,
+		0,
 		timestamp,
 	);
 }
@@ -923,7 +959,7 @@ export function moveTask(input: MoveTaskInput) {
 	const db = getDb();
 	const task = db
 		.prepare(`
-      SELECT id, column_id, position
+      SELECT id, column_id, position, hide_in_done_column
       FROM tasks
       WHERE id = ? AND project_id = ?
     `)
@@ -932,6 +968,7 @@ export function moveTask(input: MoveTaskInput) {
 				id: string;
 				column_id: string;
 				position: number;
+				hide_in_done_column: number;
 		  }
 		| undefined;
 
@@ -1005,7 +1042,10 @@ export function moveTask(input: MoveTaskInput) {
 
 			db.prepare(`
         UPDATE tasks
-        SET position = ?, updated_at = ?
+        SET
+          position = ?,
+          hide_in_done_column = 0,
+          updated_at = ?
         WHERE id = ? AND project_id = ?
       `).run(targetPosition, timestamp, input.taskId, input.projectId);
 		} else {
@@ -1029,6 +1069,7 @@ export function moveTask(input: MoveTaskInput) {
           column_id = ?,
           position = ?,
           done_at = ?,
+          hide_in_done_column = 0,
           updated_at = ?
         WHERE id = ? AND project_id = ?
       `).run(
@@ -1061,6 +1102,25 @@ export function deleteProject(input: DeleteProjectInput) {
 	const db = getDb();
 
 	db.prepare("DELETE FROM projects WHERE id = ?").run(input.projectId);
+}
+
+export function hideCurrentDoneTask(input: HideCurrentDoneTaskInput) {
+	const db = getDb();
+	const timestamp = nowIso();
+
+	db.prepare(`
+      UPDATE tasks
+      SET hide_in_done_column = 1, updated_at = ?
+      WHERE id IN (
+        SELECT t.id
+        FROM tasks t
+        INNER JOIN board_columns c ON c.id = t.column_id
+        WHERE t.project_id = ?
+          AND c.project_id = ?
+          AND c.title = 'Done'
+          AND t.hide_in_done_column = 0
+      )
+    `).run(timestamp, input.projectId, input.projectId);
 }
 
 export function setProjectActiveSessions(projectId: string, count: number) {

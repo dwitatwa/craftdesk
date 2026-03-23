@@ -132,6 +132,10 @@ export interface DeleteProjectInput {
 	projectId: string;
 }
 
+export interface HideCurrentDoneTaskInput {
+	projectId: string;
+}
+
 export interface ProjectLookupInput {
 	projectId: string;
 }

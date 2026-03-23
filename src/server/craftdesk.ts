@@ -7,6 +7,7 @@ import type {
 	DeleteColumnInput,
 	DeleteProjectInput,
 	DeleteTaskInput,
+	HideCurrentDoneTaskInput,
 	ListProjectsInput,
 	MoveTaskInput,
 	ProjectFileLookupInput,
@@ -146,6 +147,15 @@ export const deleteProject = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const { deleteProject: deleteProjectInDb } = await import("#/server/db");
 		return deleteProjectInDb(data);
+	});
+
+export const hideCurrentDoneTask = createServerFn({ method: "POST" })
+	.inputValidator((input: HideCurrentDoneTaskInput) => input)
+	.handler(async ({ data }) => {
+		const { hideCurrentDoneTask: hideCurrentDoneTaskInDb } = await import(
+			"#/server/db"
+		);
+		return hideCurrentDoneTaskInDb(data);
 	});
 
 export const getTaskDetail = createServerFn({ method: "GET" })
