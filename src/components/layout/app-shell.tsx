@@ -1,7 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { ClientOnly, Link } from "@tanstack/react-router";
 import { Folder, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -16,7 +16,6 @@ import { Button } from "#/components/ui/button";
 import { Dialog, DialogContent } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { FilePreviewView } from "#/components/workspace/file-preview-view";
-import { GitDiffView } from "#/components/workspace/git-diff-view";
 import type {
 	ProjectFileSelectionState,
 	ProjectSummary,
@@ -38,6 +37,11 @@ type SidebarView = "explorer" | "git";
 const DEFAULT_SIDEBAR_WIDTH = 320;
 const MIN_SIDEBAR_WIDTH = 260;
 const MIN_WORKSPACE_CONTENT_WIDTH = 560;
+const GitDiffView = lazy(() =>
+	import("#/components/workspace/git-diff-view").then((module) => ({
+		default: module.GitDiffView,
+	})),
+);
 
 function createEmptyProjectFileSelection(): ProjectFileSelectionState {
 	return {
@@ -590,12 +594,16 @@ function ProjectWorkspaceShell({
 					<div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#1A1A1A_1px,transparent_1px)] [background-size:24px_24px] opacity-20" />
 					<div className="relative flex h-full min-h-0 flex-col">
 						{isGitWorkspaceVisible ? (
-							<GitDiffView
-								activeProject={activeProject}
-								onClose={handleCloseGitDiff}
-								refreshVersion={gitRefreshVersion}
-								selectedChange={selectedGitChange}
-							/>
+							<ClientOnly fallback={<GitDiffViewFallback />}>
+								<Suspense fallback={<GitDiffViewFallback />}>
+									<GitDiffView
+										activeProject={activeProject}
+										onClose={handleCloseGitDiff}
+										refreshVersion={gitRefreshVersion}
+										selectedChange={selectedGitChange}
+									/>
+								</Suspense>
+							</ClientOnly>
 						) : isProjectFileVisible ? (
 							<FilePreviewView
 								activeProject={activeProject}
@@ -610,6 +618,15 @@ function ProjectWorkspaceShell({
 					</div>
 				</main>
 			</div>
+		</div>
+	);
+}
+
+function GitDiffViewFallback() {
+	return (
+		<div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+			<LoaderCircle className="size-4 animate-spin" />
+			Loading diff...
 		</div>
 	);
 }
