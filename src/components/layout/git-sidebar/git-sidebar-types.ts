@@ -1,4 +1,4 @@
-import type { GitSelectedChange } from "#/lib/git";
+import type { GitChange, GitDiffMode, GitSelectedChange } from "#/lib/git";
 
 export interface ActiveProjectContext {
 	id: string;
@@ -12,3 +12,10 @@ export interface GitSidebarProps {
 	onSelectChange: (change: GitSelectedChange | null) => void;
 	onDiffRefresh?: () => void;
 }
+
+export interface GitSidebarDiscardTarget {
+	changes: GitChange[];
+	source: "single" | "selection";
+}
+
+export type GitBulkSelectionMode = GitDiffMode | null;

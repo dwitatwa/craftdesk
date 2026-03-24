@@ -38,10 +38,14 @@ export interface GitDiffInput {
 export interface GitChangeMutationInput {
 	cwd: string;
 	path: string;
+	paths?: string[];
 	action:
 		| "stage"
+		| "stage-selected"
 		| "unstage"
+		| "unstage-selected"
 		| "discard"
+		| "discard-selected"
 		| "stage-all"
 		| "unstage-all"
 		| "commit"

@@ -19,7 +19,9 @@ import { Button } from "#/components/ui/button";
 import type {
 	GitBranchListEntry,
 	GitBranchSummary,
+	GitChange,
 	GitCommitPreview,
+	GitDiffMode,
 	GitRemote,
 } from "#/lib/git";
 import { getGitBranchCommits } from "#/server/git";
@@ -38,7 +40,11 @@ import {
 	SidebarSection,
 	StashRow,
 } from "./git-sidebar-sections";
-import type { GitSidebarProps } from "./git-sidebar-types";
+import type {
+	GitBulkSelectionMode,
+	GitSidebarDiscardTarget,
+	GitSidebarProps,
+} from "./git-sidebar-types";
 import {
 	createInitialSectionState,
 	resolveBranchRowActionState,
@@ -72,15 +78,19 @@ export function GitSidebar({
 	const [branchCommits, setBranchCommits] = useState<GitCommitPreview[]>([]);
 	const [branchCommitsError, setBranchCommitsError] = useState("");
 	const [isBranchCommitsLoading, setIsBranchCommitsLoading] = useState(false);
+	const [activeSelectionMode, setActiveSelectionMode] =
+		useState<GitBulkSelectionMode>(null);
+	const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+	const [discardTarget, setDiscardTarget] =
+		useState<GitSidebarDiscardTarget | null>(null);
 	const branchCommitsRequestIdRef = useRef(0);
 	const branchContextMenuRef = useRef<HTMLDivElement | null>(null);
 	const {
-		discardTarget,
 		error,
 		handleCheckoutLocalBranch,
 		handleCreateLocalBranch,
 		handleDeleteLocalBranch,
-		handleDiscardConfirm,
+		handleDiscardChanges,
 		handleGitAction,
 		handleGitCommit,
 		handleGitGroupAction,
@@ -88,11 +98,11 @@ export function GitSidebar({
 		handlePushBranchToRemote,
 		handlePushCurrentBranch,
 		handleRefresh,
-		isDiscarding,
+		handleStageSelectedChanges,
+		handleUnstageSelectedChanges,
 		isLoading,
 		overview,
 		pendingMutationKey,
-		setDiscardTarget,
 	} = useGitSidebarState({
 		activeProjectPath,
 		onDiffRefresh,
@@ -103,6 +113,41 @@ export function GitSidebar({
 		branchCommitsTarget?.projectPath === activeProjectPath
 			? branchCommitsTarget.branchName
 			: "";
+
+	useEffect(() => {
+		if (!overview) {
+			setActiveSelectionMode(null);
+			setSelectedPaths([]);
+			setDiscardTarget(null);
+			return;
+		}
+
+		const activeChanges =
+			activeSelectionMode === "staged" ? overview.staged : overview.unstaged;
+
+		setSelectedPaths((currentPaths) =>
+			currentPaths.filter((selectedPath) =>
+				activeChanges.some((change) => change.path === selectedPath),
+			),
+		);
+		setDiscardTarget((currentTarget) => {
+			if (!currentTarget) {
+				return null;
+			}
+
+			const nextChanges = currentTarget.changes.filter((targetChange) =>
+				overview.unstaged.some((change) => change.path === targetChange.path),
+			);
+
+			return nextChanges.length > 0
+				? { ...currentTarget, changes: nextChanges }
+				: null;
+		});
+
+		if (activeSelectionMode && activeChanges.length === 0) {
+			setActiveSelectionMode(null);
+		}
+	}, [activeSelectionMode, overview]);
 
 	useEffect(() => {
 		if (!branchCommitsBranchName || !activeProjectPath) {
@@ -199,6 +244,100 @@ export function GitSidebar({
 			window.removeEventListener("scroll", handleViewportChange, true);
 		};
 	}, [branchContextMenuState]);
+
+	const setSelectionMode = (diffMode: GitDiffMode) => {
+		setActiveSelectionMode(diffMode);
+		setSelectedPaths([]);
+		setDiscardTarget(null);
+	};
+
+	const clearSelectionMode = () => {
+		setActiveSelectionMode(null);
+		setSelectedPaths([]);
+		setDiscardTarget(null);
+	};
+
+	const toggleSelection = (change: GitChange) => {
+		setSelectedPaths((currentPaths) =>
+			currentPaths.includes(change.path)
+				? currentPaths.filter((path) => path !== change.path)
+				: [...currentPaths, change.path],
+		);
+	};
+
+	const handleSingleDiscardRequest = (change: GitChange) => {
+		setDiscardTarget({
+			changes: [change],
+			source: "single",
+		});
+	};
+
+	const handleDiscardDialogConfirm = async () => {
+		if (!discardTarget) {
+			return;
+		}
+
+		const didDiscard = await handleDiscardChanges(discardTarget.changes);
+
+		if (!didDiscard) {
+			return;
+		}
+
+		const discardedPaths = discardTarget.changes.map((change) => change.path);
+		setSelectedPaths((currentPaths) =>
+			currentPaths.filter((path) => !discardedPaths.includes(path)),
+		);
+		setDiscardTarget(null);
+
+		if (discardTarget.source === "selection") {
+			clearSelectionMode();
+		}
+	};
+
+	const handleSelectedAction = async (
+		diffMode: GitDiffMode,
+		action: "stage" | "unstage" | "discard",
+	) => {
+		if (!overview || activeSelectionMode !== diffMode) {
+			return;
+		}
+
+		const sourceChanges =
+			diffMode === "staged" ? overview.staged : overview.unstaged;
+		const selectedChanges = sourceChanges.filter((change) =>
+			selectedPaths.includes(change.path),
+		);
+
+		if (selectedChanges.length === 0) {
+			return;
+		}
+
+		if (action === "discard") {
+			setDiscardTarget({
+				changes: selectedChanges,
+				source: "selection",
+			});
+			return;
+		}
+
+		const didApply =
+			action === "stage"
+				? await handleStageSelectedChanges(selectedChanges)
+				: await handleUnstageSelectedChanges(selectedChanges);
+
+		if (!didApply) {
+			return;
+		}
+
+		clearSelectionMode();
+	};
+
+	const isDiscarding = discardTarget
+		? discardTarget.changes.length > 1
+			? pendingMutationKey === "discard:selected"
+			: pendingMutationKey ===
+				`discard:${discardTarget.changes[0].path}:${discardTarget.changes[0].code}`
+		: false;
 
 	if (!activeProject) {
 		return (
@@ -388,9 +527,19 @@ export function GitSidebar({
 										onSelectChange={onSelectChange}
 										diffMode="staged"
 										onAction={handleGitAction}
-										onDiscardRequest={setDiscardTarget}
+										onDiscardRequest={handleSingleDiscardRequest}
 										onGroupAction={handleGitGroupAction}
 										pendingMutationKey={pendingMutationKey}
+										activeSelectionMode={activeSelectionMode}
+										selectedPaths={
+											activeSelectionMode === "staged" ? selectedPaths : []
+										}
+										onStartSelectionMode={setSelectionMode}
+										onCancelSelectionMode={clearSelectionMode}
+										onToggleSelection={toggleSelection}
+										onSelectedAction={(action) => {
+											void handleSelectedAction("staged", action);
+										}}
 									/>
 									<ChangeGroup
 										title="Unstaged"
@@ -399,9 +548,19 @@ export function GitSidebar({
 										onSelectChange={onSelectChange}
 										diffMode="unstaged"
 										onAction={handleGitAction}
-										onDiscardRequest={setDiscardTarget}
+										onDiscardRequest={handleSingleDiscardRequest}
 										onGroupAction={handleGitGroupAction}
 										pendingMutationKey={pendingMutationKey}
+										activeSelectionMode={activeSelectionMode}
+										selectedPaths={
+											activeSelectionMode === "unstaged" ? selectedPaths : []
+										}
+										onStartSelectionMode={setSelectionMode}
+										onCancelSelectionMode={clearSelectionMode}
+										onToggleSelection={toggleSelection}
+										onSelectedAction={(action) => {
+											void handleSelectedAction("unstaged", action);
+										}}
 									/>
 								</div>
 							</SidebarSection>
@@ -543,7 +702,7 @@ export function GitSidebar({
 				discardTarget={discardTarget}
 				isDiscarding={isDiscarding}
 				onConfirm={() => {
-					void handleDiscardConfirm();
+					void handleDiscardDialogConfirm();
 				}}
 				onOpenChange={(open) => {
 					if (!open && !isDiscarding) {

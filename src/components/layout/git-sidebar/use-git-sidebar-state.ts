@@ -41,7 +41,6 @@ export function useGitSidebarState({
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
 	const [pendingMutationKey, setPendingMutationKey] = useState("");
-	const [discardTarget, setDiscardTarget] = useState<GitChange | null>(null);
 	const activeProjectPathRef = useRef(activeProjectPath);
 	const loadedProjectPathRef = useRef("");
 	const overviewRequestRef = useRef<{
@@ -151,7 +150,6 @@ export function useGitSidebarState({
 			setOverview(null);
 			setError("");
 			setIsLoading(false);
-			setDiscardTarget(null);
 			changeVersionRef.current = 0;
 			return;
 		}
@@ -335,17 +333,67 @@ export function useGitSidebarState({
 		[activeProjectPath, handleRefresh],
 	);
 
-	const handleDiscardConfirm = useCallback(async () => {
-		if (!discardTarget) {
-			return;
-		}
+	const handleSelectedGitAction = useCallback(
+		async (changes: GitChange[], action: "stage" | "unstage" | "discard") => {
+			if (!activeProjectPath || changes.length === 0) {
+				return false;
+			}
 
-		const didDiscard = await handleGitAction(discardTarget, "discard");
+			const uniquePaths = [...new Set(changes.map((change) => change.path))];
+			const primaryChange = changes[0];
+			const isSingleChange = uniquePaths.length === 1;
+			const bulkAction =
+				action === "stage"
+					? "stage-selected"
+					: action === "unstage"
+						? "unstage-selected"
+						: "discard-selected";
+			const mutationKey = isSingleChange
+				? `${action}:${primaryChange.path}:${primaryChange.code}`
+				: `${action}:selected`;
 
-		if (didDiscard) {
-			setDiscardTarget(null);
-		}
-	}, [discardTarget, handleGitAction]);
+			setPendingMutationKey(mutationKey);
+			setError("");
+
+			try {
+				await mutateGitChange({
+					data: {
+						cwd: activeProjectPath,
+						path: isSingleChange ? primaryChange.path : ".",
+						paths: isSingleChange ? undefined : uniquePaths,
+						action: isSingleChange ? action : bulkAction,
+					},
+				});
+				await handleRefresh();
+				return true;
+			} catch (cause) {
+				setError(
+					cause instanceof Error
+						? cause.message
+						: `Failed to ${action} selected changes.`,
+				);
+				return false;
+			} finally {
+				setPendingMutationKey("");
+			}
+		},
+		[activeProjectPath, handleRefresh],
+	);
+
+	const handleDiscardChanges = useCallback(
+		async (changes: GitChange[]) => handleSelectedGitAction(changes, "discard"),
+		[handleSelectedGitAction],
+	);
+
+	const handleStageSelectedChanges = useCallback(
+		async (changes: GitChange[]) => handleSelectedGitAction(changes, "stage"),
+		[handleSelectedGitAction],
+	);
+
+	const handleUnstageSelectedChanges = useCallback(
+		async (changes: GitChange[]) => handleSelectedGitAction(changes, "unstage"),
+		[handleSelectedGitAction],
+	);
 
 	const handleGitGroupAction = useCallback(
 		async (action: "stage-all" | "unstage-all") => {
@@ -516,10 +564,9 @@ export function useGitSidebarState({
 	);
 
 	return {
-		discardTarget,
 		error,
 		handleCheckoutLocalBranch,
-		handleDiscardConfirm,
+		handleDiscardChanges,
 		handleGitAction,
 		handleCreateLocalBranch,
 		handleDeleteLocalBranch,
@@ -530,13 +577,10 @@ export function useGitSidebarState({
 		handleGitCommit,
 		handleGitGroupAction,
 		handleRefresh,
-		isDiscarding: discardTarget
-			? pendingMutationKey ===
-				`discard:${discardTarget.path}:${discardTarget.code}`
-			: false,
+		handleStageSelectedChanges,
+		handleUnstageSelectedChanges,
 		isLoading,
 		overview,
 		pendingMutationKey,
-		setDiscardTarget,
 	};
 }

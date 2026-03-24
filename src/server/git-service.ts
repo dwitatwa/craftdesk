@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync, type FSWatcher, statSync, watch } from "node:fs";
+import { rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -163,10 +164,30 @@ export async function applyGitChangeMutation(input: GitChangeMutationInput) {
 
 	if (input.action === "stage") {
 		await runGit(["add", "-A", "--", input.path], repoRoot);
+	} else if (input.action === "stage-selected") {
+		const stagePaths = [...new Set(input.paths?.filter(Boolean) ?? [])];
+
+		if (stagePaths.length === 0) {
+			throw new Error("No selected changes were provided.");
+		}
+
+		for (const stagePath of stagePaths) {
+			await runGit(["add", "-A", "--", stagePath], repoRoot);
+		}
 	} else if (input.action === "stage-all") {
 		await runGit(["add", "-A", "."], repoRoot);
 	} else if (input.action === "unstage") {
 		await runGit(["restore", "--staged", "--", input.path], repoRoot);
+	} else if (input.action === "unstage-selected") {
+		const unstagePaths = [...new Set(input.paths?.filter(Boolean) ?? [])];
+
+		if (unstagePaths.length === 0) {
+			throw new Error("No selected changes were provided.");
+		}
+
+		for (const unstagePath of unstagePaths) {
+			await runGit(["restore", "--staged", "--", unstagePath], repoRoot);
+		}
 	} else if (input.action === "unstage-all") {
 		await runGit(["restore", "--staged", "."], repoRoot);
 	} else if (input.action === "commit") {
@@ -181,18 +202,16 @@ export async function applyGitChangeMutation(input: GitChangeMutationInput) {
 		await runGit(["commit", "-m", input.commitMessage], repoRoot);
 		await runGit(["push"], repoRoot);
 	} else if (input.action === "discard") {
-		const statusOutput = await runGit(
-			["status", "--short", "--", input.path],
-			repoRoot,
-		);
-		const isUntracked = statusOutput.stdout.startsWith("??");
+		await discardGitPath(repoRoot, input.path);
+	} else if (input.action === "discard-selected") {
+		const discardPaths = [...new Set(input.paths?.filter(Boolean) ?? [])];
 
-		if (isUntracked) {
-			const { exec } = await import("node:child_process");
-			const execAsync = promisify(exec);
-			await execAsync(`rm -rf "${path.resolve(repoRoot, input.path)}"`);
-		} else {
-			await runGit(["restore", "--", input.path], repoRoot);
+		if (discardPaths.length === 0) {
+			throw new Error("No selected changes were provided.");
+		}
+
+		for (const discardPath of discardPaths) {
+			await discardGitPath(repoRoot, discardPath);
 		}
 	}
 
@@ -201,6 +220,40 @@ export async function applyGitChangeMutation(input: GitChangeMutationInput) {
 	return {
 		ok: true,
 	};
+}
+
+async function discardGitPath(repoRoot: string, discardPath: string) {
+	const statusOutput = await runGit(
+		["status", "--short", "--", discardPath],
+		repoRoot,
+	);
+	const isUntracked = statusOutput.stdout.startsWith("??");
+
+	if (isUntracked) {
+		await rm(resolveRepositoryPath(repoRoot, discardPath), {
+			force: true,
+			recursive: true,
+		});
+		return;
+	}
+
+	await runGit(["restore", "--", discardPath], repoRoot);
+}
+
+function resolveRepositoryPath(repoRoot: string, targetPath: string) {
+	const resolvedPath = path.resolve(repoRoot, targetPath);
+	const relativePath = path.relative(repoRoot, resolvedPath);
+
+	if (
+		relativePath === "" ||
+		(relativePath &&
+			!relativePath.startsWith("..") &&
+			!path.isAbsolute(relativePath))
+	) {
+		return resolvedPath;
+	}
+
+	throw new Error("Refusing to discard a path outside the repository.");
 }
 
 export async function applyGitBranchMutation(input: GitBranchMutationInput) {

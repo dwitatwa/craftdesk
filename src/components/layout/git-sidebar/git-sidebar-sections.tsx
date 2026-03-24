@@ -1,4 +1,5 @@
 import {
+	Check,
 	ChevronDown,
 	GitBranch,
 	GitCommitHorizontal,
@@ -153,6 +154,12 @@ export function ChangeGroup({
 	onDiscardRequest,
 	onGroupAction,
 	pendingMutationKey,
+	activeSelectionMode,
+	selectedPaths = [],
+	onStartSelectionMode,
+	onCancelSelectionMode,
+	onToggleSelection,
+	onSelectedAction,
 }: {
 	title: string;
 	changes: GitChange[];
@@ -166,8 +173,19 @@ export function ChangeGroup({
 	onDiscardRequest: (change: GitChange) => void;
 	onGroupAction: (action: "stage-all" | "unstage-all") => Promise<void>;
 	pendingMutationKey: string;
+	activeSelectionMode: GitDiffMode | null;
+	selectedPaths?: string[];
+	onStartSelectionMode: (diffMode: GitDiffMode) => void;
+	onCancelSelectionMode: () => void;
+	onToggleSelection: (change: GitChange) => void;
+	onSelectedAction: (action: "stage" | "unstage" | "discard") => void;
 }) {
 	const isGroupMutating = pendingMutationKey === `${diffMode}:all`;
+	const isSelectionModeActive = activeSelectionMode === diffMode;
+	const selectedCount = selectedPaths.length;
+	const isStageSelectedPending = pendingMutationKey === "stage:selected";
+	const isUnstageSelectedPending = pendingMutationKey === "unstage:selected";
+	const isDiscardSelectedPending = pendingMutationKey === "discard:selected";
 
 	return (
 		<div className="space-y-1">
@@ -181,29 +199,139 @@ export function ChangeGroup({
 					</div>
 				</div>
 				{changes.length > 0 ? (
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						className="h-4.5 w-4.5 text-muted-foreground/40 opacity-0 transition-opacity hover:text-foreground group-hover/header:opacity-100"
-						onClick={(e) => {
-							e.stopPropagation();
-							const action =
-								diffMode === "staged" ? "unstage-all" : "stage-all";
-							void onGroupAction(action);
-						}}
-						disabled={isGroupMutating}
-						aria-label={diffMode === "staged" ? "Unstage all" : "Stage all"}
-						title={diffMode === "staged" ? "Unstage all" : "Stage all"}
-					>
-						{isGroupMutating ? (
-							<LoaderCircle className="size-2.5 animate-spin" />
-						) : diffMode === "staged" ? (
-							<Minus className="size-2.5" />
+					<div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/header:opacity-100">
+						{isSelectionModeActive ? (
+							<>
+								{diffMode === "unstaged" ? (
+									<>
+										<Button
+											type="button"
+											variant="ghost"
+											size="xs"
+											className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-foreground"
+											onClick={(event) => {
+												event.stopPropagation();
+												onSelectedAction("stage");
+											}}
+											disabled={selectedCount === 0 || isStageSelectedPending}
+											title={
+												selectedCount > 0
+													? `Stage ${selectedCount} selected changes`
+													: "Select unstaged files to stage"
+											}
+										>
+											{isStageSelectedPending ? (
+												<LoaderCircle className="size-2.5 animate-spin" />
+											) : (
+												<Plus className="size-2.5" />
+											)}
+											<span>Stage</span>
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											size="xs"
+											className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-red-300"
+											onClick={(event) => {
+												event.stopPropagation();
+												onSelectedAction("discard");
+											}}
+											disabled={selectedCount === 0 || isDiscardSelectedPending}
+											title={
+												selectedCount > 0
+													? `Discard ${selectedCount} selected changes`
+													: "Select unstaged files to discard"
+											}
+										>
+											{isDiscardSelectedPending ? (
+												<LoaderCircle className="size-2.5 animate-spin" />
+											) : (
+												<RotateCcw className="size-2.5" />
+											)}
+											<span>Discard</span>
+										</Button>
+									</>
+								) : (
+									<Button
+										type="button"
+										variant="ghost"
+										size="xs"
+										className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-foreground"
+										onClick={(event) => {
+											event.stopPropagation();
+											onSelectedAction("unstage");
+										}}
+										disabled={selectedCount === 0 || isUnstageSelectedPending}
+										title={
+											selectedCount > 0
+												? `Unstage ${selectedCount} selected changes`
+												: "Select staged files to unstage"
+										}
+									>
+										{isUnstageSelectedPending ? (
+											<LoaderCircle className="size-2.5 animate-spin" />
+										) : (
+											<Minus className="size-2.5" />
+										)}
+										<span>Unstage</span>
+									</Button>
+								)}
+								<Button
+									type="button"
+									variant="ghost"
+									size="xs"
+									className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-foreground"
+									onClick={(event) => {
+										event.stopPropagation();
+										onCancelSelectionMode();
+									}}
+								>
+									Cancel
+								</Button>
+							</>
 						) : (
-							<Plus className="size-2.5" />
+							<>
+								<Button
+									type="button"
+									variant="ghost"
+									size="xs"
+									className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-foreground"
+									onClick={(event) => {
+										event.stopPropagation();
+										onStartSelectionMode(diffMode);
+									}}
+									title={`Select ${title.toLowerCase()} changes`}
+								>
+									Select
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="h-4.5 w-4.5 text-muted-foreground/40 hover:text-foreground"
+									onClick={(e) => {
+										e.stopPropagation();
+										const action =
+											diffMode === "staged" ? "unstage-all" : "stage-all";
+										void onGroupAction(action);
+									}}
+									disabled={isGroupMutating}
+									aria-label={
+										diffMode === "staged" ? "Unstage all" : "Stage all"
+									}
+									title={diffMode === "staged" ? "Unstage all" : "Stage all"}
+								>
+									{isGroupMutating ? (
+										<LoaderCircle className="size-2.5 animate-spin" />
+									) : diffMode === "staged" ? (
+										<Minus className="size-2.5" />
+									) : (
+										<Plus className="size-2.5" />
+									)}
+								</Button>
+							</>
 						)}
-					</Button>
+					</div>
 				) : null}
 			</div>
 
@@ -214,8 +342,17 @@ export function ChangeGroup({
 							selectedChange?.path === change.path &&
 							selectedChange.diffMode === diffMode &&
 							selectedChange.code === change.code;
-						const mutationKey = `${diffMode}:${change.path}:${change.code}`;
-						const isMutating = pendingMutationKey === mutationKey;
+						const isBatchSelected = isSelectionModeActive
+							? selectedPaths.includes(change.path)
+							: false;
+						const actionMutationKey =
+							diffMode === "staged"
+								? `unstage:${change.path}:${change.code}`
+								: `stage:${change.path}:${change.code}`;
+						const discardMutationKey = `discard:${change.path}:${change.code}`;
+						const isMutating =
+							pendingMutationKey === actionMutationKey ||
+							pendingMutationKey === discardMutationKey;
 
 						return (
 							<div
@@ -224,13 +361,48 @@ export function ChangeGroup({
 									"group/item flex cursor-pointer items-center gap-2 rounded-md py-1 px-1 transition-colors",
 									isSelected
 										? "bg-sidebar-accent text-sidebar-accent-foreground"
-										: "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",
+										: isBatchSelected
+											? "bg-white/[0.04] text-foreground"
+											: "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",
 								)}
 							>
+								{isSelectionModeActive ? (
+									<button
+										type="button"
+										className={cn(
+											"flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+											isBatchSelected
+												? "border-emerald-400/70 bg-emerald-500/15 text-emerald-200"
+												: "border-white/10 bg-black/10 text-transparent hover:border-white/20",
+										)}
+										onClick={(event) => {
+											event.stopPropagation();
+											onToggleSelection(change);
+										}}
+										aria-label={
+											isBatchSelected
+												? `Unselect ${change.path}`
+												: `Select ${change.path}`
+										}
+										aria-pressed={isBatchSelected}
+										title={
+											isBatchSelected
+												? `Unselect ${change.path}`
+												: `Select ${change.path}`
+										}
+									>
+										<Check className="size-2.5" />
+									</button>
+								) : null}
 								<button
 									type="button"
 									className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left outline-none"
 									onClick={() => {
+										if (isSelectionModeActive) {
+											onToggleSelection(change);
+											return;
+										}
+
 										onSelectChange({
 											...change,
 											diffMode,
@@ -269,60 +441,64 @@ export function ChangeGroup({
 										</span>
 									</div>
 								</button>
-								<div className={cn(
-									"flex shrink-0 items-center gap-0.5 transition-opacity duration-200",
-									diffMode === "unstaged" ? "w-[44px]" : "w-[22px]",
-									"opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto"
-								)}>
-									{diffMode === "unstaged" ? (
+								{!isSelectionModeActive ? (
+									<div
+										className={cn(
+											"flex shrink-0 items-center gap-0.5 transition-opacity duration-200",
+											diffMode === "unstaged" ? "w-[44px]" : "w-[22px]",
+											"opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto",
+										)}
+									>
+										{diffMode === "unstaged" ? (
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-red-400"
+												onClick={(e) => {
+													e.stopPropagation();
+													onDiscardRequest(change);
+												}}
+												disabled={isMutating}
+												aria-label="Discard changes"
+												title="Discard changes"
+											>
+												{isMutating ? (
+													<LoaderCircle className="size-2.5 animate-spin" />
+												) : (
+													<RotateCcw className="size-2.5" />
+												)}
+											</Button>
+										) : null}
 										<Button
 											type="button"
 											variant="ghost"
 											size="icon-xs"
-											className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-red-400"
+											className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
 											onClick={(e) => {
 												e.stopPropagation();
-												onDiscardRequest(change);
+												const action =
+													diffMode === "staged" ? "unstage" : "stage";
+												void onAction(change, action);
 											}}
 											disabled={isMutating}
-											aria-label="Discard changes"
-											title="Discard changes"
+											aria-label={
+												diffMode === "staged" ? "Unstage file" : "Stage file"
+											}
+											title={
+												diffMode === "staged" ? "Unstage file" : "Stage file"
+											}
 										>
 											{isMutating ? (
 												<LoaderCircle className="size-2.5 animate-spin" />
+											) : diffMode === "staged" ? (
+												<Minus className="size-2.5" />
 											) : (
-												<RotateCcw className="size-2.5" />
+												<Plus className="size-2.5" />
 											)}
 										</Button>
-									) : null}
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon-xs"
-										className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-										onClick={(e) => {
-											e.stopPropagation();
-											const action =
-												diffMode === "staged" ? "unstage" : "stage";
-											void onAction(change, action);
-										}}
-										disabled={isMutating}
-										aria-label={
-											diffMode === "staged" ? "Unstage file" : "Stage file"
-										}
-										title={
-											diffMode === "staged" ? "Unstage file" : "Stage file"
-										}
-									>
-										{isMutating ? (
-											<LoaderCircle className="size-2.5 animate-spin" />
-										) : diffMode === "staged" ? (
-											<Minus className="size-2.5" />
-										) : (
-											<Plus className="size-2.5" />
-										)}
-									</Button>
-								</div>
+									</div>
+								) : null}
 							</div>
 						);
 					})}
