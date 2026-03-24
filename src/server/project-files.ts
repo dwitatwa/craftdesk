@@ -21,9 +21,11 @@ import type {
 	TextProjectFileContent,
 	UpdateProjectFileInput,
 } from "#/lib/craftdesk";
-import { getProjectSummary } from "#/server/db";
+import { notifyProjectFileChange } from "#/server/language-server-manager";
+import { resolveProjectPath } from "#/server/project-paths";
 
-const IGNORED_DIRECTORY_NAMES = new Set([".git", "node_modules"]);
+const TREE_IGNORED_DIRECTORY_NAMES = new Set([".git"]);
+const SEARCH_IGNORED_DIRECTORY_NAMES = new Set([".git", "node_modules"]);
 const MIME_TYPES_BY_EXTENSION = new Map([
 	[".apng", "image/apng"],
 	[".avif", "image/avif"],
@@ -36,38 +38,6 @@ const MIME_TYPES_BY_EXTENSION = new Map([
 	[".svg", "image/svg+xml"],
 	[".webp", "image/webp"],
 ]);
-
-function normalizeRelativePath(relativePath?: string) {
-	return (relativePath ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-}
-
-function getProjectRoot(projectId: string) {
-	const project = getProjectSummary(projectId);
-
-	if (!project) {
-		throw new Error("Project not found.");
-	}
-
-	return path.resolve(project.path);
-}
-
-function resolveProjectPath(projectId: string, relativePath?: string) {
-	const projectRoot = getProjectRoot(projectId);
-	const normalizedRelativePath = normalizeRelativePath(relativePath);
-	const absolutePath = path.resolve(projectRoot, normalizedRelativePath);
-	const isProjectRoot = absolutePath === projectRoot;
-	const isChildPath = absolutePath.startsWith(`${projectRoot}${path.sep}`);
-
-	if (!isProjectRoot && !isChildPath) {
-		throw new Error("Path must stay within the selected project.");
-	}
-
-	return {
-		projectRoot,
-		absolutePath,
-		relativePath: normalizedRelativePath,
-	};
-}
 
 export async function listProjectDirectoryEntries(
 	input: ProjectFileLookupInput,
@@ -90,7 +60,9 @@ export async function listProjectDirectoryEntries(
 
 	return entries
 		.filter((entry) =>
-			entry.isDirectory() ? !IGNORED_DIRECTORY_NAMES.has(entry.name) : true,
+			entry.isDirectory()
+				? !TREE_IGNORED_DIRECTORY_NAMES.has(entry.name)
+				: true,
 		)
 		.map((entry) => {
 			const entryRelativePath = [relativePath, entry.name]
@@ -238,10 +210,18 @@ export async function createProjectFile(
 		throw error;
 	}
 
-	return readProjectFileContent({
+	const createdFile = await readProjectFileContent({
 		projectId: input.projectId,
 		relativePath,
 	});
+
+	void notifyProjectFileChange({
+		projectId: input.projectId,
+		relativePath,
+		type: "created",
+	});
+
+	return createdFile;
 }
 
 export async function deleteProjectFile(
@@ -262,6 +242,11 @@ export async function deleteProjectFile(
 	}
 
 	await rm(absolutePath);
+	void notifyProjectFileChange({
+		projectId: input.projectId,
+		relativePath: input.relativePath,
+		type: "deleted",
+	});
 }
 
 export async function updateProjectFileContent(
@@ -301,6 +286,12 @@ export async function updateProjectFileContent(
 		throw new Error("File contents could not be reloaded after saving.");
 	}
 
+	void notifyProjectFileChange({
+		projectId: input.projectId,
+		relativePath,
+		type: "changed",
+	});
+
 	return updatedFile;
 }
 
@@ -319,7 +310,7 @@ async function collectMatchingProjectFiles({
 
 	for (const entry of entries) {
 		if (entry.isDirectory()) {
-			if (IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+			if (SEARCH_IGNORED_DIRECTORY_NAMES.has(entry.name)) {
 				continue;
 			}
 

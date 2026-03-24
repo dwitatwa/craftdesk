@@ -1,10 +1,9 @@
 import { Eye, FileText, LoaderCircle, SquarePen, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { Button } from "#/components/ui/button";
-import { Textarea } from "#/components/ui/textarea";
 import type {
 	ProjectFileSelectionState,
 	TextProjectFileContent,
@@ -22,19 +21,6 @@ interface FilePreviewViewProps {
 	selection: ProjectFileSelectionState;
 }
 
-function getPreviewLines(content: string) {
-	const normalizedContent = content.length > 0 ? content : "";
-	const lines = normalizedContent.split("\n").map((lineContent, lineIndex) => ({
-		id: `line-${lineIndex + 1}-${lineContent}`,
-		lineNumber: lineIndex + 1,
-		content: lineContent,
-	}));
-
-	return lines.length > 0
-		? lines
-		: [{ id: "line-1-empty", lineNumber: 1, content: "" }];
-}
-
 function formatFileSize(size: number) {
 	if (size < 1024) {
 		return `${size} B`;
@@ -46,6 +32,12 @@ function formatFileSize(size: number) {
 
 	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+const MonacoFileEditor = lazy(() =>
+	import("#/components/workspace/monaco-file-editor").then((module) => ({
+		default: module.MonacoFileEditor,
+	})),
+);
 
 export function FilePreviewView({
 	activeProject,
@@ -66,8 +58,6 @@ export function FilePreviewView({
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveError, setSaveError] = useState("");
 	const headerRef = useRef<HTMLDivElement | null>(null);
-	const lineNumberRef = useRef<HTMLDivElement | null>(null);
-	const previewLines = getPreviewLines(draftContent);
 	const hasChanges = !!activeTextFile && draftContent !== savedContent;
 	const isMarkdownFile = activeTextFile
 		? isMarkdownFilePath(activeTextFile.relativePath)
@@ -256,45 +246,33 @@ export function FilePreviewView({
 				) : activeTextFile ? (
 					<div className="flex h-full min-h-0 flex-col">
 						{!isMarkdownPreview ? (
-							<div className="flex min-h-0 flex-1 bg-[#09090b]/20 pb-4">
-								<div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-white/6 bg-[#050507]/70">
-									<div
-										ref={lineNumberRef}
-										aria-hidden="true"
-										className="min-h-0 w-[72px] overflow-hidden border-r border-white/5 bg-[#09090B]/75 py-4 pr-3 text-right font-mono text-[13px] leading-6 text-muted-foreground/35 select-none"
+							<div className="flex min-h-0 flex-1 bg-[#050507]">
+								<div className="flex min-h-0 flex-1 overflow-hidden bg-[#050507]">
+									<Suspense
+										fallback={
+											<div className="flex h-full w-full items-center justify-center bg-[#050507] text-sm text-muted-foreground">
+												<LoaderCircle className="mr-3 size-4 animate-spin" />
+												Loading editor
+											</div>
+										}
 									>
-										{previewLines.map((line) => (
-											<div key={line.id}>{line.lineNumber}</div>
-										))}
-									</div>
-									<Textarea
-										className="h-full min-h-[260px] resize-none border-0 bg-transparent py-4 font-mono text-[13px] leading-6 whitespace-pre shadow-none focus-visible:ring-0"
-										onChange={(event) => {
-											setDraftContent(event.target.value);
-											if (saveError) {
-												setSaveError("");
-											}
-										}}
-										onKeyDown={(event) => {
-											if (
-												(event.metaKey || event.ctrlKey) &&
-												event.key === "s"
-											) {
-												event.preventDefault();
+										<MonacoFileEditor
+											className="w-full"
+											onChange={(nextValue) => {
+												setDraftContent(nextValue);
+												if (saveError) {
+													setSaveError("");
+												}
+											}}
+											onSave={() => {
 												void handleSave();
-											}
-										}}
-										onScroll={(event) => {
-											if (lineNumberRef.current) {
-												lineNumberRef.current.scrollTop =
-													event.currentTarget.scrollTop;
-											}
-										}}
-										placeholder="Edit this file..."
-										spellCheck={false}
-										value={draftContent}
-										wrap="off"
-									/>
+											}}
+											projectId={activeProject?.id ?? ""}
+											projectPath={activeProject?.path ?? ""}
+											relativePath={activeTextFile.relativePath}
+											value={draftContent}
+										/>
+									</Suspense>
 								</div>
 							</div>
 						) : (
