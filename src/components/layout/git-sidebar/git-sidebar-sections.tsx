@@ -199,7 +199,7 @@ export function ChangeGroup({
 					</div>
 				</div>
 				{changes.length > 0 ? (
-					<div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/header:opacity-100">
+					<div className="flex items-center gap-1">
 						{isSelectionModeActive ? (
 							<>
 								{diffMode === "unstaged" ? (
@@ -444,9 +444,8 @@ export function ChangeGroup({
 								{!isSelectionModeActive ? (
 									<div
 										className={cn(
-											"flex shrink-0 items-center gap-0.5 transition-opacity duration-200",
+											"flex shrink-0 items-center gap-0.5",
 											diffMode === "unstaged" ? "w-[44px]" : "w-[22px]",
-											"opacity-0 pointer-events-none group-hover/item:opacity-100 group-hover/item:pointer-events-auto group-focus-within/item:opacity-100 group-focus-within/item:pointer-events-auto",
 										)}
 									>
 										{diffMode === "unstaged" ? (
