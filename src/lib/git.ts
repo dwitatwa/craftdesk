@@ -139,6 +139,9 @@ export interface GitDiffResult {
 	path: string;
 	diffMode: GitDiffMode;
 	content: string;
+	originalContent: string;
+	modifiedContent: string;
+	hasTextChanges: boolean;
 	isBinary: boolean;
 	isEmpty: boolean;
 }

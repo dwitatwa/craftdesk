@@ -1,3 +1,4 @@
+import { DiffEditor } from "@monaco-editor/react";
 import {
 	FileCode2,
 	GitCompareArrows,
@@ -10,26 +11,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActiveProjectContext } from "#/components/layout/app-shell";
 import { Button } from "#/components/ui/button";
 import type { GitDiffResult, GitSelectedChange } from "#/lib/git";
+import { getMonacoLanguageIdFromPath } from "#/lib/language-server";
 import { cn, shouldHandleMiddleClickClose } from "#/lib/utils";
 import { getGitDiff } from "#/server/git";
+import { MONACO_SURFACE_CLASSNAME, MONACO_THEME } from "./monaco-shared";
 
 interface GitDiffViewProps {
 	activeProject: ActiveProjectContext | null;
 	onClose: () => void;
 	refreshVersion: number;
 	selectedChange: GitSelectedChange | null;
-}
-
-interface ParsedDiffRow {
-	id: string;
-	type: "hunk" | "line";
-	header?: string;
-	leftLineNumber: number | null;
-	rightLineNumber: number | null;
-	leftText: string;
-	rightText: string;
-	leftKind: "context" | "removed" | "empty";
-	rightKind: "context" | "added" | "empty";
 }
 
 export function GitDiffView({
@@ -189,9 +180,9 @@ export function GitDiffView({
 		};
 	}, [onClose]);
 
-	const rows = useMemo(
-		() => parseUnifiedDiff(diff?.content ?? ""),
-		[diff?.content],
+	const diffMetadata = useMemo(
+		() => createDiffMetadata(activeProject, selectedChange),
+		[activeProject, selectedChange],
 	);
 
 	if (!activeProject) {
@@ -300,48 +291,75 @@ export function GitDiffView({
 					</div>
 				) : null}
 
-				{diff && !diff.isEmpty ? (
-					<div className="grid h-full min-h-0 grid-cols-2 divide-x divide-white/5 bg-[#09090B]">
+				{diff && !diff.isEmpty && diff.isBinary ? (
+					<div className="flex h-full items-center justify-center p-8">
+						<EmptyState
+							title="Binary diff unavailable"
+							description="This change contains binary content, so it cannot be rendered in Monaco diff view."
+						/>
+					</div>
+				) : null}
+
+				{diff && !diff.isEmpty && !diff.isBinary && !diff.hasTextChanges ? (
+					<div className="flex h-full items-center justify-center p-8">
+						<EmptyState
+							title="No textual changes"
+							description="This change only updates file metadata or path information, so there is no text diff to render."
+						/>
+					</div>
+				) : null}
+
+				{diff && !diff.isEmpty && !diff.isBinary && diff.hasTextChanges ? (
+					<div className="relative h-full min-h-0 bg-[#101010]">
 						{isLoading ? (
 							<div className="pointer-events-none absolute right-4 top-4 z-10 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em] text-muted-foreground backdrop-blur-sm">
 								<LoaderCircle className="size-3 animate-spin" />
 								Refreshing diff...
 							</div>
 						) : null}
-						<DiffPaneHeader label="Previous" />
-						<DiffPaneHeader label="Current" />
-						<div className="custom-scrollbar col-span-2 min-h-0 overflow-auto">
-							<div className="grid min-w-[960px] grid-cols-2 divide-x divide-white/5">
-								<div>
-									{rows.map((row) =>
-										row.type === "hunk" ? (
-											<HunkHeader key={row.id} header={row.header ?? ""} />
-										) : (
-											<DiffLine
-												key={row.id}
-												lineNumber={row.leftLineNumber}
-												text={row.leftText}
-												kind={row.leftKind}
-											/>
-										),
-									)}
+						<DiffEditor
+							className={MONACO_SURFACE_CLASSNAME}
+							language={diffMetadata.modifiedLanguage}
+							loading={
+								<div className="flex h-full items-center justify-center bg-[#101010] text-sm text-muted-foreground">
+									<LoaderCircle className="mr-3 size-4 animate-spin" />
+									Loading diff...
 								</div>
-								<div>
-									{rows.map((row) =>
-										row.type === "hunk" ? (
-											<HunkHeader key={row.id} header={row.header ?? ""} />
-										) : (
-											<DiffLine
-												key={row.id}
-												lineNumber={row.rightLineNumber}
-												text={row.rightText}
-												kind={row.rightKind}
-											/>
-										),
-									)}
-								</div>
-							</div>
-						</div>
+							}
+							modified={diff.modifiedContent}
+							modifiedLanguage={diffMetadata.modifiedLanguage}
+							modifiedModelPath={diffMetadata.modifiedModelPath}
+							options={{
+								automaticLayout: true,
+								diffWordWrap: "off",
+								enableSplitViewResizing: true,
+								fontFamily: "JetBrains Mono, monospace",
+								fontLigatures: true,
+								fontSize: 13,
+								glyphMargin: false,
+								lineHeight: 24,
+								lineNumbersMinChars: 4,
+								minimap: { enabled: false },
+								originalEditable: false,
+								padding: {
+									bottom: 16,
+									top: 16,
+								},
+								readOnly: true,
+								renderIndicators: true,
+								renderLineHighlight: "none",
+								renderOverviewRuler: false,
+								renderSideBySide: true,
+								scrollBeyondLastLine: false,
+								smoothScrolling: true,
+								stickyScroll: { enabled: false },
+								wordWrap: "off",
+							}}
+							original={diff.originalContent}
+							originalLanguage={diffMetadata.originalLanguage}
+							originalModelPath={diffMetadata.originalModelPath}
+							theme={MONACO_THEME}
+						/>
 					</div>
 				) : null}
 			</div>
@@ -368,52 +386,12 @@ export function isSameDiffResult(
 	return (
 		currentDiff.path === nextDiff.path &&
 		currentDiff.diffMode === nextDiff.diffMode &&
+		currentDiff.originalContent === nextDiff.originalContent &&
+		currentDiff.modifiedContent === nextDiff.modifiedContent &&
+		currentDiff.hasTextChanges === nextDiff.hasTextChanges &&
 		currentDiff.isBinary === nextDiff.isBinary &&
 		currentDiff.isEmpty === nextDiff.isEmpty &&
 		currentDiff.content === nextDiff.content
-	);
-}
-
-function DiffPaneHeader({ label }: { label: string }) {
-	return (
-		<div className="border-b border-white/5 bg-white/[0.02] px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
-			{label}
-		</div>
-	);
-}
-
-function HunkHeader({ header }: { header: string }) {
-	return (
-		<div className="border-b border-sky-500/10 bg-sky-500/8 px-4 py-1.5 text-[10px] font-mono text-sky-200">
-			{header}
-		</div>
-	);
-}
-
-function DiffLine({
-	lineNumber,
-	text,
-	kind,
-}: {
-	lineNumber: number | null;
-	text: string;
-	kind: "context" | "removed" | "added" | "empty";
-}) {
-	return (
-		<div
-			className={cn(
-				"grid min-h-7 grid-cols-[64px_minmax(0,1fr)] border-b border-white/5 font-mono text-[11px] leading-6",
-				kind === "removed" && "bg-red-500/10 text-red-100",
-				kind === "added" && "bg-emerald-500/10 text-emerald-100",
-				kind === "context" && "text-zinc-200",
-				kind === "empty" && "text-zinc-500",
-			)}
-		>
-			<div className="border-r border-white/5 px-3 text-right text-[10px] text-zinc-500">
-				{lineNumber ?? ""}
-			</div>
-			<div className="overflow-hidden px-3 whitespace-pre">{text || " "}</div>
-		</div>
 	);
 }
 
@@ -448,6 +426,42 @@ function EmptyState({
 	);
 }
 
+function createDiffMetadata(
+	activeProject: ActiveProjectContext | null,
+	selectedChange: GitSelectedChange | null,
+) {
+	const originalPath =
+		selectedChange?.originalPath ?? selectedChange?.path ?? "";
+	const modifiedPath = selectedChange?.path ?? "";
+	const projectKey = activeProject?.id ?? "workspace";
+
+	return {
+		modifiedLanguage: getMonacoLanguageIdFromPath(modifiedPath),
+		modifiedModelPath: createDiffModelPath(
+			projectKey,
+			selectedChange?.diffMode ?? "unstaged",
+			"modified",
+			modifiedPath,
+		),
+		originalLanguage: getMonacoLanguageIdFromPath(originalPath),
+		originalModelPath: createDiffModelPath(
+			projectKey,
+			selectedChange?.diffMode ?? "unstaged",
+			"original",
+			originalPath,
+		),
+	};
+}
+
+function createDiffModelPath(
+	projectKey: string,
+	diffMode: GitSelectedChange["diffMode"],
+	side: "modified" | "original",
+	relativePath: string,
+) {
+	return `git-diff:///${side}/${encodeURIComponent(projectKey)}/${diffMode}/${encodeURIComponent(relativePath)}`;
+}
+
 function getGitDiffRequestKey(
 	activeProjectPath: string,
 	selectedChange: GitSelectedChange | null,
@@ -463,129 +477,4 @@ function getGitDiffRequestKey(
 		selectedChange.diffMode,
 		selectedChange.code,
 	].join("::");
-}
-
-function parseUnifiedDiff(content: string): ParsedDiffRow[] {
-	const rows: ParsedDiffRow[] = [];
-	let oldLine = 0;
-	let newLine = 0;
-	let blockIndex = 0;
-	let pendingRemoved: string[] = [];
-	let pendingAdded: string[] = [];
-
-	const flushPending = () => {
-		if (!pendingRemoved.length && !pendingAdded.length) {
-			return;
-		}
-
-		const count = Math.max(pendingRemoved.length, pendingAdded.length);
-
-		for (let index = 0; index < count; index += 1) {
-			const removedLine = pendingRemoved[index];
-			const addedLine = pendingAdded[index];
-			const currentOldLine = removedLine !== undefined ? oldLine : null;
-			const currentNewLine = addedLine !== undefined ? newLine : null;
-
-			if (removedLine !== undefined) {
-				oldLine += 1;
-			}
-
-			if (addedLine !== undefined) {
-				newLine += 1;
-			}
-
-			rows.push({
-				id: `change:${blockIndex}:${index}`,
-				type: "line",
-				leftLineNumber: currentOldLine,
-				rightLineNumber: currentNewLine,
-				leftText: removedLine ?? "",
-				rightText: addedLine ?? "",
-				leftKind: removedLine !== undefined ? "removed" : "empty",
-				rightKind: addedLine !== undefined ? "added" : "empty",
-			});
-		}
-
-		blockIndex += 1;
-		pendingRemoved = [];
-		pendingAdded = [];
-	};
-
-	for (const line of content.split(/\r?\n/)) {
-		if (line.startsWith("@@")) {
-			flushPending();
-			const match = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-
-			if (match) {
-				oldLine = Number.parseInt(match[1], 10);
-				newLine = Number.parseInt(match[2], 10);
-			}
-
-			rows.push({
-				id: `hunk:${rows.length}`,
-				type: "hunk",
-				header: line,
-				leftLineNumber: null,
-				rightLineNumber: null,
-				leftText: "",
-				rightText: "",
-				leftKind: "context",
-				rightKind: "context",
-			});
-			continue;
-		}
-
-		if (
-			line.startsWith("--- ") ||
-			line.startsWith("+++ ") ||
-			line.startsWith("diff --git") ||
-			line.startsWith("index ")
-		) {
-			continue;
-		}
-
-		if (line.startsWith("-")) {
-			pendingRemoved.push(line.slice(1));
-			continue;
-		}
-
-		if (line.startsWith("+")) {
-			pendingAdded.push(line.slice(1));
-			continue;
-		}
-
-		flushPending();
-
-		if (line.startsWith(" ")) {
-			rows.push({
-				id: `context:${rows.length}:${oldLine}:${newLine}`,
-				type: "line",
-				leftLineNumber: oldLine,
-				rightLineNumber: newLine,
-				leftText: line.slice(1),
-				rightText: line.slice(1),
-				leftKind: "context",
-				rightKind: "context",
-			});
-			oldLine += 1;
-			newLine += 1;
-		}
-	}
-
-	flushPending();
-
-	if (rows.length === 0 && content.trim()) {
-		return content.split("\n").map((line, index) => ({
-			id: `raw:${index}`,
-			type: "line",
-			leftLineNumber: null,
-			rightLineNumber: null,
-			leftText: line,
-			rightText: line,
-			leftKind: "context",
-			rightKind: "context",
-		}));
-	}
-
-	return rows;
 }

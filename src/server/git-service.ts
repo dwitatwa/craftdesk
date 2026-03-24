@@ -1,6 +1,7 @@
+import { isUtf8 } from "node:buffer";
 import { execFile } from "node:child_process";
 import { existsSync, type FSWatcher, statSync, watch } from "node:fs";
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -34,6 +35,27 @@ interface ExecError extends Error {
 	code?: number | string;
 	stdout?: string;
 	stderr?: string;
+}
+
+interface ExecBufferError extends Error {
+	code?: number | string;
+	stdout?: Buffer;
+	stderr?: Buffer;
+}
+
+type GitDiffContentSource =
+	| {
+			kind: "empty";
+	  }
+	| {
+			kind: "head" | "index" | "worktree";
+			path: string;
+	  };
+
+interface GitTextSourceResult {
+	content: string;
+	exists: boolean;
+	isBinary: boolean;
 }
 
 interface GitRepositoryWatcherWaiter {
@@ -150,12 +172,185 @@ export async function loadGitDiff(input: GitDiffInput): Promise<GitDiffResult> {
 		}
 	}
 
+	const sourceContent = !content.trim()
+		? {
+				hasTextChanges: false,
+				isBinary: false,
+				modifiedContent: "",
+				originalContent: "",
+			}
+		: await resolveGitDiffContent(repoRoot, input);
+
 	return {
 		path: input.path,
 		diffMode: input.diffMode,
 		content,
-		isBinary: /Binary files .* differ/.test(content),
+		originalContent: sourceContent.originalContent,
+		modifiedContent: sourceContent.modifiedContent,
+		hasTextChanges: sourceContent.hasTextChanges,
+		isBinary: /Binary files .* differ/.test(content) || sourceContent.isBinary,
 		isEmpty: !content.trim(),
+	};
+}
+
+async function resolveGitDiffContent(repoRoot: string, input: GitDiffInput) {
+	const { modified, original } = getGitDiffContentSources(input);
+	const [originalSource, modifiedSource] = await Promise.all([
+		readGitDiffContentSource(repoRoot, original),
+		readGitDiffContentSource(repoRoot, modified),
+	]);
+
+	if (originalSource.isBinary || modifiedSource.isBinary) {
+		return {
+			hasTextChanges: false,
+			isBinary: true,
+			modifiedContent: "",
+			originalContent: "",
+		};
+	}
+
+	return {
+		hasTextChanges: originalSource.content !== modifiedSource.content,
+		isBinary: false,
+		modifiedContent: modifiedSource.content,
+		originalContent: originalSource.content,
+	};
+}
+
+function getGitDiffContentSources(input: GitDiffInput): {
+	modified: GitDiffContentSource;
+	original: GitDiffContentSource;
+} {
+	const originalPath = input.originalPath ?? input.path;
+
+	if (input.diffMode === "staged") {
+		return {
+			original:
+				input.code === "A" || input.code === "?"
+					? { kind: "empty" }
+					: { kind: "head", path: originalPath },
+			modified:
+				input.code === "D"
+					? { kind: "empty" }
+					: { kind: "index", path: input.path },
+		};
+	}
+
+	if (input.code === "?") {
+		return {
+			original: { kind: "empty" },
+			modified: { kind: "worktree", path: input.path },
+		};
+	}
+
+	return {
+		original:
+			input.code === "A"
+				? { kind: "empty" }
+				: { kind: "index", path: originalPath },
+		modified:
+			input.code === "D"
+				? { kind: "empty" }
+				: { kind: "worktree", path: input.path },
+	};
+}
+
+async function readGitDiffContentSource(
+	repoRoot: string,
+	source: GitDiffContentSource,
+): Promise<GitTextSourceResult> {
+	if (source.kind === "empty") {
+		return {
+			content: "",
+			exists: false,
+			isBinary: false,
+		};
+	}
+
+	if (source.kind === "worktree") {
+		return readWorktreeTextSource(repoRoot, source.path);
+	}
+
+	return readGitTextSource(
+		repoRoot,
+		source.kind === "head" ? `HEAD:${source.path}` : `:${source.path}`,
+	);
+}
+
+async function readWorktreeTextSource(
+	repoRoot: string,
+	targetPath: string,
+): Promise<GitTextSourceResult> {
+	try {
+		const contentBuffer = await readFile(
+			resolveRepositoryPath(repoRoot, targetPath),
+		);
+
+		if (!isUtf8(contentBuffer)) {
+			return {
+				content: "",
+				exists: true,
+				isBinary: true,
+			};
+		}
+
+		return {
+			content: contentBuffer.toString("utf8"),
+			exists: true,
+			isBinary: false,
+		};
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return {
+				content: "",
+				exists: false,
+				isBinary: false,
+			};
+		}
+
+		throw error;
+	}
+}
+
+async function readGitTextSource(
+	repoRoot: string,
+	objectSpec: string,
+): Promise<GitTextSourceResult> {
+	const result = await runGitBuffer(["show", objectSpec], repoRoot, [0, 128]);
+
+	if (result.exitCode !== 0) {
+		const details = result.stderr.toString("utf8").trim().toLowerCase();
+
+		if (
+			details.includes("does not exist") ||
+			details.includes("exists on disk, but not in") ||
+			details.includes("bad revision") ||
+			details.includes("unknown revision") ||
+			details.includes("invalid object name") ||
+			details.includes("not at stage")
+		) {
+			return {
+				content: "",
+				exists: false,
+				isBinary: false,
+			};
+		}
+
+		throw new Error(details || "Git command failed.");
+	}
+
+	if (!isUtf8(result.stdout)) {
+		return {
+			content: "",
+			exists: true,
+			isBinary: true,
+		};
+	}
+
+	return {
+		content: result.stdout.toString("utf8"),
+		exists: true,
+		isBinary: false,
 	};
 }
 
@@ -917,6 +1112,75 @@ async function runGit(
 
 		throw new Error(details || "Git command failed.");
 	}
+}
+
+async function runGitBuffer(
+	args: string[],
+	cwd: string,
+	allowedExitCodes: number[] = [0],
+): Promise<{
+	exitCode: number;
+	stderr: Buffer;
+	stdout: Buffer;
+}> {
+	return new Promise((resolve, reject) => {
+		execFile(
+			"git",
+			args,
+			{
+				cwd,
+				encoding: "buffer",
+				maxBuffer: DEFAULT_MAX_BUFFER,
+				windowsHide: true,
+			},
+			(error, stdout, stderr) => {
+				const stdoutBuffer = Buffer.isBuffer(stdout)
+					? stdout
+					: Buffer.from(stdout ?? "");
+				const stderrBuffer = Buffer.isBuffer(stderr)
+					? stderr
+					: Buffer.from(stderr ?? "");
+
+				if (!error) {
+					resolve({
+						exitCode: 0,
+						stderr: stderrBuffer,
+						stdout: stdoutBuffer,
+					});
+					return;
+				}
+
+				const execError = error as ExecBufferError;
+
+				if (execError.code === "ENOENT") {
+					reject(new Error("Git is not available on this machine."));
+					return;
+				}
+
+				const exitCode =
+					typeof execError.code === "number" ? execError.code : Number.NaN;
+
+				if (allowedExitCodes.includes(exitCode)) {
+					resolve({
+						exitCode,
+						stderr: stderrBuffer,
+						stdout: stdoutBuffer,
+					});
+					return;
+				}
+
+				const details = stderrBuffer.toString("utf8").trim() || error.message;
+				const lowered = details.toLowerCase();
+
+				if (lowered.includes("not a git repository")) {
+					reject(new Error("This project folder is not a Git repository."));
+					return;
+				}
+
+				reject(new Error(details || "Git command failed."));
+			},
+		);
+	});
 }
 
 function isExecError(error: unknown): error is ExecError {
