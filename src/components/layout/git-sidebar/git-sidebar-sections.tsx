@@ -1,6 +1,11 @@
 import {
+	ArrowDownToLine,
+	ArrowRightLeft,
+	ArrowUpToLine,
 	ChevronDown,
+	GitBranch,
 	GitCommitHorizontal,
+	GitPullRequest,
 	LoaderCircle,
 	Minus,
 	Plus,
@@ -411,87 +416,190 @@ export function CommitRow({ commit }: { commit: GitCommitPreview }) {
 
 export function BranchRow({
 	branch,
-	isDeleting = false,
-	isMerging = false,
-	onDelete,
-	onMerge,
+	currentBranch,
+	isCheckingOut = false,
+	isPulling = false,
+	isPushing = false,
+	onCheckout,
+	onCreatePullRequest,
+	onPull,
+	onPush,
+	onShowCommits,
 }: {
 	branch: GitBranchListEntry;
-	isDeleting?: boolean;
-	isMerging?: boolean;
-	onDelete?: () => void;
-	onMerge?: () => void;
+	currentBranch?: GitRepositoryOverview["branch"] | null;
+	isCheckingOut?: boolean;
+	isPulling?: boolean;
+	isPushing?: boolean;
+	onCheckout?: () => void;
+	onCreatePullRequest?: () => void;
+	onPull?: () => void;
+	onPush?: () => void;
+	onShowCommits?: () => void;
 }) {
-	const showActions =
-		!branch.isCurrent && (onDelete || onMerge || isDeleting || isMerging);
+	const details = branch.isCurrent
+		? currentBranch?.upstream
+			? `⇄ ${currentBranch.upstream}`
+			: currentBranch?.detached
+				? "Detached HEAD"
+				: "No upstream"
+		: null;
+	const showActions = branch.isCurrent
+		? onPull || onCreatePullRequest || onShowCommits || isPulling
+		: onPush || onCheckout || onShowCommits || isPushing || isCheckingOut;
+	const branchContent = (
+		<>
+			<GitBranch className="size-3 shrink-0 text-muted-foreground/70" />
+			<div className="min-w-0 flex items-center gap-1.5 text-[11px]">
+				<div
+					className={cn(
+						"truncate font-medium",
+						branch.isCurrent ? "text-foreground" : undefined,
+					)}
+				>
+					{branch.name}
+				</div>
+				{details ? (
+					<div className="truncate text-[10px] text-muted-foreground/60">
+						{details}
+					</div>
+				) : null}
+			</div>
+			<div className="shrink-0 text-[9px] text-muted-foreground/45">
+				• {branch.lastCommitRelativeDate}
+			</div>
+		</>
+	);
 
 	return (
 		<div
 			className={cn(
-				"group/branch px-3 py-1 transition-colors",
+				"group/branch flex items-center justify-between gap-3 px-3 py-1.5 transition-colors",
 				branch.isCurrent
-					? "bg-primary/20 text-primary-foreground"
+					? "bg-primary/12 text-foreground"
 					: "hover:bg-white/[0.05]",
 			)}
 		>
-			<div className="flex items-center justify-between gap-3">
-				<div className="min-w-0 flex items-center gap-2">
-					<div className="truncate text-[11px] font-medium">{branch.name}</div>
-					<div className="text-[9px] font-mono text-muted-foreground/40">
-						{branch.shortSha}
-					</div>
+			{onShowCommits ? (
+				<button
+					type="button"
+					className="min-w-0 flex flex-1 items-center gap-2 rounded-sm bg-transparent p-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
+					onClick={onShowCommits}
+					title={`Show recent commits for ${branch.name}`}
+				>
+					{branchContent}
+				</button>
+			) : (
+				<div className="min-w-0 flex flex-1 items-center gap-2">
+					{branchContent}
 				</div>
-				<div className="flex shrink-0 items-center gap-2">
-					<div className="text-[9px] text-muted-foreground/40">
-						{branch.lastCommitRelativeDate}
-					</div>
+			)}
+			{showActions ? (
+				<div className="flex shrink-0 items-center gap-1 opacity-0 pointer-events-none transition-opacity group-hover/branch:opacity-100 group-hover/branch:pointer-events-auto group-focus-within/branch:opacity-100 group-focus-within/branch:pointer-events-auto">
 					{branch.isCurrent ? (
-						<div className="rounded-full border border-primary/30 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-primary">
-							Current
-						</div>
-					) : null}
-					{showActions ? (
-						<div className="flex items-center gap-1 opacity-0 pointer-events-none transition-opacity group-hover/branch:opacity-100 group-hover/branch:pointer-events-auto group-focus-within/branch:opacity-100 group-focus-within/branch:pointer-events-auto">
-							{onMerge ? (
+						<>
+							{onPull ? (
 								<Button
 									type="button"
 									variant="ghost"
-									size="xs"
-									className="h-5 px-1.5 text-[10px] font-medium"
+									size="icon-xs"
+									className="text-muted-foreground hover:text-foreground"
 									onClick={(event) => {
 										event.stopPropagation();
-										onMerge();
+										onPull();
 									}}
-									disabled={isDeleting || isMerging}
+									disabled={isPulling}
+									aria-label={`Pull ${branch.name}`}
+									title={`Pull ${branch.name}`}
 								>
-									{isMerging ? (
+									{isPulling ? (
 										<LoaderCircle className="size-3 animate-spin" />
-									) : null}
-									Merge
+									) : (
+										<ArrowDownToLine className="size-3" />
+									)}
 								</Button>
 							) : null}
-							{onDelete ? (
+							{onCreatePullRequest ? (
 								<Button
 									type="button"
 									variant="ghost"
-									size="xs"
-									className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground hover:text-red-500"
+									size="icon-xs"
+									className="text-muted-foreground hover:text-foreground"
 									onClick={(event) => {
 										event.stopPropagation();
-										onDelete();
+										onCreatePullRequest();
 									}}
-									disabled={isDeleting || isMerging}
+									aria-label={`Create pull request from ${branch.name}`}
+									title={`Create pull request from ${branch.name}`}
 								>
-									{isDeleting ? (
-										<LoaderCircle className="size-3 animate-spin" />
-									) : null}
-									Delete
+									<GitPullRequest className="size-3" />
 								</Button>
 							) : null}
-						</div>
+						</>
+					) : (
+						<>
+							{onPush ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="text-muted-foreground hover:text-foreground"
+									onClick={(event) => {
+										event.stopPropagation();
+										onPush();
+									}}
+									disabled={isPushing}
+									aria-label={`Push ${branch.name} to remote`}
+									title={`Push ${branch.name} to remote`}
+								>
+									{isPushing ? (
+										<LoaderCircle className="size-3 animate-spin" />
+									) : (
+										<ArrowUpToLine className="size-3" />
+									)}
+								</Button>
+							) : null}
+							{onCheckout ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="text-muted-foreground hover:text-foreground"
+									onClick={(event) => {
+										event.stopPropagation();
+										onCheckout();
+									}}
+									disabled={isCheckingOut}
+									aria-label={`Checkout ${branch.name}`}
+									title={`Checkout ${branch.name}`}
+								>
+									{isCheckingOut ? (
+										<LoaderCircle className="size-3 animate-spin" />
+									) : (
+										<ArrowRightLeft className="size-3" />
+									)}
+								</Button>
+							) : null}
+						</>
+					)}
+					{onShowCommits ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon-xs"
+							className="text-muted-foreground hover:text-foreground"
+							onClick={(event) => {
+								event.stopPropagation();
+								onShowCommits();
+							}}
+							aria-label={`Show recent commits for ${branch.name}`}
+							title={`Show recent commits for ${branch.name}`}
+						>
+							<GitCommitHorizontal className="size-3" />
+						</Button>
 					) : null}
 				</div>
-			</div>
+			) : null}
 		</div>
 	);
 }

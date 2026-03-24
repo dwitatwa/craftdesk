@@ -22,8 +22,12 @@ import {
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
+import type { GitCommitPreview } from "#/lib/git";
+import { CommitRow, EmptyState } from "./git-sidebar-sections";
 
 interface GitSidebarCreateBranchDialogProps {
+	currentBranchName: string;
+	isDetachedHead?: boolean;
 	isOpen: boolean;
 	isSubmitting: boolean;
 	onCreate: (branchName: string) => Promise<boolean>;
@@ -31,6 +35,8 @@ interface GitSidebarCreateBranchDialogProps {
 }
 
 export function GitSidebarCreateBranchDialog({
+	currentBranchName,
+	isDetachedHead = false,
 	isOpen,
 	isSubmitting,
 	onCreate,
@@ -76,12 +82,22 @@ export function GitSidebarCreateBranchDialog({
 						void handleCreate();
 					}}
 				>
-					<DialogHeader>
-						<DialogTitle>Create Local Branch</DialogTitle>
-						<DialogDescription>
-							Create a new local branch from the current `HEAD`.
-						</DialogDescription>
-					</DialogHeader>
+						<DialogHeader>
+							<DialogTitle>Create Local Branch</DialogTitle>
+							<DialogDescription>
+								{isDetachedHead ? (
+									"Create a new local branch from the current HEAD."
+								) : (
+									<>
+										Create a new local branch from{" "}
+										<span className="font-medium text-foreground">
+											{currentBranchName}
+										</span>
+										.
+									</>
+								)}
+							</DialogDescription>
+						</DialogHeader>
 					<div className="grid gap-4 py-4">
 						<div className="grid gap-2">
 							<Label
@@ -178,5 +194,60 @@ export function GitSidebarBranchActionDialog({
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>
+	);
+}
+
+interface GitSidebarBranchCommitsDialogProps {
+	branchName: string;
+	commits: GitCommitPreview[];
+	error: string;
+	isLoading: boolean;
+	isOpen: boolean;
+	onOpenChange: (open: boolean) => void;
+}
+
+export function GitSidebarBranchCommitsDialog({
+	branchName,
+	commits,
+	error,
+	isLoading,
+	isOpen,
+	onOpenChange,
+}: GitSidebarBranchCommitsDialogProps) {
+	return (
+		<Dialog open={isOpen} onOpenChange={onOpenChange}>
+			<DialogContent className="sm:max-w-[640px]">
+				<DialogHeader>
+					<DialogTitle>Recent Commits</DialogTitle>
+					<DialogDescription>
+						Showing the latest commits for{" "}
+						<span className="break-all font-medium text-foreground">
+							{branchName}
+						</span>
+						.
+					</DialogDescription>
+				</DialogHeader>
+				<div className="max-h-[52vh] overflow-y-auto custom-scrollbar">
+					{isLoading ? (
+						<div className="flex items-center gap-2 px-3 py-6 text-xs text-muted-foreground">
+							<LoaderCircle className="size-3 animate-spin" />
+							Loading branch commits...
+						</div>
+					) : error ? (
+						<div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+							{error}
+						</div>
+					) : commits.length > 0 ? (
+						<div className="space-y-1">
+							{commits.map((commit) => (
+								<CommitRow key={commit.sha} commit={commit} />
+							))}
+						</div>
+					) : (
+						<EmptyState label="No commits were found for this branch." />
+					)}
+				</div>
+			</DialogContent>
+		</Dialog>
 	);
 }

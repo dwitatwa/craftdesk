@@ -15,6 +15,12 @@ export interface GitRepositoryOverviewInput {
 	cwd: string;
 }
 
+export interface GitBranchCommitPreviewInput {
+	cwd: string;
+	branchName: string;
+	maxCount?: number;
+}
+
 export interface GitRepositoryChangeWaitInput {
 	cwd: string;
 	afterVersion: number;
@@ -47,8 +53,11 @@ export interface GitBranchMutationInput {
 	cwd: string;
 	action:
 		| "create-local"
+		| "checkout-local"
 		| "delete-local"
 		| "merge-into-current"
+		| "pull-current"
+		| "push-branch"
 		| "push-current";
 	branchName?: string;
 }
@@ -107,7 +116,6 @@ export interface GitRepositoryOverview {
 	changeVersion: number;
 	branch: GitBranchSummary;
 	branches: GitBranchListEntry[];
-	commits: GitCommitPreview[];
 	staged: GitChange[];
 	unstaged: GitChange[];
 	remotes: GitRemote[];

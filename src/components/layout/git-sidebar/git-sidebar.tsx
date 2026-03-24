@@ -7,19 +7,19 @@ import {
 	RefreshCcw,
 	ScrollText,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
+import type { GitBranchSummary, GitCommitPreview, GitRemote } from "#/lib/git";
+import { getGitBranchCommits } from "#/server/git";
 import {
-	GitSidebarBranchActionDialog,
+	GitSidebarBranchCommitsDialog,
 	GitSidebarCreateBranchDialog,
 } from "./git-sidebar-branch-dialogs";
 import { GitSidebarDiscardDialog } from "./git-sidebar-discard-dialog";
 import {
 	BranchRow,
-	BranchSummaryCard,
 	ChangeGroup,
-	CommitRow,
 	CommitSection,
 	EmptyState,
 	RemoteRow,
@@ -42,21 +42,25 @@ export function GitSidebar({
 	);
 	const [isCreateBranchDialogOpen, setIsCreateBranchDialogOpen] =
 		useState(false);
-	const [branchActionState, setBranchActionState] = useState<{
-		action: "delete" | "merge";
+	const [branchCommitsTarget, setBranchCommitsTarget] = useState<{
 		branchName: string;
+		projectPath: string;
 	} | null>(null);
+	const [branchCommits, setBranchCommits] = useState<GitCommitPreview[]>([]);
+	const [branchCommitsError, setBranchCommitsError] = useState("");
+	const [isBranchCommitsLoading, setIsBranchCommitsLoading] = useState(false);
+	const branchCommitsRequestIdRef = useRef(0);
 	const {
 		discardTarget,
 		error,
+		handleCheckoutLocalBranch,
 		handleCreateLocalBranch,
-		handleDeleteLocalBranch,
 		handleDiscardConfirm,
 		handleGitAction,
-		handleMergeBranchIntoCurrent,
-		handlePushCurrentBranch,
 		handleGitCommit,
 		handleGitGroupAction,
+		handlePullCurrentBranch,
+		handlePushBranchToRemote,
 		handleRefresh,
 		isDiscarding,
 		isLoading,
@@ -69,6 +73,66 @@ export function GitSidebar({
 		onSelectChange,
 		selectedChange,
 	});
+	const branchCommitsBranchName =
+		branchCommitsTarget?.projectPath === activeProjectPath
+			? branchCommitsTarget.branchName
+			: "";
+
+	useEffect(() => {
+		if (!branchCommitsBranchName || !activeProjectPath) {
+			if (!branchCommitsBranchName) {
+				setBranchCommits([]);
+				setBranchCommitsError("");
+				setIsBranchCommitsLoading(false);
+			}
+
+			return;
+		}
+
+		let isCancelled = false;
+		const requestId = branchCommitsRequestIdRef.current + 1;
+		branchCommitsRequestIdRef.current = requestId;
+
+		setBranchCommits([]);
+		setBranchCommitsError("");
+		setIsBranchCommitsLoading(true);
+
+		void getGitBranchCommits({
+			data: {
+				cwd: activeProjectPath,
+				branchName: branchCommitsBranchName,
+			},
+		})
+			.then((nextCommits) => {
+				if (isCancelled || branchCommitsRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setBranchCommits(nextCommits);
+			})
+			.catch((cause) => {
+				if (isCancelled || branchCommitsRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setBranchCommitsError(
+					cause instanceof Error
+						? cause.message
+						: "Failed to load branch commits.",
+				);
+			})
+			.finally(() => {
+				if (isCancelled || branchCommitsRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setIsBranchCommitsLoading(false);
+			});
+
+		return () => {
+			isCancelled = true;
+		};
+	}, [activeProjectPath, branchCommitsBranchName]);
 
 	if (!activeProject) {
 		return (
@@ -81,15 +145,19 @@ export function GitSidebar({
 	const changeCount =
 		(overview?.staged.length ?? 0) + (overview?.unstaged.length ?? 0);
 	const isCreateBranching = pendingMutationKey === "branch:create";
-	const isPushingCurrentBranch = pendingMutationKey === "branch:push";
 	const isAnyBranchMutationPending = pendingMutationKey.startsWith("branch:");
-	const currentBranchPushState = overview?.branch.upstream
-		? overview.branch.ahead > 0
-			? "ready"
-			: overview.branch.behind > 0
-				? "behind"
-				: "synced"
-		: "ready";
+	const isBranchCommitsDialogOpen = Boolean(branchCommitsBranchName);
+	const currentBranch = overview?.branch ?? null;
+	const orderedBranches = overview
+		? [
+				...overview.branches.filter((branch) => branch.isCurrent),
+				...overview.branches.filter((branch) => !branch.isCurrent),
+			]
+		: [];
+	const currentBranchPullRequestUrl =
+		currentBranch && overview
+			? buildPullRequestUrl(currentBranch, overview.remotes)
+			: null;
 
 	return (
 		<>
@@ -205,78 +273,76 @@ export function GitSidebar({
 										<Plus className="size-3" />
 									</Button>
 								}
-							>
-								<BranchSummaryCard
-									branch={overview.branch}
-									isPushing={isPushingCurrentBranch}
-									pushState={currentBranchPushState}
-									onPush={
-										isAnyBranchMutationPending ||
-										isLoading ||
-										currentBranchPushState !== "ready"
-											? undefined
-											: () => {
-													void handlePushCurrentBranch();
-												}
-									}
-								/>
-								<div className="mt-3 space-y-1.5">
-									<div className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
-										Recent Commits
+								>
+									<div className="space-y-1">
+										{orderedBranches.length > 0 ? (
+											orderedBranches.map((branch) => (
+												<BranchRow
+													key={branch.name}
+													branch={branch}
+													currentBranch={branch.isCurrent ? currentBranch : null}
+													isCheckingOut={
+														pendingMutationKey === `branch:checkout:${branch.name}`
+													}
+													isPulling={pendingMutationKey === "branch:pull"}
+													isPushing={
+														pendingMutationKey === `branch:push:${branch.name}`
+													}
+													onCheckout={
+														branch.isCurrent ||
+														isAnyBranchMutationPending ||
+														isLoading
+															? undefined
+															: () => {
+																	void handleCheckoutLocalBranch(branch.name);
+																}
+													}
+													onCreatePullRequest={
+														branch.isCurrent && currentBranchPullRequestUrl
+															? () => {
+																	if (typeof window !== "undefined") {
+																		window.open(
+																			currentBranchPullRequestUrl,
+																			"_blank",
+																			"noopener,noreferrer",
+																		);
+																	}
+																}
+															: undefined
+													}
+													onPull={
+														branch.isCurrent &&
+														currentBranch?.upstream &&
+														!isAnyBranchMutationPending &&
+														!isLoading
+															? () => {
+																	void handlePullCurrentBranch();
+																}
+															: undefined
+													}
+													onPush={
+														!branch.isCurrent &&
+														overview.remotes.length > 0 &&
+														!isAnyBranchMutationPending &&
+														!isLoading
+															? () => {
+																	void handlePushBranchToRemote(branch.name);
+																}
+															: undefined
+													}
+													onShowCommits={() => {
+														setBranchCommitsTarget({
+															branchName: branch.name,
+															projectPath: activeProjectPath,
+														});
+													}}
+												/>
+											))
+										) : (
+											<EmptyState label="No local branches were found." />
+										)}
 									</div>
-									{overview.commits.length > 0 ? (
-										overview.commits.map((commit) => (
-											<CommitRow key={commit.sha} commit={commit} />
-										))
-									) : (
-										<EmptyState label="No commits were found." />
-									)}
-								</div>
-								<div className="mt-3 space-y-1.5">
-									<div className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
-										Local Branches
-									</div>
-									{overview.branches.length > 0 ? (
-										overview.branches.map((branch) => (
-											<BranchRow
-												key={branch.name}
-												branch={branch}
-												isDeleting={
-													pendingMutationKey === `branch:delete:${branch.name}`
-												}
-												isMerging={
-													pendingMutationKey === `branch:merge:${branch.name}`
-												}
-												onDelete={
-													branch.isCurrent ||
-													isAnyBranchMutationPending ||
-													isLoading
-														? undefined
-														: () =>
-																setBranchActionState({
-																	action: "delete",
-																	branchName: branch.name,
-																})
-												}
-												onMerge={
-													branch.isCurrent ||
-													overview.branch.detached ||
-													isAnyBranchMutationPending ||
-													isLoading
-														? undefined
-														: () =>
-																setBranchActionState({
-																	action: "merge",
-																	branchName: branch.name,
-																})
-												}
-											/>
-										))
-									) : (
-										<EmptyState label="No local branches were found." />
-									)}
-								</div>
-							</SidebarSection>
+								</SidebarSection>
 
 							<SidebarSection
 								open={sectionOpenState.remotes}
@@ -335,42 +401,76 @@ export function GitSidebar({
 				}}
 			/>
 			<GitSidebarCreateBranchDialog
+				currentBranchName={currentBranch?.name ?? ""}
+				isDetachedHead={currentBranch?.detached ?? false}
 				isOpen={isCreateBranchDialogOpen}
 				isSubmitting={isCreateBranching}
 				onCreate={handleCreateLocalBranch}
 				onOpenChange={setIsCreateBranchDialogOpen}
 			/>
-			<GitSidebarBranchActionDialog
-				action={branchActionState?.action ?? "merge"}
-				branchName={branchActionState?.branchName ?? ""}
-				isOpen={Boolean(branchActionState)}
-				isSubmitting={
-					Boolean(branchActionState) &&
-					pendingMutationKey ===
-						`branch:${branchActionState?.action}:${branchActionState?.branchName}`
-				}
-				onConfirm={async () => {
-					if (!branchActionState) {
-						return;
-					}
-
-					const didComplete =
-						branchActionState.action === "delete"
-							? await handleDeleteLocalBranch(branchActionState.branchName)
-							: await handleMergeBranchIntoCurrent(
-									branchActionState.branchName,
-								);
-
-					if (didComplete) {
-						setBranchActionState(null);
-					}
-				}}
+			<GitSidebarBranchCommitsDialog
+				branchName={branchCommitsBranchName}
+				commits={branchCommits}
+				error={branchCommitsError}
+				isLoading={isBranchCommitsLoading}
+				isOpen={isBranchCommitsDialogOpen}
 				onOpenChange={(open) => {
-					if (!open && !isAnyBranchMutationPending) {
-						setBranchActionState(null);
+					if (!open) {
+						setBranchCommitsTarget(null);
 					}
 				}}
 			/>
-		</>
+			</>
+		);
+}
+
+function buildPullRequestUrl(
+	branch: GitBranchSummary,
+	remotes: GitRemote[],
+): string | null {
+	if (branch.detached) {
+		return null;
+	}
+
+	const remoteName = branch.upstream?.split("/")[0] || "origin";
+	const remote = remotes.find((entry) => entry.name === remoteName);
+	const webRemoteUrl = normalizeRemoteWebUrl(
+		remote?.pushUrl ?? remote?.fetchUrl ?? null,
 	);
+
+	if (!webRemoteUrl) {
+		return null;
+	}
+
+	if (webRemoteUrl.hostname === "github.com") {
+		return `${webRemoteUrl.origin}${webRemoteUrl.pathname}/compare/${encodeURIComponent(branch.name)}?expand=1`;
+	}
+
+	if (webRemoteUrl.hostname === "gitlab.com") {
+		return `${webRemoteUrl.origin}${webRemoteUrl.pathname}/-/merge_requests/new?merge_request[source_branch]=${encodeURIComponent(branch.name)}`;
+	}
+
+	return null;
+}
+
+function normalizeRemoteWebUrl(remoteUrl: string | null): URL | null {
+	if (!remoteUrl) {
+		return null;
+	}
+
+	let normalized = remoteUrl.trim();
+
+	if (normalized.startsWith("git@")) {
+		normalized = normalized.replace(/^git@([^:]+):/, "https://$1/");
+	} else if (normalized.startsWith("ssh://git@")) {
+		normalized = normalized.replace(/^ssh:\/\/git@/, "https://");
+	}
+
+	normalized = normalized.replace(/\.git$/, "");
+
+	try {
+		return new URL(normalized);
+	} catch {
+		return null;
+	}
 }

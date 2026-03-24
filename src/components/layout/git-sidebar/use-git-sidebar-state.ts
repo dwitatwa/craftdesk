@@ -457,6 +457,16 @@ export function useGitSidebarState({
 		[runGitBranchMutation],
 	);
 
+	const handleCheckoutLocalBranch = useCallback(
+		async (branchName: string) =>
+			runGitBranchMutation("checkout-local", {
+				branchName,
+				mutationKey: `branch:checkout:${branchName}`,
+				errorMessage: "Failed to checkout branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
 	const handleDeleteLocalBranch = useCallback(
 		async (branchName: string) =>
 			runGitBranchMutation("delete-local", {
@@ -477,6 +487,15 @@ export function useGitSidebarState({
 		[runGitBranchMutation],
 	);
 
+	const handlePullCurrentBranch = useCallback(
+		async () =>
+			runGitBranchMutation("pull-current", {
+				mutationKey: "branch:pull",
+				errorMessage: "Failed to pull branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
 	const handlePushCurrentBranch = useCallback(
 		async () =>
 			runGitBranchMutation("push-current", {
@@ -486,14 +505,27 @@ export function useGitSidebarState({
 		[runGitBranchMutation],
 	);
 
+	const handlePushBranchToRemote = useCallback(
+		async (branchName: string) =>
+			runGitBranchMutation("push-branch", {
+				branchName,
+				mutationKey: `branch:push:${branchName}`,
+				errorMessage: "Failed to push branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
 	return {
 		discardTarget,
 		error,
+		handleCheckoutLocalBranch,
 		handleDiscardConfirm,
 		handleGitAction,
 		handleCreateLocalBranch,
 		handleDeleteLocalBranch,
 		handleMergeBranchIntoCurrent,
+		handlePullCurrentBranch,
+		handlePushBranchToRemote,
 		handlePushCurrentBranch,
 		handleGitCommit,
 		handleGitGroupAction,

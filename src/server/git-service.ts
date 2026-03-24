@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import type {
+	GitBranchCommitPreviewInput,
 	GitBranchListEntry,
 	GitBranchMutationInput,
 	GitBranchSummary,
@@ -57,15 +58,13 @@ export async function loadGitRepositoryOverview(
 	const repoRoot = await resolveGitRepositoryRoot(input.cwd);
 	const changeVersion = await ensureGitRepositoryWatchVersion(repoRoot);
 
-	const [branch, branches, commits, statusOutput, remotes, stashes] =
-		await Promise.all([
-			loadBranchSummary(repoRoot),
-			loadLocalBranches(repoRoot),
-			loadCommitPreview(repoRoot),
-			runGit(["status", "--short", "--untracked-files=all"], repoRoot),
-			loadRemotes(repoRoot),
-			loadStashes(repoRoot),
-		]);
+	const [branch, branches, statusOutput, remotes, stashes] = await Promise.all([
+		loadBranchSummary(repoRoot),
+		loadLocalBranches(repoRoot),
+		runGit(["status", "--short", "--untracked-files=all"], repoRoot),
+		loadRemotes(repoRoot),
+		loadStashes(repoRoot),
+	]);
 
 	const { staged, unstaged } = parseGitStatusOutput(statusOutput.stdout);
 
@@ -75,12 +74,23 @@ export async function loadGitRepositoryOverview(
 		changeVersion,
 		branch,
 		branches,
-		commits,
 		staged,
 		unstaged,
 		remotes,
 		stashes,
 	};
+}
+
+export async function loadGitBranchCommits(
+	input: GitBranchCommitPreviewInput,
+): Promise<GitCommitPreview[]> {
+	const repoRoot = await resolveGitRepositoryRoot(input.cwd);
+	const branchName = await requireValidBranchName(input.branchName);
+
+	return loadCommitPreview(repoRoot, {
+		ref: branchName,
+		maxCount: input.maxCount,
+	});
 }
 
 export async function loadGitDiff(input: GitDiffInput): Promise<GitDiffResult> {
@@ -197,6 +207,9 @@ export async function applyGitBranchMutation(input: GitBranchMutationInput) {
 	if (input.action === "create-local") {
 		const branchName = await requireValidBranchName(input.branchName);
 		await runGit(["branch", branchName], repoRoot);
+	} else if (input.action === "checkout-local") {
+		const branchName = await requireValidBranchName(input.branchName);
+		await runGit(["checkout", branchName], repoRoot);
 	} else if (input.action === "delete-local") {
 		const branchName = await requireValidBranchName(input.branchName);
 		const branchSummary = await loadBranchSummary(repoRoot);
@@ -223,6 +236,24 @@ export async function applyGitBranchMutation(input: GitBranchMutationInput) {
 		}
 
 		await runGit(["merge", branchName], repoRoot);
+	} else if (input.action === "pull-current") {
+		const branchSummary = await loadBranchSummary(repoRoot);
+
+		if (branchSummary.detached) {
+			throw new Error("Cannot pull while HEAD is detached.");
+		}
+
+		if (!branchSummary.upstream) {
+			throw new Error(
+				`Current branch "${branchSummary.name}" has no upstream to pull from.`,
+			);
+		}
+
+		await runGit(["pull"], repoRoot);
+	} else if (input.action === "push-branch") {
+		const branchName = await requireValidBranchName(input.branchName);
+		const upstream = await loadBranchUpstream(repoRoot, branchName);
+		await pushBranchToRemote(repoRoot, branchName, upstream);
 	} else if (input.action === "push-current") {
 		const branchSummary = await loadBranchSummary(repoRoot);
 
@@ -230,20 +261,11 @@ export async function applyGitBranchMutation(input: GitBranchMutationInput) {
 			throw new Error("Cannot push while HEAD is detached.");
 		}
 
-		if (branchSummary.upstream) {
-			await runGit(["push"], repoRoot);
-		} else {
-			const remotes = await loadRemotes(repoRoot);
-			const originRemote = remotes.find((remote) => remote.name === "origin");
-
-			if (!originRemote) {
-				throw new Error(
-					`Current branch "${branchSummary.name}" has no upstream and no "origin" remote is configured.`,
-				);
-			}
-
-			await runGit(["push", "-u", "origin", branchSummary.name], repoRoot);
-		}
+		await pushBranchToRemote(
+			repoRoot,
+			branchSummary.name,
+			branchSummary.upstream,
+		);
 	}
 
 	signalGitRepositoryChange(repoRoot);
@@ -251,6 +273,34 @@ export async function applyGitBranchMutation(input: GitBranchMutationInput) {
 	return {
 		ok: true,
 	};
+}
+
+async function pushBranchToRemote(
+	repoRoot: string,
+	branchName: string,
+	upstream: string | null,
+) {
+	if (upstream) {
+		const [remoteName, ...remoteBranchSegments] = upstream.split("/");
+		const remoteBranchName = remoteBranchSegments.join("/") || branchName;
+
+		await runGit(
+			["push", remoteName, `${branchName}:${remoteBranchName}`],
+			repoRoot,
+		);
+		return;
+	}
+
+	const remotes = await loadRemotes(repoRoot);
+	const originRemote = remotes.find((remote) => remote.name === "origin");
+
+	if (!originRemote) {
+		throw new Error(
+			`Branch "${branchName}" has no upstream and no "origin" remote is configured.`,
+		);
+	}
+
+	await runGit(["push", "-u", "origin", branchName], repoRoot);
 }
 
 export async function waitForGitRepositoryChange(
@@ -448,7 +498,7 @@ async function loadLocalBranches(
 		[
 			"for-each-ref",
 			"--sort=-committerdate",
-			"--format=%(refname:short)%x1f%(committerdate:relative)%x1f%(objectname:short)",
+			"--format=%(refname:short)%09%(committerdate:relative)%09%(objectname:short)",
 			"refs/heads",
 		],
 		repoRoot,
@@ -458,7 +508,7 @@ async function loadLocalBranches(
 		.split(/\r?\n/)
 		.filter(Boolean)
 		.map((line) => {
-			const [name, lastCommitRelativeDate, shortSha] = line.split("\u001f");
+			const [name, lastCommitRelativeDate, shortSha] = line.split("\t");
 
 			return {
 				name,
@@ -466,16 +516,34 @@ async function loadLocalBranches(
 				shortSha,
 				isCurrent: name === branchSummary.name,
 			};
-		});
+			});
+}
+
+async function loadBranchUpstream(
+	repoRoot: string,
+	branchName: string,
+): Promise<string | null> {
+	const result = await runGit(
+		["for-each-ref", "--format=%(upstream:short)", `refs/heads/${branchName}`],
+		repoRoot,
+	);
+
+	return result.stdout.trim() || null;
 }
 
 async function loadCommitPreview(
 	repoRoot: string,
+	options: {
+		maxCount?: number;
+		ref?: string;
+	} = {},
 ): Promise<GitCommitPreview[]> {
+	const maxCount = Math.max(1, Math.min(options.maxCount ?? 8, 50));
 	const result = await runGit(
 		[
 			"log",
-			"--max-count=8",
+			...(options.ref ? [options.ref] : []),
+			`--max-count=${maxCount}`,
 			"--date=relative",
 			"--format=%H%x1f%h%x1f%s%x1f%cr%x1f%an",
 		],
