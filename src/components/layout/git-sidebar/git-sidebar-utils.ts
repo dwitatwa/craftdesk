@@ -1,6 +1,9 @@
 import type {
+	GitBranchListEntry,
+	GitBranchSummary,
 	GitChange,
 	GitDiffMode,
+	GitRemote,
 	GitRepositoryOverview,
 	GitSelectedChange,
 } from "#/lib/git";
@@ -96,4 +99,72 @@ export function getChangeToneClassName(code: string) {
 		default:
 			return "bg-white/10 text-zinc-200";
 	}
+}
+
+export function getBranchNameToneClassName(
+	branch: Pick<GitBranchListEntry, "ahead" | "behind" | "isCurrent">,
+) {
+	if (branch.ahead > 0 && branch.behind > 0) {
+		return "text-sky-300";
+	}
+
+	if (branch.behind > 0) {
+		return "text-amber-300";
+	}
+
+	if (branch.ahead > 0) {
+		return "text-emerald-300";
+	}
+
+	return branch.isCurrent ? "text-foreground" : undefined;
+}
+
+export function resolveBranchRowActionState({
+	branch,
+	currentBranch,
+	branchPullRequestUrl,
+	remotes,
+	pendingMutationKey,
+}: {
+	branch: GitBranchListEntry;
+	currentBranch: GitBranchSummary | null;
+	branchPullRequestUrl: string | null;
+	remotes: GitRemote[];
+	pendingMutationKey: string;
+}) {
+	const isCheckingOut = pendingMutationKey === `branch:checkout:${branch.name}`;
+	const isPulling = branch.isCurrent && pendingMutationKey === "branch:pull";
+	const isPushing = branch.isCurrent
+		? pendingMutationKey === "branch:push"
+		: pendingMutationKey === `branch:push:${branch.name}`;
+	const hasUpstream = branch.isCurrent
+		? Boolean(currentBranch?.upstream)
+		: Boolean(branch.upstream);
+	const canPush = branch.isCurrent
+		? Boolean(
+				currentBranch &&
+					!currentBranch.detached &&
+					(!currentBranch.upstream || currentBranch.ahead > 0),
+			)
+		: !branch.upstream
+			? remotes.length > 0
+			: branch.ahead > 0;
+
+	return {
+		canCheckout: !branch.isCurrent,
+		canDelete: !branch.isCurrent,
+		canPull: branch.isCurrent
+			? Boolean(
+					currentBranch?.upstream &&
+						currentBranch.behind > 0 &&
+						currentBranch.ahead === 0,
+				)
+			: false,
+		canPush,
+		canCreatePullRequest: Boolean(branchPullRequestUrl),
+		hasUpstream,
+		isCheckingOut,
+		isPulling,
+		isPushing,
+	};
 }

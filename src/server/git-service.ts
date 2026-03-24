@@ -51,6 +51,8 @@ interface GitRepositoryWatchState {
 }
 
 const repositoryWatchStates = new Map<string, GitRepositoryWatchState>();
+const GIT_TRACK_AHEAD_PATTERN = /ahead (\d+)/;
+const GIT_TRACK_BEHIND_PATTERN = /behind (\d+)/;
 
 export async function loadGitRepositoryOverview(
 	input: GitRepositoryOverviewInput,
@@ -498,7 +500,7 @@ async function loadLocalBranches(
 		[
 			"for-each-ref",
 			"--sort=-committerdate",
-			"--format=%(refname:short)%09%(committerdate:relative)%09%(objectname:short)",
+			"--format=%(refname:short)%09%(upstream:short)%09%(upstream:track)%09%(committerdate:relative)%09%(objectname:short)",
 			"refs/heads",
 		],
 		repoRoot,
@@ -508,15 +510,51 @@ async function loadLocalBranches(
 		.split(/\r?\n/)
 		.filter(Boolean)
 		.map((line) => {
-			const [name, lastCommitRelativeDate, shortSha] = line.split("\t");
+			const [
+				name,
+				upstreamValue,
+				upstreamTrack,
+				lastCommitRelativeDate,
+				shortSha,
+			] = line.split("\t");
+			const upstream = upstreamValue || null;
+			const { ahead, behind } = parseUpstreamTrack(upstreamTrack);
 
 			return {
 				name,
+				upstream,
+				ahead,
+				behind,
 				lastCommitRelativeDate,
 				shortSha,
 				isCurrent: name === branchSummary.name,
 			};
-			});
+		});
+}
+
+export function parseUpstreamTrack(track: string | undefined) {
+	const normalizedTrack = track?.trim() ?? "";
+
+	if (!normalizedTrack || normalizedTrack === "[gone]") {
+		return {
+			ahead: 0,
+			behind: 0,
+		};
+	}
+
+	const ahead = Number.parseInt(
+		normalizedTrack.match(GIT_TRACK_AHEAD_PATTERN)?.[1] ?? "0",
+		10,
+	);
+	const behind = Number.parseInt(
+		normalizedTrack.match(GIT_TRACK_BEHIND_PATTERN)?.[1] ?? "0",
+		10,
+	);
+
+	return {
+		ahead,
+		behind,
+	};
 }
 
 async function loadBranchUpstream(

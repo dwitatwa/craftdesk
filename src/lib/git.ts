@@ -84,6 +84,9 @@ export interface GitBranchSummary {
 
 export interface GitBranchListEntry {
 	name: string;
+	upstream: string | null;
+	ahead: number;
+	behind: number;
 	lastCommitRelativeDate: string;
 	shortSha: string;
 	isCurrent: boolean;

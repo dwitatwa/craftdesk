@@ -1,18 +1,19 @@
 import {
-	ArrowDownToLine,
-	ArrowRightLeft,
-	ArrowUpToLine,
 	ChevronDown,
 	GitBranch,
 	GitCommitHorizontal,
-	GitPullRequest,
 	LoaderCircle,
 	Minus,
 	Plus,
 	RotateCcw,
 	Send,
 } from "lucide-react";
-import type { ComponentType, MouseEvent, ReactNode } from "react";
+import type {
+	ComponentType,
+	KeyboardEvent,
+	MouseEvent,
+	ReactNode,
+} from "react";
 import { useState } from "react";
 
 import { Button } from "#/components/ui/button";
@@ -28,7 +29,10 @@ import type {
 	GitStashEntry,
 } from "#/lib/git";
 import { cn } from "#/lib/utils";
-import { getChangeToneClassName } from "./git-sidebar-utils";
+import {
+	getBranchNameToneClassName,
+	getChangeToneClassName,
+} from "./git-sidebar-utils";
 
 export function CommitSection({
 	onCommit,
@@ -417,38 +421,18 @@ export function CommitRow({ commit }: { commit: GitCommitPreview }) {
 export function BranchRow({
 	branch,
 	currentBranch,
-	canCheckout = false,
-	canPull = false,
-	canPush = false,
 	isCheckingOut = false,
-	isCheckoutDisabled = false,
 	isPulling = false,
-	isPullDisabled = false,
 	isPushing = false,
-	isPushDisabled = false,
-	onCheckout,
-	onCreatePullRequest,
-	onDeleteContextMenu,
-	onPull,
-	onPush,
+	onOpenContextMenu,
 	onShowCommits,
 }: {
 	branch: GitBranchListEntry;
 	currentBranch?: GitRepositoryOverview["branch"] | null;
-	canCheckout?: boolean;
-	canPull?: boolean;
-	canPush?: boolean;
 	isCheckingOut?: boolean;
-	isCheckoutDisabled?: boolean;
 	isPulling?: boolean;
-	isPullDisabled?: boolean;
 	isPushing?: boolean;
-	isPushDisabled?: boolean;
-	onCheckout?: () => void;
-	onCreatePullRequest?: () => void;
-	onDeleteContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
-	onPull?: () => void;
-	onPush?: () => void;
+	onOpenContextMenu?: (position: { x: number; y: number }) => void;
 	onShowCommits?: () => void;
 }) {
 	const details = branch.isCurrent
@@ -458,21 +442,23 @@ export function BranchRow({
 				? "Detached HEAD"
 				: "No upstream"
 		: null;
-	const showActions = branch.isCurrent
-		? canPull || onCreatePullRequest || onShowCommits || isPulling
-		: canPush || canCheckout || onShowCommits || isPushing || isCheckingOut;
-	const keepActionsVisible = isCheckingOut || isPulling || isPushing;
-	const hasCurrentBranchUpstream = Boolean(currentBranch?.upstream);
+	const hasBranchUpstream = branch.isCurrent
+		? Boolean(currentBranch?.upstream)
+		: Boolean(branch.upstream);
+	const branchNameClassName = getBranchNameToneClassName(branch);
+	const isBusy = isCheckingOut || isPulling || isPushing;
+	const busyLabel = isCheckingOut
+		? `Checking out ${branch.name}`
+		: isPulling
+			? `Pulling ${branch.name}`
+			: hasBranchUpstream
+				? `Pushing ${branch.name}`
+				: `Publishing ${branch.name}`;
 	const branchContent = (
 		<>
 			<GitBranch className="size-3 shrink-0 text-muted-foreground/70" />
 			<div className="min-w-0 flex items-center gap-1.5 text-[11px]">
-				<div
-					className={cn(
-						"truncate font-medium",
-						branch.isCurrent ? "text-foreground" : undefined,
-					)}
-				>
+				<div className={cn("truncate font-medium", branchNameClassName)}>
 					{branch.name}
 				</div>
 				{details ? (
@@ -486,6 +472,41 @@ export function BranchRow({
 			</div>
 		</>
 	);
+	const handleKeyboardContextMenu = (
+		event: KeyboardEvent<HTMLButtonElement>,
+	) => {
+		if (
+			event.key !== "ContextMenu" &&
+			!(event.shiftKey && event.key === "F10")
+		) {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		if (!onOpenContextMenu) {
+			return;
+		}
+
+		const bounds = event.currentTarget.getBoundingClientRect();
+		onOpenContextMenu({
+			x: bounds.right - 12,
+			y: bounds.top + bounds.height / 2,
+		});
+	};
+	const handleMouseContextMenu = (event: MouseEvent<HTMLButtonElement>) => {
+		if (!onOpenContextMenu) {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+		onOpenContextMenu({
+			x: event.clientX,
+			y: event.clientY,
+		});
+	};
 
 	return (
 		<div
@@ -501,8 +522,10 @@ export function BranchRow({
 					type="button"
 					className="min-w-0 flex flex-1 items-center gap-2 rounded-sm bg-transparent p-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
 					onClick={onShowCommits}
-					onContextMenu={onDeleteContextMenu}
+					onContextMenu={handleMouseContextMenu}
+					onKeyDown={handleKeyboardContextMenu}
 					title={`Show recent commits for ${branch.name}`}
+					aria-haspopup="menu"
 				>
 					{branchContent}
 				</button>
@@ -511,174 +534,12 @@ export function BranchRow({
 					{branchContent}
 				</div>
 			)}
-			{showActions ? (
+			{isBusy ? (
 				<div
-					className={cn(
-						"flex shrink-0 items-center gap-1 transition-opacity",
-						keepActionsVisible
-							? "opacity-100 pointer-events-auto"
-							: "opacity-0 pointer-events-none group-hover/branch:opacity-100 group-hover/branch:pointer-events-auto group-focus-within/branch:opacity-100 group-focus-within/branch:pointer-events-auto",
-					)}
+					className="flex shrink-0 items-center gap-1 text-muted-foreground"
+					title={busyLabel}
 				>
-					{branch.isCurrent ? (
-						<>
-							{canPush ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="text-muted-foreground hover:text-foreground"
-									onClick={(event) => {
-										event.stopPropagation();
-										onPush?.();
-									}}
-									disabled={isPushDisabled || isPushing || !onPush}
-									aria-label={
-										isPushing
-											? hasCurrentBranchUpstream
-												? `Pushing ${branch.name}`
-												: `Publishing ${branch.name}`
-											: hasCurrentBranchUpstream
-												? `Push ${branch.name}`
-												: `Publish ${branch.name}`
-									}
-									title={
-										isPushing
-											? hasCurrentBranchUpstream
-												? `Pushing ${branch.name}`
-												: `Publishing ${branch.name}`
-											: hasCurrentBranchUpstream
-												? `Push ${branch.name}`
-												: `Publish ${branch.name}`
-									}
-								>
-									{isPushing ? (
-										<LoaderCircle className="size-3 animate-spin" />
-									) : (
-										<ArrowUpToLine className="size-3" />
-									)}
-								</Button>
-							) : null}
-							{canPull ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="text-muted-foreground hover:text-foreground"
-									onClick={(event) => {
-										event.stopPropagation();
-										onPull?.();
-									}}
-									disabled={isPullDisabled || isPulling || !onPull}
-									aria-label={
-										isPulling ? `Pulling ${branch.name}` : `Pull ${branch.name}`
-									}
-									title={
-										isPulling ? `Pulling ${branch.name}` : `Pull ${branch.name}`
-									}
-								>
-									{isPulling ? (
-										<LoaderCircle className="size-3 animate-spin" />
-									) : (
-										<ArrowDownToLine className="size-3" />
-									)}
-								</Button>
-							) : null}
-							{onCreatePullRequest ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="text-muted-foreground hover:text-foreground"
-									onClick={(event) => {
-										event.stopPropagation();
-										onCreatePullRequest();
-									}}
-									aria-label={`Create pull request from ${branch.name}`}
-									title={`Create pull request from ${branch.name}`}
-								>
-									<GitPullRequest className="size-3" />
-								</Button>
-							) : null}
-						</>
-					) : (
-						<>
-							{canPush ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="text-muted-foreground hover:text-foreground"
-									onClick={(event) => {
-										event.stopPropagation();
-										onPush?.();
-									}}
-									disabled={isPushDisabled || isPushing || !onPush}
-									aria-label={
-										isPushing
-											? `Pushing ${branch.name} to remote`
-											: `Push ${branch.name} to remote`
-									}
-									title={
-										isPushing
-											? `Pushing ${branch.name} to remote`
-											: `Push ${branch.name} to remote`
-									}
-								>
-									{isPushing ? (
-										<LoaderCircle className="size-3 animate-spin" />
-									) : (
-										<ArrowUpToLine className="size-3" />
-									)}
-								</Button>
-							) : null}
-							{canCheckout ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									className="text-muted-foreground hover:text-foreground"
-									onClick={(event) => {
-										event.stopPropagation();
-										onCheckout?.();
-									}}
-									disabled={isCheckoutDisabled || isCheckingOut || !onCheckout}
-									aria-label={
-										isCheckingOut
-											? `Checking out ${branch.name}`
-											: `Checkout ${branch.name}`
-									}
-									title={
-										isCheckingOut
-											? `Checking out ${branch.name}`
-											: `Checkout ${branch.name}`
-									}
-								>
-									{isCheckingOut ? (
-										<LoaderCircle className="size-3 animate-spin" />
-									) : (
-										<ArrowRightLeft className="size-3" />
-									)}
-								</Button>
-							) : null}
-						</>
-					)}
-					{onShowCommits ? (
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon-xs"
-							className="text-muted-foreground hover:text-foreground"
-							onClick={(event) => {
-								event.stopPropagation();
-								onShowCommits();
-							}}
-							aria-label={`Show recent commits for ${branch.name}`}
-							title={`Show recent commits for ${branch.name}`}
-						>
-							<GitCommitHorizontal className="size-3" />
-						</Button>
-					) : null}
+					<LoaderCircle className="size-3 animate-spin" />
 				</div>
 			) : null}
 		</div>
