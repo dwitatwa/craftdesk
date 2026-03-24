@@ -82,22 +82,22 @@ export function GitSidebarCreateBranchDialog({
 						void handleCreate();
 					}}
 				>
-						<DialogHeader>
-							<DialogTitle>Create Local Branch</DialogTitle>
-							<DialogDescription>
-								{isDetachedHead ? (
-									"Create a new local branch from the current HEAD."
-								) : (
-									<>
-										Create a new local branch from{" "}
-										<span className="font-medium text-foreground">
-											{currentBranchName}
-										</span>
-										.
-									</>
-								)}
-							</DialogDescription>
-						</DialogHeader>
+					<DialogHeader>
+						<DialogTitle>Create Local Branch</DialogTitle>
+						<DialogDescription>
+							{isDetachedHead ? (
+								"Create a new local branch from the current HEAD."
+							) : (
+								<>
+									Create a new local branch from{" "}
+									<span className="font-medium text-foreground">
+										{currentBranchName}
+									</span>
+									.
+								</>
+							)}
+						</DialogDescription>
+					</DialogHeader>
 					<div className="grid gap-4 py-4">
 						<div className="grid gap-2">
 							<Label

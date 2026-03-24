@@ -6,6 +6,7 @@ import {
 	Plus,
 	RefreshCcw,
 	ScrollText,
+	Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -13,6 +14,7 @@ import { Button } from "#/components/ui/button";
 import type { GitBranchSummary, GitCommitPreview, GitRemote } from "#/lib/git";
 import { getGitBranchCommits } from "#/server/git";
 import {
+	GitSidebarBranchActionDialog,
 	GitSidebarBranchCommitsDialog,
 	GitSidebarCreateBranchDialog,
 } from "./git-sidebar-branch-dialogs";
@@ -42,6 +44,14 @@ export function GitSidebar({
 	);
 	const [isCreateBranchDialogOpen, setIsCreateBranchDialogOpen] =
 		useState(false);
+	const [branchContextMenuState, setBranchContextMenuState] = useState<{
+		branchName: string;
+		x: number;
+		y: number;
+	} | null>(null);
+	const [deleteBranchTarget, setDeleteBranchTarget] = useState<string | null>(
+		null,
+	);
 	const [branchCommitsTarget, setBranchCommitsTarget] = useState<{
 		branchName: string;
 		projectPath: string;
@@ -50,17 +60,20 @@ export function GitSidebar({
 	const [branchCommitsError, setBranchCommitsError] = useState("");
 	const [isBranchCommitsLoading, setIsBranchCommitsLoading] = useState(false);
 	const branchCommitsRequestIdRef = useRef(0);
+	const branchContextMenuRef = useRef<HTMLDivElement | null>(null);
 	const {
 		discardTarget,
 		error,
 		handleCheckoutLocalBranch,
 		handleCreateLocalBranch,
+		handleDeleteLocalBranch,
 		handleDiscardConfirm,
 		handleGitAction,
 		handleGitCommit,
 		handleGitGroupAction,
 		handlePullCurrentBranch,
 		handlePushBranchToRemote,
+		handlePushCurrentBranch,
 		handleRefresh,
 		isDiscarding,
 		isLoading,
@@ -134,6 +147,46 @@ export function GitSidebar({
 		};
 	}, [activeProjectPath, branchCommitsBranchName]);
 
+	useEffect(() => {
+		if (!branchContextMenuState) {
+			return;
+		}
+
+		const handlePointerDown = (event: PointerEvent) => {
+			if (branchContextMenuRef.current?.contains(event.target as Node)) {
+				return;
+			}
+
+			setBranchContextMenuState(null);
+		};
+
+		const handleEscape = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") {
+				return;
+			}
+
+			event.preventDefault();
+			event.stopPropagation();
+			setBranchContextMenuState(null);
+		};
+
+		const handleViewportChange = () => {
+			setBranchContextMenuState(null);
+		};
+
+		window.addEventListener("pointerdown", handlePointerDown);
+		window.addEventListener("keydown", handleEscape, true);
+		window.addEventListener("resize", handleViewportChange);
+		window.addEventListener("scroll", handleViewportChange, true);
+
+		return () => {
+			window.removeEventListener("pointerdown", handlePointerDown);
+			window.removeEventListener("keydown", handleEscape, true);
+			window.removeEventListener("resize", handleViewportChange);
+			window.removeEventListener("scroll", handleViewportChange, true);
+		};
+	}, [branchContextMenuState]);
+
 	if (!activeProject) {
 		return (
 			<div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
@@ -146,6 +199,9 @@ export function GitSidebar({
 		(overview?.staged.length ?? 0) + (overview?.unstaged.length ?? 0);
 	const isCreateBranching = pendingMutationKey === "branch:create";
 	const isAnyBranchMutationPending = pendingMutationKey.startsWith("branch:");
+	const isDeleteBranching = deleteBranchTarget
+		? pendingMutationKey === `branch:delete:${deleteBranchTarget}`
+		: false;
 	const isBranchCommitsDialogOpen = Boolean(branchCommitsBranchName);
 	const currentBranch = overview?.branch ?? null;
 	const orderedBranches = overview
@@ -158,6 +214,21 @@ export function GitSidebar({
 		currentBranch && overview
 			? buildPullRequestUrl(currentBranch, overview.remotes)
 			: null;
+	const isBranchActionDisabled = isLoading || isAnyBranchMutationPending;
+
+	const handleDeleteBranchConfirm = async () => {
+		if (!deleteBranchTarget) {
+			return;
+		}
+
+		const didDelete = await handleDeleteLocalBranch(deleteBranchTarget);
+
+		if (!didDelete) {
+			return;
+		}
+
+		setDeleteBranchTarget(null);
+	};
 
 	return (
 		<>
@@ -267,35 +338,76 @@ export function GitSidebar({
 											setIsCreateBranchDialogOpen(true);
 										}}
 										disabled={isLoading || isAnyBranchMutationPending}
-										aria-label="Create local branch"
-										title="Create local branch"
+										aria-label={
+											isCreateBranching
+												? "Creating local branch"
+												: "Create local branch"
+										}
+										title={
+											isCreateBranching
+												? "Creating local branch"
+												: "Create local branch"
+										}
 									>
-										<Plus className="size-3" />
+										{isCreateBranching ? (
+											<LoaderCircle className="size-3 animate-spin" />
+										) : (
+											<Plus className="size-3" />
+										)}
 									</Button>
 								}
-								>
-									<div className="space-y-1">
-										{orderedBranches.length > 0 ? (
-											orderedBranches.map((branch) => (
+							>
+								<div className="space-y-1">
+									{orderedBranches.length > 0 ? (
+										orderedBranches.map((branch) => {
+											const canCheckout = !branch.isCurrent;
+											const canDelete = !branch.isCurrent;
+											const canPull = branch.isCurrent
+												? Boolean(
+														currentBranch?.upstream &&
+															currentBranch.behind > 0 &&
+															currentBranch.ahead === 0,
+													)
+												: false;
+											const canPush = branch.isCurrent
+												? Boolean(
+														currentBranch &&
+															!currentBranch.detached &&
+															(!currentBranch.upstream ||
+																currentBranch.ahead > 0),
+													)
+												: overview.remotes.length > 0;
+
+											return (
 												<BranchRow
 													key={branch.name}
 													branch={branch}
-													currentBranch={branch.isCurrent ? currentBranch : null}
+													currentBranch={
+														branch.isCurrent ? currentBranch : null
+													}
+													canCheckout={canCheckout}
+													canPull={canPull}
+													canPush={canPush}
 													isCheckingOut={
-														pendingMutationKey === `branch:checkout:${branch.name}`
+														pendingMutationKey ===
+														`branch:checkout:${branch.name}`
 													}
+													isCheckoutDisabled={isBranchActionDisabled}
 													isPulling={pendingMutationKey === "branch:pull"}
+													isPullDisabled={isBranchActionDisabled}
 													isPushing={
-														pendingMutationKey === `branch:push:${branch.name}`
+														branch.isCurrent
+															? pendingMutationKey === "branch:push"
+															: pendingMutationKey ===
+																`branch:push:${branch.name}`
 													}
+													isPushDisabled={isBranchActionDisabled}
 													onCheckout={
-														branch.isCurrent ||
-														isAnyBranchMutationPending ||
-														isLoading
-															? undefined
-															: () => {
+														canCheckout
+															? () => {
 																	void handleCheckoutLocalBranch(branch.name);
 																}
+															: undefined
 													}
 													onCreatePullRequest={
 														branch.isCurrent && currentBranchPullRequestUrl
@@ -310,22 +422,34 @@ export function GitSidebar({
 																}
 															: undefined
 													}
+													onDeleteContextMenu={
+														canDelete
+															? (event) => {
+																	event.preventDefault();
+																	event.stopPropagation();
+																	setBranchContextMenuState({
+																		branchName: branch.name,
+																		x: event.clientX,
+																		y: event.clientY,
+																	});
+																}
+															: undefined
+													}
 													onPull={
-														branch.isCurrent &&
-														currentBranch?.upstream &&
-														!isAnyBranchMutationPending &&
-														!isLoading
+														canPull
 															? () => {
 																	void handlePullCurrentBranch();
 																}
 															: undefined
 													}
 													onPush={
-														!branch.isCurrent &&
-														overview.remotes.length > 0 &&
-														!isAnyBranchMutationPending &&
-														!isLoading
+														canPush
 															? () => {
+																	if (branch.isCurrent) {
+																		void handlePushCurrentBranch();
+																		return;
+																	}
+
 																	void handlePushBranchToRemote(branch.name);
 																}
 															: undefined
@@ -337,12 +461,13 @@ export function GitSidebar({
 														});
 													}}
 												/>
-											))
-										) : (
-											<EmptyState label="No local branches were found." />
-										)}
-									</div>
-								</SidebarSection>
+											);
+										})
+									) : (
+										<EmptyState label="No local branches were found." />
+									)}
+								</div>
+							</SidebarSection>
 
 							<SidebarSection
 								open={sectionOpenState.remotes}
@@ -408,6 +533,45 @@ export function GitSidebar({
 				onCreate={handleCreateLocalBranch}
 				onOpenChange={setIsCreateBranchDialogOpen}
 			/>
+			{branchContextMenuState ? (
+				<div
+					ref={branchContextMenuRef}
+					className="fixed z-50 min-w-44 overflow-hidden rounded-xl border border-white/8 bg-[#111113] p-1 shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+					style={{
+						left: branchContextMenuState.x,
+						top: branchContextMenuState.y,
+					}}
+				>
+					<button
+						type="button"
+						className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-300/90 transition-colors hover:bg-red-500/14 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+						disabled={isBranchActionDisabled}
+						onClick={() => {
+							if (isBranchActionDisabled) {
+								return;
+							}
+
+							setDeleteBranchTarget(branchContextMenuState.branchName);
+							setBranchContextMenuState(null);
+						}}
+					>
+						<Trash2 className="size-3.5 text-red-400/85" />
+						<span>Delete Branch</span>
+					</button>
+				</div>
+			) : null}
+			<GitSidebarBranchActionDialog
+				action="delete"
+				branchName={deleteBranchTarget ?? ""}
+				isOpen={Boolean(deleteBranchTarget)}
+				isSubmitting={isDeleteBranching}
+				onConfirm={handleDeleteBranchConfirm}
+				onOpenChange={(open) => {
+					if (!open && !isDeleteBranching) {
+						setDeleteBranchTarget(null);
+					}
+				}}
+			/>
 			<GitSidebarBranchCommitsDialog
 				branchName={branchCommitsBranchName}
 				commits={branchCommits}
@@ -420,8 +584,8 @@ export function GitSidebar({
 					}
 				}}
 			/>
-			</>
-		);
+		</>
+	);
 }
 
 function buildPullRequestUrl(

@@ -12,7 +12,7 @@ import {
 	RotateCcw,
 	Send,
 } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, MouseEvent, ReactNode } from "react";
 import { useState } from "react";
 
 import { Button } from "#/components/ui/button";
@@ -417,22 +417,36 @@ export function CommitRow({ commit }: { commit: GitCommitPreview }) {
 export function BranchRow({
 	branch,
 	currentBranch,
+	canCheckout = false,
+	canPull = false,
+	canPush = false,
 	isCheckingOut = false,
+	isCheckoutDisabled = false,
 	isPulling = false,
+	isPullDisabled = false,
 	isPushing = false,
+	isPushDisabled = false,
 	onCheckout,
 	onCreatePullRequest,
+	onDeleteContextMenu,
 	onPull,
 	onPush,
 	onShowCommits,
 }: {
 	branch: GitBranchListEntry;
 	currentBranch?: GitRepositoryOverview["branch"] | null;
+	canCheckout?: boolean;
+	canPull?: boolean;
+	canPush?: boolean;
 	isCheckingOut?: boolean;
+	isCheckoutDisabled?: boolean;
 	isPulling?: boolean;
+	isPullDisabled?: boolean;
 	isPushing?: boolean;
+	isPushDisabled?: boolean;
 	onCheckout?: () => void;
 	onCreatePullRequest?: () => void;
+	onDeleteContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
 	onPull?: () => void;
 	onPush?: () => void;
 	onShowCommits?: () => void;
@@ -445,8 +459,10 @@ export function BranchRow({
 				: "No upstream"
 		: null;
 	const showActions = branch.isCurrent
-		? onPull || onCreatePullRequest || onShowCommits || isPulling
-		: onPush || onCheckout || onShowCommits || isPushing || isCheckingOut;
+		? canPull || onCreatePullRequest || onShowCommits || isPulling
+		: canPush || canCheckout || onShowCommits || isPushing || isCheckingOut;
+	const keepActionsVisible = isCheckingOut || isPulling || isPushing;
+	const hasCurrentBranchUpstream = Boolean(currentBranch?.upstream);
 	const branchContent = (
 		<>
 			<GitBranch className="size-3 shrink-0 text-muted-foreground/70" />
@@ -485,6 +501,7 @@ export function BranchRow({
 					type="button"
 					className="min-w-0 flex flex-1 items-center gap-2 rounded-sm bg-transparent p-0 text-left outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
 					onClick={onShowCommits}
+					onContextMenu={onDeleteContextMenu}
 					title={`Show recent commits for ${branch.name}`}
 				>
 					{branchContent}
@@ -495,10 +512,17 @@ export function BranchRow({
 				</div>
 			)}
 			{showActions ? (
-				<div className="flex shrink-0 items-center gap-1 opacity-0 pointer-events-none transition-opacity group-hover/branch:opacity-100 group-hover/branch:pointer-events-auto group-focus-within/branch:opacity-100 group-focus-within/branch:pointer-events-auto">
+				<div
+					className={cn(
+						"flex shrink-0 items-center gap-1 transition-opacity",
+						keepActionsVisible
+							? "opacity-100 pointer-events-auto"
+							: "opacity-0 pointer-events-none group-hover/branch:opacity-100 group-hover/branch:pointer-events-auto group-focus-within/branch:opacity-100 group-focus-within/branch:pointer-events-auto",
+					)}
+				>
 					{branch.isCurrent ? (
 						<>
-							{onPull ? (
+							{canPush ? (
 								<Button
 									type="button"
 									variant="ghost"
@@ -506,11 +530,52 @@ export function BranchRow({
 									className="text-muted-foreground hover:text-foreground"
 									onClick={(event) => {
 										event.stopPropagation();
-										onPull();
+										onPush?.();
 									}}
-									disabled={isPulling}
-									aria-label={`Pull ${branch.name}`}
-									title={`Pull ${branch.name}`}
+									disabled={isPushDisabled || isPushing || !onPush}
+									aria-label={
+										isPushing
+											? hasCurrentBranchUpstream
+												? `Pushing ${branch.name}`
+												: `Publishing ${branch.name}`
+											: hasCurrentBranchUpstream
+												? `Push ${branch.name}`
+												: `Publish ${branch.name}`
+									}
+									title={
+										isPushing
+											? hasCurrentBranchUpstream
+												? `Pushing ${branch.name}`
+												: `Publishing ${branch.name}`
+											: hasCurrentBranchUpstream
+												? `Push ${branch.name}`
+												: `Publish ${branch.name}`
+									}
+								>
+									{isPushing ? (
+										<LoaderCircle className="size-3 animate-spin" />
+									) : (
+										<ArrowUpToLine className="size-3" />
+									)}
+								</Button>
+							) : null}
+							{canPull ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									className="text-muted-foreground hover:text-foreground"
+									onClick={(event) => {
+										event.stopPropagation();
+										onPull?.();
+									}}
+									disabled={isPullDisabled || isPulling || !onPull}
+									aria-label={
+										isPulling ? `Pulling ${branch.name}` : `Pull ${branch.name}`
+									}
+									title={
+										isPulling ? `Pulling ${branch.name}` : `Pull ${branch.name}`
+									}
 								>
 									{isPulling ? (
 										<LoaderCircle className="size-3 animate-spin" />
@@ -538,7 +603,7 @@ export function BranchRow({
 						</>
 					) : (
 						<>
-							{onPush ? (
+							{canPush ? (
 								<Button
 									type="button"
 									variant="ghost"
@@ -546,11 +611,19 @@ export function BranchRow({
 									className="text-muted-foreground hover:text-foreground"
 									onClick={(event) => {
 										event.stopPropagation();
-										onPush();
+										onPush?.();
 									}}
-									disabled={isPushing}
-									aria-label={`Push ${branch.name} to remote`}
-									title={`Push ${branch.name} to remote`}
+									disabled={isPushDisabled || isPushing || !onPush}
+									aria-label={
+										isPushing
+											? `Pushing ${branch.name} to remote`
+											: `Push ${branch.name} to remote`
+									}
+									title={
+										isPushing
+											? `Pushing ${branch.name} to remote`
+											: `Push ${branch.name} to remote`
+									}
 								>
 									{isPushing ? (
 										<LoaderCircle className="size-3 animate-spin" />
@@ -559,7 +632,7 @@ export function BranchRow({
 									)}
 								</Button>
 							) : null}
-							{onCheckout ? (
+							{canCheckout ? (
 								<Button
 									type="button"
 									variant="ghost"
@@ -567,11 +640,19 @@ export function BranchRow({
 									className="text-muted-foreground hover:text-foreground"
 									onClick={(event) => {
 										event.stopPropagation();
-										onCheckout();
+										onCheckout?.();
 									}}
-									disabled={isCheckingOut}
-									aria-label={`Checkout ${branch.name}`}
-									title={`Checkout ${branch.name}`}
+									disabled={isCheckoutDisabled || isCheckingOut || !onCheckout}
+									aria-label={
+										isCheckingOut
+											? `Checking out ${branch.name}`
+											: `Checkout ${branch.name}`
+									}
+									title={
+										isCheckingOut
+											? `Checking out ${branch.name}`
+											: `Checkout ${branch.name}`
+									}
 								>
 									{isCheckingOut ? (
 										<LoaderCircle className="size-3 animate-spin" />
