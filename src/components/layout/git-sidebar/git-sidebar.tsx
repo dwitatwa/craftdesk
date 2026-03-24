@@ -323,7 +323,7 @@ export function GitSidebar({
 	return (
 		<>
 			<div className="flex h-full min-h-0 flex-col">
-				<div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar px-2 py-2">
+				<div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3">
 					{error ? (
 						<div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-100">
 							{error}
@@ -331,14 +331,14 @@ export function GitSidebar({
 					) : null}
 
 					{!error && isLoading && !overview ? (
-						<div className="flex items-center gap-2 px-2 py-4 text-xs text-muted-foreground">
+						<div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
 							<LoaderCircle className="size-3 animate-spin" />
 							Loading Git state...
 						</div>
 					) : null}
 
 					{!error && overview ? (
-						<div className="space-y-1">
+						<div className="divide-y divide-white/6">
 							<CommitSection
 								onCommit={handleGitCommit}
 								disabled={isLoading || overview.staged.length === 0}
@@ -380,7 +380,7 @@ export function GitSidebar({
 									</Button>
 								}
 							>
-								<div className="flex flex-col gap-4">
+								<div className="flex flex-col gap-3">
 									<ChangeGroup
 										title="Staged"
 										changes={overview.staged}
@@ -503,9 +503,11 @@ export function GitSidebar({
 								icon={GitFork}
 							>
 								{overview.remotes.length > 0 ? (
-									overview.remotes.map((remote) => (
-										<RemoteRow key={remote.name} remote={remote} />
-									))
+									<div className="space-y-1">
+										{overview.remotes.map((remote) => (
+											<RemoteRow key={remote.name} remote={remote} />
+										))}
+									</div>
 								) : (
 									<EmptyState label="No remotes could be found." />
 								)}
@@ -523,9 +525,11 @@ export function GitSidebar({
 								icon={ScrollText}
 							>
 								{overview.stashes.length > 0 ? (
-									overview.stashes.map((stash) => (
-										<StashRow key={stash.name} stash={stash} />
-									))
+									<div className="space-y-1">
+										{overview.stashes.map((stash) => (
+											<StashRow key={stash.name} stash={stash} />
+										))}
+									</div>
 								) : (
 									<EmptyState label="No stashes could be found." />
 								)}

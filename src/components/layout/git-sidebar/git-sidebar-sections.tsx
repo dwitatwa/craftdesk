@@ -34,6 +34,10 @@ import {
 	getChangeToneClassName,
 } from "./git-sidebar-utils";
 
+const GIT_SECTION_HEADER_CLASS =
+	"flex items-center justify-between gap-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground/70 transition-colors hover:text-foreground";
+const GIT_SECTION_BODY_CLASS = "pl-4 pt-2";
+
 export function CommitSection({
 	onCommit,
 	disabled = false,
@@ -55,10 +59,10 @@ export function CommitSection({
 	};
 
 	return (
-		<div className="px-3 py-2 space-y-2">
+		<div className="space-y-3 py-3">
 			<Textarea
 				placeholder="Commit message (Ctrl+Enter to commit)"
-				className="min-h-[60px] text-[11px] resize-none bg-black/20 border-white/5 focus-visible:ring-1 focus-visible:ring-primary/50"
+				className="min-h-[72px] resize-none border-white/8 bg-black/20 text-[11px] focus-visible:ring-1 focus-visible:ring-primary/50"
 				value={message}
 				onChange={(e) => setMessage(e.target.value)}
 				onKeyDown={(e) => {
@@ -69,11 +73,11 @@ export function CommitSection({
 				}}
 				disabled={disabled || isCommitting}
 			/>
-			<div className="flex gap-1.5">
+			<div className="flex gap-2">
 				<Button
 					size="sm"
 					variant="secondary"
-					className="flex-1 h-7 text-[10px] font-bold"
+					className="h-7 flex-1 text-[10px] font-bold"
 					onClick={() => handleSubmit("commit")}
 					disabled={disabled || isCommitting || !message.trim()}
 				>
@@ -116,11 +120,11 @@ export function SidebarSection({
 	children: ReactNode;
 }) {
 	return (
-		<div className="group">
-			<div className="flex items-center justify-between px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:text-foreground">
+		<div className="group py-2">
+			<div className={GIT_SECTION_HEADER_CLASS}>
 				<button
 					type="button"
-					className="inline-flex min-w-0 flex-1 items-center gap-1.5 text-left outline-none"
+					className="inline-flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
 					onClick={() => onOpenChange(!open)}
 				>
 					<ChevronDown
@@ -132,9 +136,9 @@ export function SidebarSection({
 					<Icon className="size-3 shrink-0" />
 					<span className="truncate">{title}</span>
 				</button>
-				<div className="flex items-center gap-1">{rightElement}</div>
+				<div className="flex items-center gap-1.5">{rightElement}</div>
 			</div>
-			{open ? <div className="pb-1">{children}</div> : null}
+			{open ? <div className={GIT_SECTION_BODY_CLASS}>{children}</div> : null}
 		</div>
 	);
 }
@@ -166,13 +170,13 @@ export function ChangeGroup({
 	const isGroupMutating = pendingMutationKey === `${diffMode}:all`;
 
 	return (
-		<div className="space-y-0.5">
-			<div className="group/header flex items-center justify-between px-3 py-0.5 bg-white/[0.03] transition-colors hover:bg-white/[0.06]">
+		<div className="space-y-1.5">
+			<div className="group/header flex items-center justify-between py-1">
 				<div className="flex items-center gap-2">
-					<div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50">
+					<div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/55">
 						{title}
 					</div>
-					<div className="text-[10px] font-mono text-muted-foreground/30">
+					<div className="text-[10px] font-mono text-muted-foreground/35">
 						{changes.length}
 					</div>
 				</div>
@@ -181,7 +185,7 @@ export function ChangeGroup({
 						type="button"
 						variant="ghost"
 						size="icon-xs"
-						className="opacity-0 group-hover/header:opacity-100 h-4 w-4 text-muted-foreground/50 hover:text-foreground transition-opacity"
+						className="h-5 w-5 text-muted-foreground/50 opacity-0 transition-opacity hover:text-foreground group-hover/header:opacity-100"
 						onClick={(e) => {
 							e.stopPropagation();
 							const action =
@@ -204,7 +208,7 @@ export function ChangeGroup({
 			</div>
 
 			{changes.length > 0 ? (
-				<div className="space-y-[1px]">
+				<div className="space-y-1">
 					{changes.map((change) => {
 						const isSelected =
 							selectedChange?.path === change.path &&
@@ -217,10 +221,10 @@ export function ChangeGroup({
 							<div
 								key={`${diffMode}:${change.code}:${change.path}`}
 								className={cn(
-									"group/item flex items-center gap-2 px-3 py-0.5 transition-colors cursor-pointer",
+									"group/item flex cursor-pointer items-center gap-2 rounded-lg py-1.5 transition-colors",
 									isSelected
 										? "bg-sidebar-accent text-sidebar-accent-foreground"
-										: "hover:bg-sidebar-accent/40 text-muted-foreground hover:text-foreground",
+										: "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",
 								)}
 							>
 								<button
@@ -273,7 +277,7 @@ export function ChangeGroup({
 											type="button"
 											variant="ghost"
 											size="icon-xs"
-											className="h-4 w-4 text-muted-foreground hover:text-red-500"
+											className="h-5 w-5 text-muted-foreground hover:text-red-500"
 											onClick={(e) => {
 												e.stopPropagation();
 												onDiscardRequest(change);
@@ -293,7 +297,7 @@ export function ChangeGroup({
 										type="button"
 										variant="ghost"
 										size="icon-xs"
-										className="h-4 w-4 text-muted-foreground hover:text-foreground"
+										className="h-5 w-5 text-muted-foreground hover:text-foreground"
 										onClick={(e) => {
 											e.stopPropagation();
 											const action =
@@ -356,7 +360,7 @@ export function BranchSummaryCard({
 					: "Publish current branch to origin";
 
 	return (
-		<div className="px-3 py-1">
+		<div className="py-2">
 			<div className="flex items-center justify-between gap-3">
 				<div className="min-w-0">
 					<div className="truncate text-[11px] font-bold">{branch.name}</div>
@@ -394,7 +398,7 @@ export function BranchSummaryCard({
 
 export function CommitRow({ commit }: { commit: GitCommitPreview }) {
 	return (
-		<div className="px-3 py-1 hover:bg-white/[0.05] transition-colors group/commit cursor-pointer">
+		<div className="group/commit cursor-pointer rounded-lg py-2 transition-colors hover:bg-white/[0.05]">
 			<div className="flex items-center gap-2">
 				<GitCommitHorizontal className="size-3 shrink-0 text-muted-foreground/40" />
 				<div className="min-w-0 flex-1 flex items-center justify-between gap-2">
@@ -406,7 +410,7 @@ export function CommitRow({ commit }: { commit: GitCommitPreview }) {
 					</div>
 				</div>
 			</div>
-			<div className="pl-5 flex items-center justify-between gap-2 mt-0.5">
+			<div className="mt-1 flex items-center justify-between gap-2 pl-5">
 				<div className="truncate text-[9px] text-muted-foreground/50">
 					{commit.author}
 				</div>
@@ -511,7 +515,7 @@ export function BranchRow({
 	return (
 		<div
 			className={cn(
-				"group/branch flex items-center justify-between gap-3 px-3 py-1.5 transition-colors",
+				"group/branch flex items-center justify-between gap-3 rounded-lg py-2 transition-colors",
 				branch.isCurrent
 					? "bg-primary/12 text-foreground"
 					: "hover:bg-white/[0.05]",
@@ -548,9 +552,9 @@ export function BranchRow({
 
 export function RemoteRow({ remote }: { remote: GitRemote }) {
 	return (
-		<div className="px-3 py-1 hover:bg-white/[0.05] transition-colors">
+		<div className="rounded-lg py-2 transition-colors hover:bg-white/[0.05]">
 			<div className="text-[11px] font-bold">{remote.name}</div>
-			<div className="space-y-0 text-[9px] font-mono text-muted-foreground/60">
+			<div className="space-y-1 text-[9px] font-mono text-muted-foreground/60">
 				<div className="truncate">
 					<span className="opacity-40">f:</span> {remote.fetchUrl ?? "—"}
 				</div>
@@ -564,7 +568,7 @@ export function RemoteRow({ remote }: { remote: GitRemote }) {
 
 export function StashRow({ stash }: { stash: GitStashEntry }) {
 	return (
-		<div className="px-3 py-1 hover:bg-white/[0.05] transition-colors cursor-pointer">
+		<div className="cursor-pointer rounded-lg py-2 transition-colors hover:bg-white/[0.05]">
 			<div className="flex items-center justify-between gap-3">
 				<div className="min-w-0">
 					<div className="truncate text-[11px] font-bold">{stash.name}</div>
@@ -590,7 +594,7 @@ function InlineMetric({ label, value }: { label: string; value: number }) {
 
 export function EmptyState({ label }: { label: string }) {
 	return (
-		<div className="px-3 py-1.5 text-[10px] text-muted-foreground/40 italic">
+		<div className="py-2 text-[10px] italic text-muted-foreground/45">
 			{label}
 		</div>
 	);
