@@ -12,7 +12,7 @@ import {
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
-import type { BoardColumn, BoardTask } from "#/lib/craftdesk";
+import type { BoardColumn, BoardTask, TaskCategory } from "#/lib/craftdesk";
 import { cn } from "#/lib/utils";
 import { CreateTaskModal } from "./create-task-modal";
 import { TaskCard } from "./task-card";
@@ -29,11 +29,12 @@ interface ColumnProps {
 	onCreateTask: (input: {
 		columnId: string;
 		title: string;
+		category: TaskCategory;
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
 	onUpdateTask: (
 		taskId: string,
-		input: { title: string; notes: string },
+		input: { title: string; category: TaskCategory; notes: string },
 	) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
 	onStopTaskTerminal: (taskId: string) => Promise<void> | void;
@@ -224,11 +225,12 @@ interface KanbanBoardProps {
 	onCreateTask: (input: {
 		columnId: string;
 		title: string;
+		category: TaskCategory;
 	}) => Promise<void> | void;
 	onDeleteColumn: (columnId: string) => Promise<void> | void;
 	onUpdateTask: (
 		taskId: string,
-		input: { title: string; notes: string },
+		input: { title: string; category: TaskCategory; notes: string },
 	) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
 	onStopTaskTerminal: (taskId: string) => Promise<void> | void;

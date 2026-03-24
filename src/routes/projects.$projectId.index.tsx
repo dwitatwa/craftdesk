@@ -5,6 +5,7 @@ import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { Terminal } from "#/components/workspace/terminal";
+import type { TaskCategory } from "#/lib/craftdesk";
 import { cn } from "#/lib/utils";
 import {
 	createColumn,
@@ -96,6 +97,7 @@ function ProjectDetailView() {
 	const handleCreateTask = async (input: {
 		columnId: string;
 		title: string;
+		category: TaskCategory;
 	}) => {
 		if (!workspace) {
 			return;
@@ -106,6 +108,7 @@ function ProjectDetailView() {
 				projectId: workspace.project.id,
 				columnId: input.columnId,
 				title: input.title,
+				category: input.category,
 			},
 		});
 		await refreshData();
@@ -144,12 +147,13 @@ function ProjectDetailView() {
 
 	const handleUpdateTask = async (
 		taskId: string,
-		input: { title: string; notes: string },
+		input: { title: string; category: TaskCategory; notes: string },
 	) => {
 		await updateTask({
 			data: {
 				taskId,
 				title: input.title,
+				category: input.category,
 				notes: input.notes,
 			},
 		});

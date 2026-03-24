@@ -12,6 +12,7 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
+import { TASK_CATEGORY_LABELS, type TaskCategory } from "#/lib/craftdesk";
 import { cn } from "#/lib/utils";
 import { EditTaskModal } from "./edit-task-modal";
 
@@ -19,6 +20,7 @@ interface TaskCardProps {
 	id: string;
 	projectId: string;
 	title: string;
+	category: TaskCategory;
 	notes?: string;
 	columnTitle?: string;
 	className?: string;
@@ -33,7 +35,7 @@ interface TaskCardProps {
 	showDropIndicatorBottom?: boolean;
 	onUpdateTask: (
 		taskId: string,
-		input: { title: string; notes: string },
+		input: { title: string; category: TaskCategory; notes: string },
 	) => Promise<void> | void;
 	onDelete: (taskId: string) => Promise<void> | void;
 	onStopTerminal: (taskId: string) => Promise<void> | void;
@@ -43,6 +45,7 @@ export function TaskCard({
 	id,
 	projectId,
 	title,
+	category,
 	notes,
 	columnTitle,
 	className,
@@ -70,6 +73,7 @@ export function TaskCard({
 	const notesPreview = summarizeNotes(notes);
 	const metaBadgeClassName =
 		"inline-flex items-center rounded-md px-1.5 py-0.5 text-[9px] leading-none font-mono font-bold tracking-tight";
+	const categoryBadgeClassName = getTaskCategoryBadgeClassName(category);
 
 	const handleDelete = async () => {
 		setIsDeleting(true);
@@ -180,6 +184,11 @@ export function TaskCard({
 								>
 									{taskLabel}
 								</span>
+								<span
+									className={cn(metaBadgeClassName, categoryBadgeClassName)}
+								>
+									{TASK_CATEGORY_LABELS[category]}
+								</span>
 							</div>
 							<div />
 						</button>
@@ -260,6 +269,7 @@ export function TaskCard({
 				onOpenChange={setIsEditModalOpen}
 				columnTitle={columnTitle}
 				initialTitle={title}
+				initialCategory={category}
 				initialNotes={notes ?? ""}
 				onSave={(input) => onUpdateTask(id, input)}
 			/>
@@ -306,4 +316,15 @@ function summarizeNotes(value?: string) {
 		.replace(/\n+/g, " ")
 		.replace(/\s+/g, " ")
 		.trim();
+}
+
+function getTaskCategoryBadgeClassName(category: TaskCategory) {
+	switch (category) {
+		case "feature":
+			return "border border-sky-500/30 bg-sky-500/10 text-sky-300";
+		case "bug":
+			return "border border-rose-500/30 bg-rose-500/10 text-rose-300";
+		default:
+			return "border border-amber-500/30 bg-amber-500/10 text-amber-300";
+	}
 }

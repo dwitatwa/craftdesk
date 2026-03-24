@@ -10,15 +10,32 @@ import {
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
+import {
+	TASK_CATEGORIES,
+	TASK_CATEGORY_LABELS,
+	type TaskCategory,
+} from "#/lib/craftdesk";
 
 interface EditTaskModalProps {
 	isOpen: boolean;
 	onOpenChange: (open: boolean) => void;
 	columnTitle?: string;
 	initialTitle: string;
+	initialCategory: TaskCategory;
 	initialNotes: string;
-	onSave: (input: { title: string; notes: string }) => Promise<void> | void;
+	onSave: (input: {
+		title: string;
+		category: TaskCategory;
+		notes: string;
+	}) => Promise<void> | void;
 }
 
 export function EditTaskModal({
@@ -26,12 +43,15 @@ export function EditTaskModal({
 	onOpenChange,
 	columnTitle,
 	initialTitle,
+	initialCategory,
 	initialNotes,
 	onSave,
 }: EditTaskModalProps) {
 	const titleId = useId();
+	const categoryLabelId = useId();
 	const notesId = useId();
 	const [title, setTitle] = useState(initialTitle);
+	const [category, setCategory] = useState(initialCategory);
 	const [notes, setNotes] = useState(initialNotes);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [saveError, setSaveError] = useState<string | null>(null);
@@ -42,9 +62,10 @@ export function EditTaskModal({
 		}
 
 		setTitle(initialTitle);
+		setCategory(initialCategory);
 		setNotes(initialNotes);
 		setSaveError(null);
-	}, [initialNotes, initialTitle, isOpen]);
+	}, [initialCategory, initialNotes, initialTitle, isOpen]);
 
 	const handleOpenChange = (open: boolean) => {
 		if (isSubmitting) {
@@ -65,6 +86,7 @@ export function EditTaskModal({
 		try {
 			await onSave({
 				title: title.trim(),
+				category,
 				notes,
 			});
 			onOpenChange(false);
@@ -103,6 +125,32 @@ export function EditTaskModal({
 							onChange={(event) => setTitle(event.target.value)}
 							className="bg-muted/30 focus-visible:ring-primary/30"
 						/>
+					</div>
+					<div className="grid gap-2">
+						<Label
+							id={categoryLabelId}
+							className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70"
+						>
+							Category
+						</Label>
+						<Select
+							value={category}
+							onValueChange={(value) => setCategory(value as TaskCategory)}
+						>
+							<SelectTrigger
+								aria-labelledby={categoryLabelId}
+								className="bg-muted/30 focus-visible:ring-primary/30"
+							>
+								<SelectValue placeholder="Select category" />
+							</SelectTrigger>
+							<SelectContent>
+								{TASK_CATEGORIES.map((option) => (
+									<SelectItem key={option} value={option}>
+										{TASK_CATEGORY_LABELS[option]}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 					</div>
 					<div className="grid gap-2">
 						<Label

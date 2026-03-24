@@ -3,6 +3,7 @@ import { ArrowLeft, Calendar, CheckCircle2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TaskNotesEditor } from "#/components/workspace/task-notes-editor";
 import { Terminal } from "#/components/workspace/terminal";
+import { TASK_CATEGORY_LABELS, type TaskCategory } from "#/lib/craftdesk";
 import { shouldHandleMiddleClickClose } from "#/lib/utils";
 import { getTaskDetail } from "#/server/craftdesk";
 
@@ -275,6 +276,11 @@ function TaskDetailView() {
 										<span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest leading-none">
 											{task.id}
 										</span>
+										<span
+											className={getTaskCategoryBadgeClassName(task.category)}
+										>
+											{TASK_CATEGORY_LABELS[task.category]}
+										</span>
 										{task.isRunning && (
 											<div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-green-500/10 border border-green-500/20 leading-none">
 												<span className="relative flex size-1.5">
@@ -401,6 +407,20 @@ function clampDetailPanelWidth(width: number, containerWidth: number) {
 
 function getDefaultDetailPanelWidthStyle() {
 	return `clamp(${MIN_DETAIL_PANEL_WIDTH}px, ${DEFAULT_DETAIL_PANEL_RATIO * 100}%, max(${MIN_DETAIL_PANEL_WIDTH}px, calc(100% - ${MIN_TERMINAL_PANEL_WIDTH}px)))`;
+}
+
+function getTaskCategoryBadgeClassName(category: TaskCategory) {
+	const baseClassName =
+		"inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-widest leading-none";
+
+	switch (category) {
+		case "feature":
+			return `${baseClassName} border-sky-500/30 bg-sky-500/10 text-sky-300`;
+		case "bug":
+			return `${baseClassName} border-rose-500/30 bg-rose-500/10 text-rose-300`;
+		default:
+			return `${baseClassName} border-amber-500/30 bg-amber-500/10 text-amber-300`;
+	}
 }
 
 function formatTimestamp(value: string) {

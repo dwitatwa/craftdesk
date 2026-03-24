@@ -7,9 +7,20 @@ export interface ProjectSummary {
 	lastOpenedAt: string;
 }
 
+export const TASK_CATEGORIES = ["feature", "bug", "other"] as const;
+
+export type TaskCategory = (typeof TASK_CATEGORIES)[number];
+
+export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
+	feature: "Feature",
+	bug: "Bug",
+	other: "Other",
+};
+
 export interface BoardTask {
 	id: string;
 	title: string;
+	category: TaskCategory;
 	notes: string;
 	projectId: string;
 	columnId: string;
@@ -80,6 +91,7 @@ export interface ProjectFileSearchResult {
 export interface TaskDetail {
 	id: string;
 	title: string;
+	category: TaskCategory;
 	notes: string;
 	projectId: string;
 	projectName: string;
@@ -114,6 +126,7 @@ export interface CreateTaskInput {
 	projectId: string;
 	columnId: string;
 	title: string;
+	category: TaskCategory;
 }
 
 export interface DeleteTaskInput {
@@ -123,6 +136,7 @@ export interface DeleteTaskInput {
 export interface UpdateTaskInput {
 	taskId: string;
 	title: string;
+	category: TaskCategory;
 	notes: string;
 }
 
@@ -179,6 +193,16 @@ export interface UpdateTaskNotesInput {
 }
 
 const NON_ALPHANUMERIC_REGEX = /[^a-z0-9]+/g;
+
+export function isTaskCategory(value: string): value is TaskCategory {
+	return TASK_CATEGORIES.includes(value as TaskCategory);
+}
+
+export function normalizeTaskCategory(
+	value: string | null | undefined,
+): TaskCategory {
+	return isTaskCategory(value ?? "") ? value : "other";
+}
 
 export function getProjectFileExtension(relativePath: string) {
 	const normalizedPath = relativePath

@@ -15,6 +15,7 @@ import {
 	type HideCurrentDoneTaskInput,
 	type ListProjectsInput,
 	type MoveTaskInput,
+	normalizeTaskCategory,
 	type ProjectSummary,
 	type ProjectWorkspace,
 	type SaveProjectInput,
@@ -51,6 +52,7 @@ const DEFAULT_ALPHA_TASKS = [
 	{
 		id: "TASK-0001",
 		columnTitle: "Backlog",
+		category: "feature",
 		title: "Implement dark mode persistence",
 		notes:
 			"Save user theme preference to local storage and sync with account settings.",
@@ -58,6 +60,7 @@ const DEFAULT_ALPHA_TASKS = [
 	{
 		id: "TASK-0002",
 		columnTitle: "Backlog",
+		category: "feature",
 		title: "Refactor terminal state management",
 		notes:
 			"Migrate terminal history to a more performant data structure to support longer sessions.",
@@ -65,6 +68,7 @@ const DEFAULT_ALPHA_TASKS = [
 	{
 		id: "TASK-0003",
 		columnTitle: "To Do",
+		category: "feature",
 		title: "Design new command palette",
 		notes:
 			"Create a modern command interface for quick actions and file searching.",
@@ -72,6 +76,7 @@ const DEFAULT_ALPHA_TASKS = [
 	{
 		id: "TASK-0004",
 		columnTitle: "In Progress",
+		category: "other",
 		title: "Compile production kernel",
 		notes:
 			"Running build scripts for the main application engine with optimized flags.",
@@ -79,6 +84,7 @@ const DEFAULT_ALPHA_TASKS = [
 	{
 		id: "TASK-0005",
 		columnTitle: "In Progress",
+		category: "feature",
 		title: "Optimize asset loading pipeline",
 		notes:
 			"Implementing lazy loading and progressive image decoding for the workspace.",
@@ -86,6 +92,7 @@ const DEFAULT_ALPHA_TASKS = [
 	{
 		id: "TASK-0006",
 		columnTitle: "Done",
+		category: "bug",
 		title: "Fix layout shift on mobile",
 		notes:
 			"Resolved jumpy transitions when switching between board and list views on small screens.",
@@ -93,6 +100,7 @@ const DEFAULT_ALPHA_TASKS = [
 	{
 		id: "TASK-0007",
 		columnTitle: "Done",
+		category: "other",
 		title: "Update documentation for API",
 		notes: "Completed the reference guide for all public REST endpoints.",
 	},
@@ -175,6 +183,7 @@ function initializeSchema(db: DatabaseSync) {
       column_id TEXT NOT NULL,
       position INTEGER NOT NULL,
       title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other' CHECK (category IN ('feature', 'bug', 'other')),
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
@@ -203,6 +212,7 @@ function runMigrations(db: DatabaseSync) {
 	removeStatusColumnIfPresent(db);
 	const didAddTaskPosition = ensureTaskPositionColumnExists(db);
 	ensureTaskNotesColumn(db);
+	ensureTaskCategoryColumn(db);
 	db.exec(`
     UPDATE tasks
     SET created_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
@@ -216,6 +226,12 @@ function runMigrations(db: DatabaseSync) {
         FROM board_columns
         WHERE title = 'Done'
       );
+
+    UPDATE tasks
+    SET category = 'other'
+    WHERE category IS NULL
+      OR TRIM(category) = ''
+      OR category NOT IN ('feature', 'bug', 'other');
   `);
 
 	if (didAddTaskPosition) {
@@ -266,11 +282,13 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
 	const hasHideInDoneColumn = columns.some(
 		(column) => column.name === "hide_in_done_column",
 	);
+	const hasCategory = columns.some((column) => column.name === "category");
 	const noteSource = hasNotes ? "notes" : "description";
 	const positionSource = hasPosition ? "position" : "0";
 	const hideInDoneColumnSource = hasHideInDoneColumn
 		? "hide_in_done_column"
 		: "0";
+	const categorySource = hasCategory ? "category" : "'other'";
 
 	if (!columns.some((column) => column.name === "status")) {
 		return;
@@ -285,6 +303,7 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       column_id TEXT NOT NULL,
       position INTEGER NOT NULL,
       title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other' CHECK (category IN ('feature', 'bug', 'other')),
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
@@ -300,6 +319,7 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       column_id,
       position,
       title,
+      category,
       notes,
       created_at,
       done_at,
@@ -312,6 +332,7 @@ function removeStatusColumnIfPresent(db: DatabaseSync) {
       column_id,
       ${positionSource},
       title,
+      ${categorySource},
       ${noteSource},
       created_at,
       done_at,
@@ -357,8 +378,9 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
 	const hasHideInDoneColumn = columns.some(
 		(column) => column.name === "hide_in_done_column",
 	);
+	const hasCategory = columns.some((column) => column.name === "category");
 
-	if (hasNotes && !hasDescription && hasHideInDoneColumn) {
+	if (hasNotes && !hasDescription && hasHideInDoneColumn && hasCategory) {
 		return;
 	}
 
@@ -370,6 +392,7 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
 	const hideInDoneColumnSource = hasHideInDoneColumn
 		? "hide_in_done_column"
 		: "0";
+	const categorySource = hasCategory ? "category" : "'other'";
 
 	db.exec(`
     BEGIN TRANSACTION;
@@ -380,6 +403,7 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
       column_id TEXT NOT NULL,
       position INTEGER NOT NULL,
       title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'other' CHECK (category IN ('feature', 'bug', 'other')),
       notes TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       done_at TEXT,
@@ -395,6 +419,7 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
       column_id,
       position,
       title,
+      category,
       notes,
       created_at,
       done_at,
@@ -407,6 +432,7 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
       column_id,
       position,
       title,
+      ${categorySource},
       ${notesSource},
       created_at,
       done_at,
@@ -424,6 +450,18 @@ function ensureTaskNotesColumn(db: DatabaseSync) {
 
     COMMIT;
   `);
+}
+
+function ensureTaskCategoryColumn(db: DatabaseSync) {
+	const columns = getTableColumns(db, "tasks");
+
+	if (columns.some((column) => column.name === "category")) {
+		return;
+	}
+
+	db.exec(
+		"ALTER TABLE tasks ADD COLUMN category TEXT NOT NULL DEFAULT 'other';",
+	);
 }
 
 function getTableColumns(db: DatabaseSync, tableName: string) {
@@ -485,11 +523,12 @@ function seedDefaults(db: DatabaseSync) {
       column_id,
       position,
       title,
+      category,
       notes,
       created_at,
       done_at,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
 	for (const task of DEFAULT_ALPHA_TASKS) {
@@ -508,6 +547,7 @@ function seedDefaults(db: DatabaseSync) {
 			columnId,
 			nextPosition,
 			task.title,
+			task.category,
 			task.notes,
 			timestamp,
 			doneAt,
@@ -766,6 +806,7 @@ export function getProjectWorkspace(
       SELECT
         id,
         title,
+        category,
         notes,
         project_id,
         column_id,
@@ -780,6 +821,7 @@ export function getProjectWorkspace(
 		.all(projectId) as Array<{
 		id: string;
 		title: string;
+		category: string;
 		notes: string;
 		project_id: string;
 		column_id: string;
@@ -799,6 +841,7 @@ export function getProjectWorkspace(
 		existingTasks.push({
 			id: task.id,
 			title: task.title,
+			category: normalizeTaskCategory(task.category),
 			notes: task.notes,
 			projectId: task.project_id,
 			columnId: task.column_id,
@@ -886,6 +929,7 @@ export function deleteColumn(input: DeleteColumnInput) {
 export function createTask(input: CreateTaskInput) {
 	const db = getDb();
 	const title = input.title.trim();
+	const category = normalizeTaskCategory(input.category);
 
 	if (!title) {
 		throw new Error("Task title is required.");
@@ -919,18 +963,20 @@ export function createTask(input: CreateTaskInput) {
       column_id,
       position,
       title,
+      category,
       notes,
       created_at,
       done_at,
       hide_in_done_column,
       updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`).run(
 		nextTaskId(db),
 		input.projectId,
 		input.columnId,
 		positionRow.position + 1,
 		title,
+		category,
 		"",
 		timestamp,
 		null,
@@ -954,6 +1000,7 @@ export function updateTaskNotes(input: { taskId: string; notes: string }) {
 export function updateTask(input: UpdateTaskInput) {
 	const db = getDb();
 	const title = input.title.trim();
+	const category = normalizeTaskCategory(input.category);
 	const notes = input.notes.replace(/\r\n/g, "\n");
 	const timestamp = nowIso();
 
@@ -964,10 +1011,10 @@ export function updateTask(input: UpdateTaskInput) {
 	const result = db
 		.prepare(`
       UPDATE tasks
-      SET title = ?, notes = ?, updated_at = ?
+      SET title = ?, category = ?, notes = ?, updated_at = ?
       WHERE id = ?
     `)
-		.run(title, notes, timestamp, input.taskId);
+		.run(title, category, notes, timestamp, input.taskId);
 
 	if (result.changes === 0) {
 		throw new Error("Task not found.");
@@ -1160,6 +1207,7 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
       SELECT
         t.id,
         t.title,
+        t.category,
         t.notes,
         t.project_id,
         t.created_at,
@@ -1177,6 +1225,7 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 		| {
 				id: string;
 				title: string;
+				category: string;
 				notes: string;
 				project_id: string;
 				created_at: string;
@@ -1195,6 +1244,7 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 	return {
 		id: row.id,
 		title: row.title,
+		category: normalizeTaskCategory(row.category),
 		notes: row.notes,
 		projectId: row.project_id,
 		projectName: row.project_name,
