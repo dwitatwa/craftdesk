@@ -323,22 +323,22 @@ export function GitSidebar({
 	return (
 		<>
 			<div className="flex h-full min-h-0 flex-col">
-				<div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3">
+				<div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
 					{error ? (
-						<div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+						<div className="rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-[12px] text-red-200/90">
 							{error}
 						</div>
 					) : null}
 
 					{!error && isLoading && !overview ? (
-						<div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground">
+						<div className="flex items-center gap-1.5 px-2.5 py-3 text-[12px] text-muted-foreground/60">
 							<LoaderCircle className="size-3 animate-spin" />
 							Loading Git state...
 						</div>
 					) : null}
 
 					{!error && overview ? (
-						<div className="divide-y divide-white/6">
+						<div className="divide-y divide-white/4">
 							<CommitSection
 								onCommit={handleGitCommit}
 								disabled={isLoading || overview.staged.length === 0}
@@ -363,7 +363,7 @@ export function GitSidebar({
 										type="button"
 										variant="ghost"
 										size="icon-xs"
-										className="shrink-0 text-muted-foreground hover:text-foreground"
+										className="size-5 text-muted-foreground/40 hover:text-foreground"
 										onClick={(e) => {
 											e.preventDefault();
 											e.stopPropagation();
@@ -373,14 +373,14 @@ export function GitSidebar({
 										aria-label="Refresh Git data"
 									>
 										{isLoading ? (
-											<LoaderCircle className="size-3 animate-spin" />
+											<LoaderCircle className="size-2.5 animate-spin" />
 										) : (
-											<RefreshCcw className="size-3" />
+											<RefreshCcw className="size-2.5" />
 										)}
 									</Button>
 								}
 							>
-								<div className="flex flex-col gap-3">
+								<div className="flex flex-col gap-1">
 									<ChangeGroup
 										title="Staged"
 										changes={overview.staged}
@@ -421,7 +421,7 @@ export function GitSidebar({
 										type="button"
 										variant="ghost"
 										size="icon-xs"
-										className="shrink-0 text-muted-foreground hover:text-foreground"
+										className="size-5 text-muted-foreground/40 hover:text-foreground"
 										onClick={(event) => {
 											event.preventDefault();
 											event.stopPropagation();
@@ -440,14 +440,14 @@ export function GitSidebar({
 										}
 									>
 										{isCreateBranching ? (
-											<LoaderCircle className="size-3 animate-spin" />
+											<LoaderCircle className="size-2.5 animate-spin" />
 										) : (
-											<Plus className="size-3" />
+											<Plus className="size-2.5" />
 										)}
 									</Button>
 								}
 							>
-								<div className="space-y-1">
+								<div className="space-y-0.5">
 									{orderedBranches.length > 0 ? (
 										orderedBranches.map((branch) => {
 											const branchPullRequestUrl = buildPullRequestUrl(
@@ -503,7 +503,7 @@ export function GitSidebar({
 								icon={GitFork}
 							>
 								{overview.remotes.length > 0 ? (
-									<div className="space-y-1">
+									<div className="space-y-0.5">
 										{overview.remotes.map((remote) => (
 											<RemoteRow key={remote.name} remote={remote} />
 										))}
@@ -525,7 +525,7 @@ export function GitSidebar({
 								icon={ScrollText}
 							>
 								{overview.stashes.length > 0 ? (
-									<div className="space-y-1">
+									<div className="space-y-0.5">
 										{overview.stashes.map((stash) => (
 											<StashRow key={stash.name} stash={stash} />
 										))}
@@ -566,7 +566,7 @@ export function GitSidebar({
 					ref={branchContextMenuRef}
 					role="menu"
 					aria-label={`Branch actions for ${contextMenuBranch.name}`}
-					className="fixed z-50 min-w-48 overflow-hidden rounded-xl border border-white/8 bg-[#111113] p-1 shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+					className="fixed z-50 min-w-[170px] overflow-hidden rounded-lg border border-white/8 bg-[#0e0e10] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
 					style={{
 						left: branchContextMenuState.x,
 						top: branchContextMenuState.y,
@@ -575,26 +575,26 @@ export function GitSidebar({
 					<button
 						type="button"
 						role="menuitem"
-						className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-zinc-100 transition-colors hover:bg-white/6 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+						className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 						disabled={isBranchActionDisabled}
 						onClick={() => {
 							handleShowBranchCommits(contextMenuBranch.name);
 						}}
 					>
-						<GitCommitHorizontal className="size-3.5 text-zinc-300" />
+						<GitCommitHorizontal className="size-3 text-zinc-400" />
 						<span>Show Commits</span>
 					</button>
 					{contextMenuBranchActions.canCheckout ? (
 						<button
 							type="button"
 							role="menuitem"
-							className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-zinc-100 transition-colors hover:bg-white/6 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 							disabled={isBranchActionDisabled}
 							onClick={() => {
 								handleCheckoutFromContextMenu(contextMenuBranch.name);
 							}}
 						>
-							<ArrowRightLeft className="size-3.5 text-zinc-300" />
+							<ArrowRightLeft className="size-3 text-zinc-400" />
 							<span>Checkout Branch</span>
 						</button>
 					) : null}
@@ -602,13 +602,13 @@ export function GitSidebar({
 						<button
 							type="button"
 							role="menuitem"
-							className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-zinc-100 transition-colors hover:bg-white/6 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 							disabled={isBranchActionDisabled}
 							onClick={() => {
 								handlePushFromContextMenu(contextMenuBranch);
 							}}
 						>
-							<ArrowUpToLine className="size-3.5 text-zinc-300" />
+							<ArrowUpToLine className="size-3 text-zinc-400" />
 							<span>
 								{contextMenuBranch.isCurrent &&
 								!contextMenuBranchActions.hasUpstream
@@ -621,11 +621,11 @@ export function GitSidebar({
 						<button
 							type="button"
 							role="menuitem"
-							className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-zinc-100 transition-colors hover:bg-white/6 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 							disabled={isBranchActionDisabled}
 							onClick={handlePullFromContextMenu}
 						>
-							<ArrowDownToLine className="size-3.5 text-zinc-300" />
+							<ArrowDownToLine className="size-3 text-zinc-400" />
 							<span>Pull Branch</span>
 						</button>
 					) : null}
@@ -633,21 +633,21 @@ export function GitSidebar({
 						<button
 							type="button"
 							role="menuitem"
-							className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-zinc-100 transition-colors hover:bg-white/6 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 							disabled={isBranchActionDisabled}
 							onClick={handleCreatePullRequestFromContextMenu}
 						>
-							<GitPullRequest className="size-3.5 text-zinc-300" />
+							<GitPullRequest className="size-3 text-zinc-400" />
 							<span>Create Pull Request</span>
 						</button>
 					) : null}
 					{contextMenuBranchActions.canDelete ? (
 						<>
-							<div className="my-1 border-t border-white/6" />
+							<div className="my-1 border-t border-white/5" />
 							<button
 								type="button"
 								role="menuitem"
-								className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-300/90 transition-colors hover:bg-red-500/14 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+								className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-red-400/80 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 								disabled={isBranchActionDisabled}
 								onClick={() => {
 									if (isBranchActionDisabled) {
@@ -658,7 +658,7 @@ export function GitSidebar({
 									setBranchContextMenuState(null);
 								}}
 							>
-								<Trash2 className="size-3.5 text-red-400/85" />
+								<Trash2 className="size-3 text-red-400/70" />
 								<span>Delete Branch</span>
 							</button>
 						</>

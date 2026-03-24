@@ -592,7 +592,7 @@ export function FileExplorer({
 			const directoryState = directories[entry.relativePath];
 			const isExpanded = expandedDirectories[entry.relativePath];
 			const isSelected = selectedFilePath === entry.relativePath;
-			const paddingLeft = 12 + depth * 14;
+			const paddingLeft = 10 + depth * 12;
 
 			if (entry.kind === "directory") {
 				return (
@@ -600,7 +600,7 @@ export function FileExplorer({
 						<button
 							type="button"
 							className={cn(
-								"flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
+								"flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
 								isExpanded && "text-foreground",
 							)}
 							style={{ paddingLeft }}
@@ -610,26 +610,26 @@ export function FileExplorer({
 						>
 							<ChevronRight
 								className={cn(
-									"size-3 shrink-0 transition-transform",
+									"size-2.5 shrink-0 transition-transform opacity-70",
 									isExpanded && "rotate-90",
 								)}
 							/>
 							{isExpanded ? (
-								<FolderOpen className="size-3.5 shrink-0 text-primary" />
+								<FolderOpen className="size-3 shrink-0 text-primary/90" />
 							) : (
-								<Folder className="size-3.5 shrink-0 text-primary/80" />
+								<Folder className="size-3 shrink-0 text-primary/70" />
 							)}
 							<span className="truncate">{entry.name}</span>
 							{directoryState?.isLoading ? (
-								<LoaderCircle className="ml-auto size-3 animate-spin text-muted-foreground/60" />
+								<LoaderCircle className="ml-auto size-2.5 animate-spin text-muted-foreground/40" />
 							) : null}
 						</button>
 						{isExpanded ? (
 							<div>
 								{directoryState?.error ? (
 									<p
-										className="px-3 py-1 text-[10px] text-destructive/80"
-										style={{ paddingLeft: paddingLeft + 20 }}
+										className="px-3 py-0.5 text-[10px] text-destructive/70"
+										style={{ paddingLeft: paddingLeft + 18 }}
 									>
 										{directoryState.error}
 									</p>
@@ -638,8 +638,8 @@ export function FileExplorer({
 									renderDirectoryEntries(directoryState.entries, depth + 1)
 								) : directoryState?.isLoaded && !directoryState.isLoading ? (
 									<p
-										className="px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground/35"
-										style={{ paddingLeft: paddingLeft + 20 }}
+										className="px-3 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/30"
+										style={{ paddingLeft: paddingLeft + 18 }}
 									>
 										Empty
 									</p>
@@ -655,10 +655,10 @@ export function FileExplorer({
 					key={entry.relativePath}
 					type="button"
 					className={cn(
-						"flex w-full min-w-0 items-center gap-2 rounded-md py-1.5 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
-						isSelected && "bg-primary/12 text-foreground",
+						"flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
+						isSelected && "bg-primary/10 text-foreground",
 					)}
-					style={{ paddingLeft: paddingLeft + 20 }}
+					style={{ paddingLeft: paddingLeft + 18 }}
 					onClick={() => {
 						void loadFile(entry.relativePath);
 					}}
@@ -677,11 +677,11 @@ export function FileExplorer({
 					}}
 				>
 					{isImageFilePath(entry.relativePath) ? (
-						<ImageIcon className="size-3.5 shrink-0 text-sky-300/80" />
+						<ImageIcon className="size-3 shrink-0 text-sky-400/70" />
 					) : isMarkdownFilePath(entry.relativePath) ? (
-						<NotebookText className="size-3.5 shrink-0 text-emerald-300/80" />
+						<NotebookText className="size-3 shrink-0 text-emerald-400/70" />
 					) : (
-						<FileText className="size-3.5 shrink-0 text-muted-foreground/70" />
+						<FileText className="size-3 shrink-0 text-muted-foreground/60" />
 					)}
 					<span className="truncate">{entry.name}</span>
 				</button>
@@ -696,7 +696,7 @@ export function FileExplorer({
 				<div
 					role="tree"
 					aria-label="File explorer"
-					className="min-h-0 flex-1 overflow-y-auto px-2 py-2 custom-scrollbar"
+					className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 custom-scrollbar"
 					onContextMenu={(event) => {
 						event.preventDefault();
 						setContextMenuState({
@@ -707,18 +707,18 @@ export function FileExplorer({
 					}}
 				>
 					{rootDirectory?.isLoading ? (
-						<div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-							<LoaderCircle className="mr-2 size-3.5 animate-spin" />
+						<div className="flex h-full items-center justify-center text-[12px] text-muted-foreground/60">
+							<LoaderCircle className="mr-1.5 size-3 animate-spin" />
 							Loading files
 						</div>
 					) : rootDirectory?.error ? (
-						<div className="px-3 py-4 text-xs text-destructive">
+						<div className="px-3 py-4 text-[12px] text-destructive/80">
 							{rootDirectory.error}
 						</div>
 					) : rootDirectory?.entries.length ? (
 						renderDirectoryEntries(rootDirectory.entries)
 					) : (
-						<div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground/50">
+						<div className="flex h-full items-center justify-center px-4 text-center text-[12px] text-muted-foreground/40">
 							Select this workspace to start creating files.
 						</div>
 					)}
@@ -728,7 +728,7 @@ export function FileExplorer({
 			{contextMenuState ? (
 				<div
 					ref={contextMenuRef}
-					className="fixed z-50 min-w-44 overflow-hidden rounded-xl border border-white/8 bg-[#111113] p-1 shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+					className="fixed z-50 min-w-[170px] overflow-hidden rounded-lg border border-white/8 bg-[#0e0e10] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
 					style={{
 						left: contextMenuState.x,
 						top: contextMenuState.y,
@@ -738,39 +738,39 @@ export function FileExplorer({
 						<>
 							<button
 								type="button"
-								className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:bg-white/[0.06]"
+								className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5"
 								onClick={() => {
 									setContextMenuState(null);
 									void handleRefresh();
 								}}
 							>
-								<RefreshCcw className="size-3.5 text-muted-foreground" />
+								<RefreshCcw className="size-3 text-zinc-400" />
 								<span>Refresh Files</span>
 							</button>
 							<button
 								type="button"
-								className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-foreground/90 transition-colors hover:bg-white/[0.06]"
+								className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5"
 								onClick={() => {
 									setContextMenuState(null);
 									setIsCreateFormOpen(true);
 									setCreateError("");
 								}}
 							>
-								<FilePlus2 className="size-3.5 text-muted-foreground" />
+								<FilePlus2 className="size-3 text-zinc-400" />
 								<span>Add File</span>
 							</button>
 						</>
 					) : (
 						<button
 							type="button"
-							className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs text-red-300/90 transition-colors hover:bg-red-500/14 hover:text-red-200"
+							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-red-400/80 transition-colors hover:bg-red-500/10 hover:text-red-300"
 							onClick={() => {
 								setContextMenuState(null);
 								setDeleteTarget(contextMenuState.file);
 								setIsDeleteDialogOpen(true);
 							}}
 						>
-							<Trash2 className="size-3.5 text-red-400/85" />
+							<Trash2 className="size-3 text-red-400/70" />
 							<span>Delete File</span>
 						</button>
 					)}
