@@ -16,6 +16,8 @@ import type {
 	ProjectFileEntry,
 	ProjectFileLookupInput,
 	ProjectFileMutationInput,
+	ProjectFileSearchResult,
+	SearchProjectFilesInput,
 	TextProjectFileContent,
 	UpdateProjectFileInput,
 } from "#/lib/craftdesk";
@@ -112,6 +114,49 @@ export async function listProjectDirectoryEntries(
 				sensitivity: "base",
 			});
 		});
+}
+
+export async function searchProjectFiles(
+	input: SearchProjectFilesInput,
+): Promise<ProjectFileSearchResult[]> {
+	const query = input.query.trim().toLowerCase();
+
+	if (!query) {
+		return [];
+	}
+
+	const { absolutePath } = resolveProjectPath(input.projectId);
+	const matches: ProjectFileSearchResult[] = [];
+
+	await collectMatchingProjectFiles({
+		absoluteDirectoryPath: absolutePath,
+		matches,
+		query,
+		relativeDirectoryPath: "",
+	});
+
+	return matches.sort((left, right) => {
+		const leftNameMatch = left.name.toLowerCase().includes(query);
+		const rightNameMatch = right.name.toLowerCase().includes(query);
+
+		if (leftNameMatch !== rightNameMatch) {
+			return leftNameMatch ? -1 : 1;
+		}
+
+		const byName = left.name.localeCompare(right.name, undefined, {
+			numeric: true,
+			sensitivity: "base",
+		});
+
+		if (byName !== 0) {
+			return byName;
+		}
+
+		return left.relativePath.localeCompare(right.relativePath, undefined, {
+			numeric: true,
+			sensitivity: "base",
+		});
+	});
 }
 
 export async function readProjectFileContent(
@@ -257,6 +302,58 @@ export async function updateProjectFileContent(
 	}
 
 	return updatedFile;
+}
+
+async function collectMatchingProjectFiles({
+	absoluteDirectoryPath,
+	matches,
+	query,
+	relativeDirectoryPath,
+}: {
+	absoluteDirectoryPath: string;
+	matches: ProjectFileSearchResult[];
+	query: string;
+	relativeDirectoryPath: string;
+}) {
+	const entries = await readdir(absoluteDirectoryPath, { withFileTypes: true });
+
+	for (const entry of entries) {
+		if (entry.isDirectory()) {
+			if (IGNORED_DIRECTORY_NAMES.has(entry.name)) {
+				continue;
+			}
+
+			const entryRelativePath = [relativeDirectoryPath, entry.name]
+				.filter(Boolean)
+				.join("/");
+
+			await collectMatchingProjectFiles({
+				absoluteDirectoryPath: path.join(absoluteDirectoryPath, entry.name),
+				matches,
+				query,
+				relativeDirectoryPath: entryRelativePath,
+			});
+			continue;
+		}
+
+		if (!entry.isFile()) {
+			continue;
+		}
+
+		const entryRelativePath = [relativeDirectoryPath, entry.name]
+			.filter(Boolean)
+			.join("/");
+		const normalizedEntryPath = entryRelativePath.toLowerCase();
+
+		if (!normalizedEntryPath.includes(query)) {
+			continue;
+		}
+
+		matches.push({
+			name: entry.name,
+			relativePath: entryRelativePath,
+		});
+	}
 }
 
 function getMimeTypeForPath(filePath: string) {

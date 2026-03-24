@@ -14,6 +14,7 @@ import type {
 	ProjectFileMutationInput,
 	ProjectLookupInput,
 	SaveProjectInput,
+	SearchProjectFilesInput,
 	TaskLookupInput,
 	UpdateProjectFileInput,
 	UpdateTaskInput,
@@ -64,6 +65,15 @@ export const readProjectFile = createServerFn({ method: "GET" })
 	.handler(async ({ data }) => {
 		const { readProjectFileContent } = await import("#/server/project-files");
 		return readProjectFileContent(data);
+	});
+
+export const searchProjectFiles = createServerFn({ method: "GET" })
+	.inputValidator((input: SearchProjectFilesInput) => input)
+	.handler(async ({ data }) => {
+		const { searchProjectFiles: searchProjectFilesOnDisk } = await import(
+			"#/server/project-files"
+		);
+		return searchProjectFilesOnDisk(data);
 	});
 
 export const createProjectFile = createServerFn({ method: "POST" })

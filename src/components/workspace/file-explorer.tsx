@@ -8,10 +8,12 @@ import {
 	LoaderCircle,
 	NotebookText,
 	RefreshCcw,
+	Search,
 	Trash2,
+	X,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import {
 	AlertDialog,
@@ -32,9 +34,11 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
 import type {
 	ProjectFileContent,
 	ProjectFileEntry,
+	ProjectFileSearchResult,
 	ProjectFileSelectionState,
 } from "#/lib/craftdesk";
 import { getProjectFileExtension, isMarkdownFilePath } from "#/lib/craftdesk";
@@ -44,6 +48,7 @@ import {
 	deleteProjectFile,
 	listProjectDirectory,
 	readProjectFile,
+	searchProjectFiles,
 } from "#/server/craftdesk";
 import type { ActiveProjectContext } from "../layout/app-shell";
 
@@ -189,6 +194,7 @@ export function FileExplorer({
 	const projectId = activeProject.id;
 	const activeProjectIdRef = useRef(projectId);
 	const contextMenuRef = useRef<HTMLDivElement | null>(null);
+	const searchRequestIdRef = useRef(0);
 	activeProjectIdRef.current = projectId;
 	const [directories, setDirectories] = useState<
 		Record<string, DirectoryState>
@@ -222,6 +228,13 @@ export function FileExplorer({
 	const [isDeletingFile, setIsDeletingFile] = useState(false);
 	const [isImportingFile, setIsImportingFile] = useState(false);
 	const [isDragTargetActive, setIsDragTargetActive] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+	const [searchResults, setSearchResults] = useState<ProjectFileSearchResult[]>(
+		[],
+	);
+	const [searchError, setSearchError] = useState("");
+	const [isSearching, setIsSearching] = useState(false);
 	const [contextMenuState, setContextMenuState] = useState<
 		| {
 				kind: "explorer";
@@ -239,6 +252,10 @@ export function FileExplorer({
 		  }
 		| null
 	>(null);
+	const trimmedSearchQuery = searchQuery.trim();
+	const isSearchMode = trimmedSearchQuery.length > 0;
+	const isSearchPending =
+		isSearchMode && trimmedSearchQuery !== debouncedSearchQuery;
 
 	useEffect(() => {
 		if (!contextMenuState) {
@@ -277,6 +294,68 @@ export function FileExplorer({
 			window.removeEventListener("scroll", handleViewportChange, true);
 		};
 	}, [contextMenuState]);
+
+	useEffect(() => {
+		const timeoutId = window.setTimeout(() => {
+			setDebouncedSearchQuery(searchQuery.trim());
+		}, 200);
+
+		return () => {
+			window.clearTimeout(timeoutId);
+		};
+	}, [searchQuery]);
+
+	const runSearch = useEffectEvent(async (query: string) => {
+		const trimmedQuery = query.trim();
+		const requestId = searchRequestIdRef.current + 1;
+		searchRequestIdRef.current = requestId;
+
+		if (!trimmedQuery) {
+			setSearchResults([]);
+			setSearchError("");
+			setIsSearching(false);
+			return;
+		}
+
+		setIsSearching(true);
+		setSearchError("");
+
+		try {
+			const results = await searchProjectFiles({
+				data: {
+					projectId,
+					query: trimmedQuery,
+				},
+			});
+
+			if (
+				projectId !== activeProjectIdRef.current ||
+				requestId !== searchRequestIdRef.current
+			) {
+				return;
+			}
+
+			setSearchResults(results);
+			setSearchError("");
+		} catch (error) {
+			if (
+				projectId !== activeProjectIdRef.current ||
+				requestId !== searchRequestIdRef.current
+			) {
+				return;
+			}
+
+			setSearchResults([]);
+			setSearchError(getErrorMessage(error, "Failed to search files."));
+		} finally {
+			if (
+				projectId === activeProjectIdRef.current &&
+				requestId === searchRequestIdRef.current
+			) {
+				setIsSearching(false);
+			}
+		}
+	});
 
 	const loadDirectory = async (relativePath: string, force = false) => {
 		const normalizedPath = normalizeRelativePath(relativePath);
@@ -440,6 +519,17 @@ export function FileExplorer({
 		};
 	}, [onSelectionChange, projectId]);
 
+	useEffect(() => {
+		if (!debouncedSearchQuery) {
+			setSearchResults([]);
+			setSearchError("");
+			setIsSearching(false);
+			return;
+		}
+
+		void runSearch(debouncedSearchQuery);
+	}, [debouncedSearchQuery]);
+
 	const handleToggleDirectory = async (relativePath: string) => {
 		const normalizedPath = normalizeRelativePath(relativePath);
 		const isExpanded = expandedDirectories[normalizedPath];
@@ -465,6 +555,10 @@ export function FileExplorer({
 
 		if (selectedFilePath) {
 			await loadFile(selectedFilePath);
+		}
+
+		if (trimmedSearchQuery) {
+			await runSearch(trimmedSearchQuery);
 		}
 	};
 
@@ -534,6 +628,9 @@ export function FileExplorer({
 			setIsCreateFormOpen(false);
 			setImportedFile(null);
 			setNewFilePath("");
+			if (trimmedSearchQuery) {
+				await runSearch(trimmedSearchQuery);
+			}
 			await loadFile(normalizedPath);
 		} catch (error) {
 			setCreateError(getErrorMessage(error, "Failed to create file."));
@@ -571,6 +668,9 @@ export function FileExplorer({
 			}
 			setIsDeleteDialogOpen(false);
 			setDeleteTarget(null);
+			if (trimmedSearchQuery) {
+				await runSearch(trimmedSearchQuery);
+			}
 		} catch (error) {
 			const nextError = getErrorMessage(error, "Failed to delete file.");
 			onSelectionChange({
@@ -584,6 +684,69 @@ export function FileExplorer({
 		}
 	};
 
+	const renderFileIcon = (relativePath: string) => {
+		if (isImageFilePath(relativePath)) {
+			return <ImageIcon className="size-3 shrink-0 text-sky-400/70" />;
+		}
+
+		if (isMarkdownFilePath(relativePath)) {
+			return <NotebookText className="size-3 shrink-0 text-emerald-400/70" />;
+		}
+
+		return <FileText className="size-3 shrink-0 text-muted-foreground/60" />;
+	};
+
+	const renderFileButton = ({
+		className,
+		pathLabel,
+		relativePath,
+		style,
+	}: {
+		className?: string;
+		pathLabel?: React.ReactNode;
+		relativePath: string;
+		style?: React.CSSProperties;
+	}) => {
+		const isSelected = selectedFilePath === relativePath;
+
+		return (
+			<button
+				key={relativePath}
+				type="button"
+				className={cn(
+					"flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
+					isSelected && "bg-primary/10 text-foreground",
+					className,
+				)}
+				style={style}
+				onClick={() => {
+					void loadFile(relativePath);
+				}}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					setContextMenuState({
+						kind: "file",
+						x: event.clientX,
+						y: event.clientY,
+						file: {
+							name: relativePath.split("/").pop() ?? relativePath,
+							relativePath,
+						},
+					});
+				}}
+			>
+				{renderFileIcon(relativePath)}
+				<div className="min-w-0 flex-1">
+					<div className="truncate">
+						{relativePath.split("/").pop() ?? relativePath}
+					</div>
+					{pathLabel ? pathLabel : null}
+				</div>
+			</button>
+		);
+	};
+
 	const renderDirectoryEntries = (
 		entries: ProjectFileEntry[],
 		depth = 0,
@@ -591,7 +754,6 @@ export function FileExplorer({
 		entries.map((entry) => {
 			const directoryState = directories[entry.relativePath];
 			const isExpanded = expandedDirectories[entry.relativePath];
-			const isSelected = selectedFilePath === entry.relativePath;
 			const paddingLeft = 10 + depth * 12;
 
 			if (entry.kind === "directory") {
@@ -650,42 +812,10 @@ export function FileExplorer({
 				);
 			}
 
-			return (
-				<button
-					key={entry.relativePath}
-					type="button"
-					className={cn(
-						"flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
-						isSelected && "bg-primary/10 text-foreground",
-					)}
-					style={{ paddingLeft: paddingLeft + 18 }}
-					onClick={() => {
-						void loadFile(entry.relativePath);
-					}}
-					onContextMenu={(event) => {
-						event.preventDefault();
-						event.stopPropagation();
-						setContextMenuState({
-							kind: "file",
-							x: event.clientX,
-							y: event.clientY,
-							file: {
-								name: entry.name,
-								relativePath: entry.relativePath,
-							},
-						});
-					}}
-				>
-					{isImageFilePath(entry.relativePath) ? (
-						<ImageIcon className="size-3 shrink-0 text-sky-400/70" />
-					) : isMarkdownFilePath(entry.relativePath) ? (
-						<NotebookText className="size-3 shrink-0 text-emerald-400/70" />
-					) : (
-						<FileText className="size-3 shrink-0 text-muted-foreground/60" />
-					)}
-					<span className="truncate">{entry.name}</span>
-				</button>
-			);
+			return renderFileButton({
+				relativePath: entry.relativePath,
+				style: { paddingLeft: paddingLeft + 18 },
+			});
 		});
 
 	const rootDirectory = directories[ROOT_PATH];
@@ -693,6 +823,32 @@ export function FileExplorer({
 	return (
 		<>
 			<div className="flex h-full min-h-0 flex-col bg-sidebar/80">
+				<div className="border-b border-white/6 px-2 py-2">
+					<div className="relative">
+						<Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/45" />
+						<Input
+							aria-label="Search files"
+							placeholder="Search files..."
+							className="h-8 border-white/8 bg-white/[0.03] pl-8 pr-8 text-xs placeholder:text-muted-foreground/40"
+							value={searchQuery}
+							onChange={(event) => {
+								setSearchQuery(event.target.value);
+							}}
+						/>
+						{searchQuery ? (
+							<button
+								type="button"
+								aria-label="Clear file search"
+								className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground"
+								onClick={() => {
+									setSearchQuery("");
+								}}
+							>
+								<X className="size-3.5" />
+							</button>
+						) : null}
+					</div>
+				</div>
 				<div
 					role="tree"
 					aria-label="File explorer"
@@ -706,7 +862,39 @@ export function FileExplorer({
 						});
 					}}
 				>
-					{rootDirectory?.isLoading ? (
+					{isSearchMode ? (
+						isSearchPending || isSearching ? (
+							<div className="flex h-full items-center justify-center text-[12px] text-muted-foreground/60">
+								<LoaderCircle className="mr-1.5 size-3 animate-spin" />
+								Searching files
+							</div>
+						) : searchError ? (
+							<div className="px-3 py-4 text-[12px] text-destructive/80">
+								{searchError}
+							</div>
+						) : searchResults.length ? (
+							<div className="space-y-0.5">
+								<div className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground/45">
+									{searchResults.length} matching files
+								</div>
+								{searchResults.map((result) =>
+									renderFileButton({
+										className: "px-2 py-1.5",
+										pathLabel: (
+											<div className="truncate text-[10px] text-muted-foreground/45">
+												{result.relativePath}
+											</div>
+										),
+										relativePath: result.relativePath,
+									}),
+								)}
+							</div>
+						) : (
+							<div className="flex h-full items-center justify-center px-4 text-center text-[12px] text-muted-foreground/40">
+								No files match "{trimmedSearchQuery}".
+							</div>
+						)
+					) : rootDirectory?.isLoading ? (
 						<div className="flex h-full items-center justify-center text-[12px] text-muted-foreground/60">
 							<LoaderCircle className="mr-1.5 size-3 animate-spin" />
 							Loading files

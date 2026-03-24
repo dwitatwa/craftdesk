@@ -1,8 +1,9 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, CheckCircle2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { TaskNotesEditor } from "#/components/workspace/task-notes-editor";
 import { Terminal } from "#/components/workspace/terminal";
+import { shouldHandleMiddleClickClose } from "#/lib/utils";
 import { getTaskDetail } from "#/server/craftdesk";
 
 export const Route = createFileRoute("/projects/$projectId/tasks/$taskId")({
@@ -27,6 +28,7 @@ function TaskDetailView() {
 	const { task } = Route.useLoaderData();
 	const router = useRouter();
 	const splitContainerRef = useRef<HTMLDivElement | null>(null);
+	const headerRef = useRef<HTMLDivElement | null>(null);
 	const dragStateRef = useRef<{
 		containerLeft: number;
 		containerWidth: number;
@@ -132,6 +134,36 @@ function TaskDetailView() {
 		};
 	}, [projectId, router]);
 
+	const handleCloseTaskDetail = useCallback(() => {
+		void router.navigate({
+			to: "/projects/$projectId",
+			params: { projectId },
+		});
+	}, [projectId, router]);
+
+	useEffect(() => {
+		const header = headerRef.current;
+
+		if (!header) {
+			return;
+		}
+
+		const handleMouseDown = (event: MouseEvent) => {
+			if (!shouldHandleMiddleClickClose(event)) {
+				return;
+			}
+
+			event.preventDefault();
+			handleCloseTaskDetail();
+		};
+
+		header.addEventListener("mousedown", handleMouseDown);
+
+		return () => {
+			header.removeEventListener("mousedown", handleMouseDown);
+		};
+	}, [handleCloseTaskDetail]);
+
 	const handleDividerPointerDown = (
 		event: React.PointerEvent<HTMLButtonElement>,
 	) => {
@@ -224,12 +256,16 @@ function TaskDetailView() {
 						style={{ width: detailWidth }}
 					>
 						{/* Header - Consistent with Sidebar and Terminal */}
-						<div className="h-20 flex items-center justify-between px-6 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10">
+						<div
+							ref={headerRef}
+							className="h-20 flex items-center justify-between px-6 border-b sticky top-0 bg-background/80 backdrop-blur-md z-10"
+						>
 							<div className="flex items-center gap-4 min-w-0">
 								<Link
 									to="/projects/$projectId"
 									params={{ projectId: task.projectId }}
 									className="inline-flex items-center justify-center size-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+									data-middle-click-close-ignore
 									title="Back to kanban (Alt+W)"
 								>
 									<ArrowLeft className="size-4" />

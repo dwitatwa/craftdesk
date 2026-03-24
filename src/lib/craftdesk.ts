@@ -72,6 +72,11 @@ export interface ProjectFileSelectionState {
 	error: string;
 }
 
+export interface ProjectFileSearchResult {
+	name: string;
+	relativePath: string;
+}
+
 export interface TaskDetail {
 	id: string;
 	title: string;
@@ -143,6 +148,11 @@ export interface ProjectLookupInput {
 export interface ProjectFileLookupInput {
 	projectId: string;
 	relativePath?: string;
+}
+
+export interface SearchProjectFilesInput {
+	projectId: string;
+	query: string;
 }
 
 export interface ProjectFileMutationInput {

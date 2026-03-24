@@ -10,7 +10,7 @@ import type {
 	TextProjectFileContent,
 } from "#/lib/craftdesk";
 import { isMarkdownFilePath } from "#/lib/craftdesk";
-import { cn } from "#/lib/utils";
+import { cn, shouldHandleMiddleClickClose } from "#/lib/utils";
 import { updateProjectFile } from "#/server/craftdesk";
 import type { ActiveProjectContext } from "../layout/app-shell";
 
@@ -65,6 +65,7 @@ export function FilePreviewView({
 	const [mode, setMode] = useState<"write" | "preview">("write");
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveError, setSaveError] = useState("");
+	const headerRef = useRef<HTMLDivElement | null>(null);
 	const lineNumberRef = useRef<HTMLDivElement | null>(null);
 	const previewLines = getPreviewLines(draftContent);
 	const hasChanges = !!activeTextFile && draftContent !== savedContent;
@@ -106,6 +107,29 @@ export function FilePreviewView({
 		};
 	}, [hasChanges]);
 
+	useEffect(() => {
+		const header = headerRef.current;
+
+		if (!header) {
+			return;
+		}
+
+		const handleMouseDown = (event: MouseEvent) => {
+			if (!shouldHandleMiddleClickClose(event)) {
+				return;
+			}
+
+			event.preventDefault();
+			onClose();
+		};
+
+		header.addEventListener("mousedown", handleMouseDown);
+
+		return () => {
+			header.removeEventListener("mousedown", handleMouseDown);
+		};
+	}, [onClose]);
+
 	const handleSave = async () => {
 		if (!activeProject || !activeTextFile || isSaving || !hasChanges) {
 			return;
@@ -144,7 +168,10 @@ export function FilePreviewView({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-background">
-			<div className="sticky top-0 z-10 flex h-20 items-center justify-between border-b bg-background/85 px-6 backdrop-blur-md">
+			<div
+				ref={headerRef}
+				className="sticky top-0 z-10 flex h-20 items-center justify-between border-b bg-background/85 px-6 backdrop-blur-md"
+			>
 				<div className="min-w-0">
 					<p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/45">
 						File Preview
@@ -202,6 +229,7 @@ export function FilePreviewView({
 					size="icon-sm"
 					className="ml-3 shrink-0 text-muted-foreground hover:text-foreground"
 					onClick={onClose}
+					data-middle-click-close-ignore
 					title="Close file preview (Alt+W or Escape)"
 				>
 					<X className="size-4" />

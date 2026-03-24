@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActiveProjectContext } from "#/components/layout/app-shell";
 import { Button } from "#/components/ui/button";
 import type { GitDiffResult, GitSelectedChange } from "#/lib/git";
-import { cn } from "#/lib/utils";
+import { cn, shouldHandleMiddleClickClose } from "#/lib/utils";
 import { getGitDiff } from "#/server/git";
 
 interface GitDiffViewProps {
@@ -42,6 +42,7 @@ export function GitDiffView({
 	const [diff, setDiff] = useState<GitDiffResult | null>(null);
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
+	const headerRef = useRef<HTMLDivElement | null>(null);
 	const activeDiffKey = getGitDiffRequestKey(activeProjectPath, selectedChange);
 	const activeDiffKeyRef = useRef(activeDiffKey);
 	const diffRef = useRef(diff);
@@ -165,6 +166,29 @@ export function GitDiffView({
 		});
 	}, [activeDiffKey, loadDiff, refreshVersion, selectedChange]);
 
+	useEffect(() => {
+		const header = headerRef.current;
+
+		if (!header) {
+			return;
+		}
+
+		const handleMouseDown = (event: MouseEvent) => {
+			if (!shouldHandleMiddleClickClose(event)) {
+				return;
+			}
+
+			event.preventDefault();
+			onClose();
+		};
+
+		header.addEventListener("mousedown", handleMouseDown);
+
+		return () => {
+			header.removeEventListener("mousedown", handleMouseDown);
+		};
+	}, [onClose]);
+
 	const rows = useMemo(
 		() => parseUnifiedDiff(diff?.content ?? ""),
 		[diff?.content],
@@ -194,7 +218,10 @@ export function GitDiffView({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="h-20 border-b bg-background/80 px-6 flex items-center backdrop-blur-sm">
+			<div
+				ref={headerRef}
+				className="h-20 border-b bg-background/80 px-6 flex items-center backdrop-blur-sm"
+			>
 				<div className="flex items-center justify-between gap-4 w-full">
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 text-base font-semibold tracking-tight">
@@ -228,6 +255,7 @@ export function GitDiffView({
 							size="icon-sm"
 							className="text-muted-foreground hover:text-foreground"
 							onClick={onClose}
+							data-middle-click-close-ignore
 							title="Close diff view (Alt+W or Escape)"
 						>
 							<X className="size-4" />
