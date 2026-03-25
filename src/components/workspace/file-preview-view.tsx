@@ -1,4 +1,4 @@
-import { Eye, FileText, LoaderCircle, SquarePen, X } from "lucide-react";
+import { Eye, FileText, LoaderCircle, Save, SquarePen, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,6 +19,18 @@ interface FilePreviewViewProps {
 	onDirtyChange: (isDirty: boolean) => void;
 	onTextFileSaved: (file: TextProjectFileContent) => void;
 	selection: ProjectFileSelectionState;
+}
+
+function normalizeLineEndings(value: string) {
+	return value.replace(/\r\n/g, "\n");
+}
+
+function applyPreferredLineEndings(value: string, reference: string) {
+	const normalizedValue = normalizeLineEndings(value);
+
+	return reference.includes("\r\n")
+		? normalizedValue.replace(/\n/g, "\r\n")
+		: normalizedValue;
 }
 
 function formatFileSize(size: number) {
@@ -58,11 +70,22 @@ export function FilePreviewView({
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveError, setSaveError] = useState("");
 	const headerRef = useRef<HTMLDivElement | null>(null);
-	const hasChanges = !!activeTextFile && draftContent !== savedContent;
+	const hasChanges =
+		!!activeTextFile &&
+		normalizeLineEndings(draftContent) !== normalizeLineEndings(savedContent);
 	const isMarkdownFile = activeTextFile
 		? isMarkdownFilePath(activeTextFile.relativePath)
 		: false;
 	const isMarkdownPreview = isMarkdownFile && mode === "preview";
+	const saveStateLabel = activeTextFile
+		? saveError
+			? "Save failed"
+			: isSaving
+				? "Saving..."
+				: hasChanges
+					? "Unsaved"
+					: "Saved"
+		: "";
 
 	useEffect(() => {
 		setDraftContent(activeTextFile?.content ?? "");
@@ -129,10 +152,9 @@ export function FilePreviewView({
 		setSaveError("");
 
 		try {
-			const normalizedContent = draftContent.replace(/\r\n/g, "\n");
 			const updatedFile = await updateProjectFile({
 				data: {
-					content: normalizedContent,
+					content: applyPreferredLineEndings(draftContent, savedContent),
 					projectId: activeProject.id,
 					relativePath: activeTextFile.relativePath,
 				},
@@ -157,7 +179,23 @@ export function FilePreviewView({
 	};
 
 	return (
-		<div className="flex h-full min-h-0 flex-col bg-background">
+		<div
+			className="flex h-full min-h-0 flex-col bg-background"
+			onKeyDownCapture={(event) => {
+				if (
+					event.defaultPrevented ||
+					event.isComposing ||
+					(!event.metaKey && !event.ctrlKey) ||
+					event.key.toLowerCase() !== "s"
+				) {
+					return;
+				}
+
+				event.preventDefault();
+				event.stopPropagation();
+				void handleSave();
+			}}
+		>
 			<div
 				ref={headerRef}
 				className="sticky top-0 z-10 flex h-20 items-center justify-between border-b bg-background/85 px-6 backdrop-blur-md"
@@ -177,6 +215,35 @@ export function FilePreviewView({
 				</div>
 				{activeTextFile ? (
 					<div className="flex items-center gap-2">
+						<div
+							className={cn(
+								"hidden rounded-full border px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] md:inline-flex",
+								saveError
+									? "border-red-400/30 bg-red-400/10 text-red-200"
+									: hasChanges
+										? "border-amber-300/25 bg-amber-300/10 text-amber-100"
+										: "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
+							)}
+						>
+							{saveStateLabel}
+						</div>
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-8 border-white/10 bg-white/[0.04] px-3 text-[10px] font-mono uppercase tracking-[0.14em] text-foreground hover:bg-white/8"
+							onClick={() => {
+								void handleSave();
+							}}
+							disabled={!hasChanges || isSaving}
+							title="Save file (Ctrl+S)"
+						>
+							{isSaving ? (
+								<LoaderCircle className="size-3 animate-spin" />
+							) : (
+								<Save className="size-3" />
+							)}
+							Save
+						</Button>
 						{isMarkdownFile ? (
 							<div className="inline-flex rounded-lg border border-white/8 bg-white/[0.03] p-1">
 								<button

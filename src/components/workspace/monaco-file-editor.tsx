@@ -344,12 +344,17 @@ export function MonacoFileEditor({
 	value,
 }: MonacoFileEditorProps) {
 	const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+	const onSaveRef = useRef(onSave);
 	const [languageStatus, setLanguageStatus] = useState("");
 	const modelPath = useMemo(
 		() => monaco.Uri.file(`${projectPath}/${relativePath}`).toString(),
 		[projectPath, relativePath],
 	);
 	const isLanguageServerEnabled = !!getLanguageIdFromPath(relativePath);
+
+	useEffect(() => {
+		onSaveRef.current = onSave;
+	}, [onSave]);
 
 	useEffect(() => {
 		const model = editorRef.current?.getModel();
@@ -464,7 +469,7 @@ export function MonacoFileEditor({
 					editorInstance.addCommand(
 						monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
 						() => {
-							onSave();
+							onSaveRef.current();
 						},
 					);
 
