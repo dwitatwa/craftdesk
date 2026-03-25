@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { TerminalScope, TerminalSessionSnapshot } from "#/lib/terminal";
 import {
 	connectTerminal,
@@ -34,6 +35,12 @@ type Listener = () => void;
 
 const STOPPED_POLL_DELAY_MS = 800;
 const PARKING_LOT_ID = "craftdesk-terminal-parking-lot";
+const DEFAULT_TERMINAL_KEY = "default";
+const INITIAL_VIEW_STATE: TerminalViewState = {
+	session: null,
+	error: null,
+	isConnecting: false,
+};
 
 const terminalControllers = new Map<string, PersistentTerminalController>();
 
@@ -51,14 +58,64 @@ export function getPersistentTerminalController(scope: TerminalScope) {
 	return controller;
 }
 
+export async function disposePersistentTerminalController(
+	scope: TerminalScope,
+	options?: { stop?: boolean },
+) {
+	const scopeKey = getScopeKey(scope);
+	const controller = terminalControllers.get(scopeKey);
+
+	if (!controller) {
+		return;
+	}
+
+	terminalControllers.delete(scopeKey);
+	await controller.dispose(options);
+}
+
+export function usePersistentTerminalController(scope: TerminalScope) {
+	const controllerRef = useRef<PersistentTerminalController | null>(null);
+	const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
+	const { cwd, projectId, scopeId, scopeType, terminalKey } = scope;
+
+	useEffect(() => {
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		const controller = getPersistentTerminalController({
+			cwd,
+			projectId,
+			scopeId,
+			scopeType,
+			terminalKey,
+		});
+		controllerRef.current = controller;
+		setViewState(controller.getState());
+
+		const unsubscribe = controller.subscribe(() => {
+			setViewState({ ...controller.getState() });
+		});
+
+		return () => {
+			unsubscribe();
+
+			if (controllerRef.current === controller) {
+				controllerRef.current = null;
+			}
+		};
+	}, [cwd, projectId, scopeId, scopeType, terminalKey]);
+
+	return {
+		controller: controllerRef.current,
+		viewState,
+	};
+}
+
 class PersistentTerminalController {
 	private scope: TerminalScope;
 	private readonly listeners = new Set<Listener>();
-	private readonly viewState: TerminalViewState = {
-		session: null,
-		error: null,
-		isConnecting: false,
-	};
+	private readonly viewState: TerminalViewState = { ...INITIAL_VIEW_STATE };
 	private hostElement: HTMLDivElement | null = null;
 	private mountElement: HTMLElement | null = null;
 	private resizeObserver: ResizeObserver | null = null;
@@ -67,6 +124,7 @@ class PersistentTerminalController {
 	private startupPromise: Promise<void> | null = null;
 	private sessionId: string | null = null;
 	private sequence = 0;
+	private isDisposed = false;
 
 	constructor(scope: TerminalScope) {
 		this.scope = scope;
@@ -81,6 +139,10 @@ class PersistentTerminalController {
 	}
 
 	subscribe(listener: Listener) {
+		if (this.isDisposed) {
+			return () => {};
+		}
+
 		this.listeners.add(listener);
 		return () => {
 			this.listeners.delete(listener);
@@ -88,6 +150,10 @@ class PersistentTerminalController {
 	}
 
 	attach(mountElement: HTMLElement, options?: { autoStart?: boolean }) {
+		if (this.isDisposed) {
+			return;
+		}
+
 		this.mountElement = mountElement;
 		this.mountHostElement();
 		this.observeResize();
@@ -122,7 +188,17 @@ class PersistentTerminalController {
 	}
 
 	async start() {
+		if (this.sessionId && this.viewState.session?.status !== "running") {
+			await this.restart();
+			return;
+		}
+
 		await this.ensureStarted();
+
+		if (this.isDisposed) {
+			return;
+		}
+
 		this.focus();
 		await this.resizeToFit();
 	}
@@ -163,9 +239,46 @@ class PersistentTerminalController {
 	}
 
 	focus() {
-		if (this.mountElement) {
+		if (this.mountElement && !this.isDisposed) {
 			this.terminal?.focus();
 		}
+	}
+
+	async dispose(options?: { stop?: boolean }) {
+		this.isDisposed = true;
+		const currentSessionId = this.sessionId;
+		this.sessionId = null;
+		this.sequence = 0;
+		this.startupPromise = null;
+
+		this.resizeObserver?.disconnect();
+		this.resizeObserver = null;
+		this.mountElement = null;
+
+		const hostElement = this.hostElement;
+		if (hostElement?.parentElement) {
+			hostElement.parentElement.removeChild(hostElement);
+		}
+		this.hostElement = null;
+
+		this.fitAddon = null;
+		this.terminal?.dispose();
+		this.terminal = null;
+
+		if (options?.stop && currentSessionId) {
+			try {
+				await stopTerminal({
+					data: { sessionId: currentSessionId },
+				});
+			} catch {
+				// Ignore shutdown errors for tabs that are being removed.
+			}
+		}
+
+		this.viewState.session = null;
+		this.viewState.error = null;
+		this.viewState.isConnecting = false;
+		this.listeners.clear();
 	}
 
 	private notify() {
@@ -226,6 +339,10 @@ class PersistentTerminalController {
 	}
 
 	private async ensureStarted() {
+		if (this.isDisposed) {
+			return;
+		}
+
 		if (this.terminal) {
 			return;
 		}
@@ -239,6 +356,10 @@ class PersistentTerminalController {
 	}
 
 	private async createTerminalSession() {
+		if (this.isDisposed) {
+			return;
+		}
+
 		this.setConnecting(true);
 		this.setError(null);
 
@@ -305,10 +426,26 @@ class PersistentTerminalController {
 					scopeId: this.scope.scopeId,
 					projectId: this.scope.projectId,
 					cwd: this.scope.cwd,
+					terminalKey: this.scope.terminalKey,
 				},
 			});
 
+			if (this.isDisposed) {
+				await stopTerminal({
+					data: { sessionId: snapshot.sessionId },
+				}).catch(() => {});
+				return;
+			}
+
 			const resizedSnapshot = await this.pushResize(snapshot.sessionId);
+
+			if (this.isDisposed) {
+				await stopTerminal({
+					data: { sessionId: resizedSnapshot?.sessionId ?? snapshot.sessionId },
+				}).catch(() => {});
+				return;
+			}
+
 			this.syncSnapshot(resizedSnapshot ?? snapshot, { resetViewport: true });
 			this.setConnecting(false);
 
@@ -332,6 +469,11 @@ class PersistentTerminalController {
 			void this.readLoop();
 		} catch (cause) {
 			this.startupPromise = null;
+
+			if (this.isDisposed) {
+				return;
+			}
+
 			this.setConnecting(false);
 			this.setError(getErrorMessage(cause));
 			throw cause;
@@ -389,6 +531,10 @@ class PersistentTerminalController {
 		nextSnapshot: TerminalSessionSnapshot,
 		options?: { resetViewport?: boolean },
 	) {
+		if (this.isDisposed) {
+			return;
+		}
+
 		this.sessionId = nextSnapshot.sessionId;
 		this.sequence = nextSnapshot.sequence;
 		this.setSession(nextSnapshot);
@@ -453,8 +599,10 @@ class PersistentTerminalController {
 	}
 }
 
-function getScopeKey(scope: Pick<TerminalScope, "scopeType" | "scopeId">) {
-	return `${scope.scopeType}:${scope.scopeId}`;
+function getScopeKey(
+	scope: Pick<TerminalScope, "scopeType" | "scopeId" | "terminalKey">,
+) {
+	return `${scope.scopeType}:${scope.scopeId}:${scope.terminalKey?.trim() || DEFAULT_TERMINAL_KEY}`;
 }
 
 function getParkingLot() {

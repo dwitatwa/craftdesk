@@ -7,13 +7,13 @@ import {
 	Square,
 	Terminal as TerminalIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "#/components/ui/button";
 import type { TerminalScope } from "#/lib/terminal";
 import { cn } from "#/lib/utils";
 import {
 	getPersistentTerminalController,
-	type TerminalViewState,
+	usePersistentTerminalController,
 } from "./terminal-runtime";
 
 interface TerminalProps {
@@ -24,14 +24,12 @@ interface TerminalProps {
 	isCollapsed?: boolean;
 	onToggleCollapse?: () => void;
 	autoStart?: boolean;
+	showHeader?: boolean;
+	showStartAction?: boolean;
+	showRestartAction?: boolean;
+	showStopAction?: boolean;
 	scope: TerminalScope;
 }
-
-const INITIAL_VIEW_STATE: TerminalViewState = {
-	session: null,
-	error: null,
-	isConnecting: false,
-};
 
 export function Terminal({
 	className,
@@ -41,41 +39,15 @@ export function Terminal({
 	isCollapsed = false,
 	onToggleCollapse,
 	autoStart = true,
+	showHeader = true,
+	showStartAction = true,
+	showRestartAction = true,
+	showStopAction = true,
 	scope,
 }: TerminalProps) {
 	const hostRef = useRef<HTMLDivElement | null>(null);
-	const controllerRef = useRef<ReturnType<
-		typeof getPersistentTerminalController
-	> | null>(null);
-	const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
-	const { cwd, projectId, scopeId, scopeType } = scope;
-
-	useEffect(() => {
-		if (typeof window === "undefined") {
-			return;
-		}
-
-		const controller = getPersistentTerminalController({
-			cwd,
-			projectId,
-			scopeId,
-			scopeType,
-		});
-		controllerRef.current = controller;
-		setViewState(controller.getState());
-
-		const unsubscribe = controller.subscribe(() => {
-			setViewState({ ...controller.getState() });
-		});
-
-		return () => {
-			unsubscribe();
-
-			if (controllerRef.current === controller) {
-				controllerRef.current = null;
-			}
-		};
-	}, [cwd, projectId, scopeId, scopeType]);
+	const { controller, viewState } = usePersistentTerminalController(scope);
+	const { cwd, projectId, scopeId, scopeType, terminalKey } = scope;
 
 	useEffect(() => {
 		if (typeof window === "undefined" || isCollapsed) {
@@ -87,6 +59,7 @@ export function Terminal({
 			projectId,
 			scopeId,
 			scopeType,
+			terminalKey,
 		});
 		const mountElement = hostRef.current;
 
@@ -99,24 +72,28 @@ export function Terminal({
 		return () => {
 			controller.detach(mountElement);
 		};
-	}, [autoStart, cwd, isCollapsed, projectId, scopeId, scopeType]);
+	}, [autoStart, cwd, isCollapsed, projectId, scopeId, scopeType, terminalKey]);
 
 	const handleStart = async () => {
-		await controllerRef.current?.start();
+		await controller?.start();
 	};
 
 	const handleRestart = async () => {
-		await controllerRef.current?.restart();
+		await controller?.restart();
 	};
 
 	const handleStop = async () => {
-		await controllerRef.current?.stop();
+		await controller?.stop();
 	};
 
 	const { error, isConnecting, session } = viewState;
 	const showStartPrompt = !autoStart && !session?.sessionId && !isConnecting;
 	const statusLabel = session?.status ?? (isConnecting ? "connecting" : "idle");
 	const scopeLabel = scope.scopeType === "task" ? "task" : "project";
+	const manualStartLabel =
+		scope.scopeType === "task"
+			? "Start it manually when you want to open this task shell."
+			: "Start it manually when you want to open this project shell.";
 	const isHeaderToggleEnabled =
 		Boolean(onToggleCollapse) && collapseTrigger === "header";
 
@@ -151,92 +128,98 @@ export function Terminal({
 
 	return (
 		<div className={cn("flex flex-col bg-[#09090B]", className)}>
-			<div
-				className={cn(
-					"flex items-center justify-between px-4 border-b border-white/5 bg-white/[0.02]",
-					headerHeight,
-				)}
-			>
-				{isHeaderToggleEnabled ? (
-					<button
-						type="button"
-						className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-						onClick={onToggleCollapse}
-						aria-expanded={!isCollapsed}
-						aria-label={isCollapsed ? `Expand ${title}` : `Collapse ${title}`}
-					>
-						{headerContent}
-					</button>
-				) : (
-					<div className="flex min-w-0 items-center gap-3">{headerContent}</div>
-				)}
-				<div className="flex items-center gap-1 shrink-0">
-					{showStartPrompt && (
-						<Button
-							variant="outline"
-							size="sm"
-							className="h-7 border-white/10 bg-white/[0.04] px-2.5 text-xs text-zinc-200 hover:border-white/15 hover:bg-white/[0.08] hover:text-white"
-							onClick={() => {
-								void handleStart();
-							}}
-						>
-							<Play className="size-3.5 fill-current" />
-							Start
-						</Button>
+			{showHeader && (
+				<div
+					className={cn(
+						"flex items-center justify-between px-4 border-b border-white/5 bg-white/[0.02]",
+						headerHeight,
 					)}
-					{onToggleCollapse && collapseTrigger === "button" && (
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-7 text-muted-foreground hover:text-foreground"
+				>
+					{isHeaderToggleEnabled ? (
+						<button
+							type="button"
+							className="flex min-w-0 flex-1 items-center gap-3 self-stretch text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
 							onClick={onToggleCollapse}
+							aria-expanded={!isCollapsed}
+							aria-label={isCollapsed ? `Expand ${title}` : `Collapse ${title}`}
 						>
-							{isCollapsed ? (
-								<Maximize2 className="size-3.5" />
-							) : (
-								<Minus className="size-3.5" />
-							)}
-						</Button>
+							{headerContent}
+						</button>
+					) : (
+						<div className="flex min-w-0 items-center gap-3">
+							{headerContent}
+						</div>
 					)}
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-7 text-muted-foreground hover:text-foreground"
-						onClick={() => {
-							void handleRestart();
-						}}
-						disabled={isConnecting || !session?.sessionId}
-					>
-						<RotateCcw className="size-3.5" />
-					</Button>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-7 text-muted-foreground hover:text-red-400"
-						onClick={() => {
-							void handleStop();
-						}}
-						disabled={!session?.sessionId || session?.status !== "running"}
-					>
-						<Square className="size-3.5" />
-					</Button>
+					<div className="flex items-center gap-1 shrink-0">
+						{showStartPrompt && showStartAction && (
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-7 border-white/10 bg-white/[0.04] px-2.5 text-xs text-zinc-200 hover:border-white/15 hover:bg-white/[0.08] hover:text-white"
+								onClick={() => {
+									void handleStart();
+								}}
+							>
+								<Play className="size-3.5 fill-current" />
+								Start
+							</Button>
+						)}
+						{onToggleCollapse && collapseTrigger === "button" && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-7 text-muted-foreground hover:text-foreground"
+								onClick={onToggleCollapse}
+							>
+								{isCollapsed ? (
+									<Maximize2 className="size-3.5" />
+								) : (
+									<Minus className="size-3.5" />
+								)}
+							</Button>
+						)}
+						{showRestartAction && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-7 text-muted-foreground hover:text-foreground"
+								onClick={() => {
+									void handleRestart();
+								}}
+								disabled={isConnecting || !session?.sessionId}
+							>
+								<RotateCcw className="size-3.5" />
+							</Button>
+						)}
+						{showStopAction && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-7 text-muted-foreground hover:text-red-400"
+								onClick={() => {
+									void handleStop();
+								}}
+								disabled={!session?.sessionId || session?.status !== "running"}
+							>
+								<Square className="size-3.5" />
+							</Button>
+						)}
+					</div>
 				</div>
-			</div>
+			)}
 
 			{!isCollapsed && (
 				<div className="relative flex-1 min-h-0 terminal-surface">
 					<div ref={hostRef} className="h-full w-full" />
 
-					{showStartPrompt && (
+					{showStartPrompt && showStartAction && (
 						<div className="absolute inset-0 flex items-center justify-center p-6">
 							<div className="flex max-w-sm flex-col items-center rounded-xl border border-dashed border-white/10 bg-black/20 px-6 py-5 text-center backdrop-blur-sm">
 								<TerminalIcon className="size-5 text-zinc-300" />
 								<p className="mt-3 text-sm font-medium text-zinc-100">
 									Terminal is idle
 								</p>
-								<p className="mt-1 text-xs text-zinc-400">
-									Start it manually when you want to open a task shell.
-								</p>
+								<p className="mt-1 text-xs text-zinc-400">{manualStartLabel}</p>
 								<Button
 									size="sm"
 									className="mt-4 h-8"

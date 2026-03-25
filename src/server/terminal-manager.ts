@@ -18,6 +18,7 @@ import { setProjectActiveSessions } from "#/server/db";
 
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
+const DEFAULT_TERMINAL_KEY = "default";
 const MAX_BUFFER_LENGTH = 2_000_000;
 const MAX_CHUNKS = 20_000;
 const DEFAULT_POLL_TIMEOUT_MS = 25_000;
@@ -59,6 +60,7 @@ interface TerminalSessionRecord {
 	scopeType: ConnectTerminalInput["scopeType"];
 	scopeId: string;
 	projectId: string;
+	terminalKey: string;
 	requestedCwd: string;
 	resolvedCwd: string;
 	shell: string;
@@ -81,9 +83,23 @@ const runtimeRequire = createRequire(import.meta.url);
 let nodePtyModule: NodePtyModule | null = null;
 
 function getScopeKey(
+	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId" | "terminalKey">,
+) {
+	return `${input.scopeType}:${input.scopeId}:${normalizeTerminalKey(input.terminalKey)}`;
+}
+
+function normalizeTerminalKey(terminalKey?: string) {
+	const trimmed = terminalKey?.trim();
+	return trimmed ? trimmed : DEFAULT_TERMINAL_KEY;
+}
+
+function matchesScope(
+	session: TerminalSessionRecord,
 	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
 ) {
-	return `${input.scopeType}:${input.scopeId}`;
+	return (
+		session.scopeType === input.scopeType && session.scopeId === input.scopeId
+	);
 }
 
 function getNodePtyModule() {
@@ -200,6 +216,7 @@ function serializeSession(
 		scopeType: session.scopeType,
 		scopeId: session.scopeId,
 		projectId: session.projectId,
+		terminalKey: session.terminalKey,
 		requestedCwd: session.requestedCwd,
 		resolvedCwd: session.resolvedCwd,
 		shell: session.shell,
@@ -251,6 +268,7 @@ function attachPty(session: TerminalSessionRecord) {
 			CRAFTDESK_SCOPE: session.scopeType,
 			CRAFTDESK_SCOPE_ID: session.scopeId,
 			CRAFTDESK_PROJECT_ID: session.projectId,
+			CRAFTDESK_TERMINAL_KEY: session.terminalKey,
 		},
 	});
 
@@ -296,6 +314,7 @@ function createSession(input: ConnectTerminalInput) {
 		scopeType: input.scopeType,
 		scopeId: input.scopeId,
 		projectId: input.projectId,
+		terminalKey: normalizeTerminalKey(input.terminalKey),
 		requestedCwd: input.cwd,
 		resolvedCwd: process.cwd(),
 		shell: resolveShell(),
@@ -320,15 +339,13 @@ function createSession(input: ConnectTerminalInput) {
 export function isScopeRunning(
 	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
 ) {
-	const scopeKey = getScopeKey(input);
-	const sessionId = sessionIdByScopeKey.get(scopeKey);
-
-	if (!sessionId) {
-		return false;
+	for (const session of sessionsById.values()) {
+		if (matchesScope(session, input) && session.status === "running") {
+			return true;
+		}
 	}
 
-	const session = sessionsById.get(sessionId);
-	return session?.status === "running";
+	return false;
 }
 
 export function connectTerminal(input: ConnectTerminalInput) {
@@ -459,23 +476,24 @@ export function stopTerminal(sessionId: string) {
 export function stopScopeTerminal(
 	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
 ) {
-	const scopeKey = getScopeKey(input);
-	const sessionId = sessionIdByScopeKey.get(scopeKey);
+	const matchingSessions = [...sessionsById.values()].filter((session) =>
+		matchesScope(session, input),
+	);
 
-	if (!sessionId) {
+	if (matchingSessions.length === 0) {
 		return null;
 	}
 
-	const session = sessionsById.get(sessionId);
+	let snapshot = serializeSession(matchingSessions[0]);
 
-	if (!session) {
-		sessionIdByScopeKey.delete(scopeKey);
-		return null;
+	for (const session of matchingSessions) {
+		if (session.status !== "running") {
+			snapshot = serializeSession(session);
+			continue;
+		}
+
+		snapshot = stopTerminal(session.id);
 	}
 
-	if (session.status !== "running") {
-		return serializeSession(session);
-	}
-
-	return stopTerminal(session.id);
+	return snapshot;
 }

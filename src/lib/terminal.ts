@@ -7,6 +7,7 @@ export interface TerminalScope {
 	scopeId: string;
 	projectId: string;
 	cwd: string;
+	terminalKey?: string;
 }
 
 export interface ConnectTerminalInput extends TerminalScope {}
@@ -21,6 +22,7 @@ export interface TerminalSessionSnapshot {
 	scopeType: TerminalScopeType;
 	scopeId: string;
 	projectId: string;
+	terminalKey: string;
 	requestedCwd: string;
 	resolvedCwd: string;
 	shell: string;
