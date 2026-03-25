@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { TerminalScope, TerminalSessionSnapshot } from "#/lib/terminal";
-import {
-	connectTerminal,
-	readTerminal,
-	resizeTerminal,
-	restartTerminal,
-	stopTerminal,
-	writeTerminal,
-} from "#/server/terminal";
+import type {
+	TerminalScope,
+	TerminalSessionSnapshot,
+	TerminalSocketServerMessage,
+} from "#/lib/terminal";
+import { getTerminalSession, stopTerminal } from "#/server/terminal";
 
 type XTermInstance = {
 	open: (element: HTMLElement) => void;
@@ -33,7 +30,7 @@ export interface TerminalViewState {
 
 type Listener = () => void;
 
-const STOPPED_POLL_DELAY_MS = 800;
+const TERMINAL_SOCKET_PATH = "/_ws/terminal";
 const PARKING_LOT_ID = "craftdesk-terminal-parking-lot";
 const DEFAULT_TERMINAL_KEY = "default";
 const INITIAL_VIEW_STATE: TerminalViewState = {
@@ -42,7 +39,7 @@ const INITIAL_VIEW_STATE: TerminalViewState = {
 	isConnecting: false,
 };
 
-const terminalControllers = new Map<string, PersistentTerminalController>();
+const terminalControllers = new Map<string, TerminalController>();
 
 export function getPersistentTerminalController(scope: TerminalScope) {
 	const scopeKey = getScopeKey(scope);
@@ -53,7 +50,7 @@ export function getPersistentTerminalController(scope: TerminalScope) {
 		return existingController;
 	}
 
-	const controller = new PersistentTerminalController(scope);
+	const controller = new TerminalController(scope);
 	terminalControllers.set(scopeKey, controller);
 	return controller;
 }
@@ -73,8 +70,8 @@ export async function disposePersistentTerminalController(
 	await controller.dispose(options);
 }
 
-export function usePersistentTerminalController(scope: TerminalScope) {
-	const controllerRef = useRef<PersistentTerminalController | null>(null);
+export function useTerminalController(scope: TerminalScope) {
+	const controllerRef = useRef<TerminalController | null>(null);
 	const [viewState, setViewState] = useState(INITIAL_VIEW_STATE);
 	const { cwd, projectId, scopeId, scopeType, terminalKey } = scope;
 
@@ -112,7 +109,7 @@ export function usePersistentTerminalController(scope: TerminalScope) {
 	};
 }
 
-class PersistentTerminalController {
+class TerminalController {
 	private scope: TerminalScope;
 	private readonly listeners = new Set<Listener>();
 	private readonly viewState: TerminalViewState = { ...INITIAL_VIEW_STATE };
@@ -121,10 +118,13 @@ class PersistentTerminalController {
 	private resizeObserver: ResizeObserver | null = null;
 	private terminal: XTermInstance | null = null;
 	private fitAddon: FitAddonInstance | null = null;
-	private startupPromise: Promise<void> | null = null;
+	private socket: WebSocket | null = null;
+	private socketReadyPromise: Promise<void> | null = null;
+	private setupPromise: Promise<void> | null = null;
+	private resumePromise: Promise<void> | null = null;
 	private sessionId: string | null = null;
-	private sequence = 0;
 	private isDisposed = false;
+	private hasCheckedExistingSession = false;
 
 	constructor(scope: TerminalScope) {
 		this.scope = scope;
@@ -158,17 +158,12 @@ class PersistentTerminalController {
 		this.mountHostElement();
 		this.observeResize();
 
-		if (
-			options?.autoStart === false &&
-			!this.terminal &&
-			!this.startupPromise
-		) {
+		if (options?.autoStart) {
+			void this.start();
 			return;
 		}
 
-		void this.start().catch(() => {
-			// Error state is already managed inside the controller startup flow.
-		});
+		void this.resumeExistingSession();
 	}
 
 	detach(mountElement: HTMLElement) {
@@ -188,54 +183,43 @@ class PersistentTerminalController {
 	}
 
 	async start() {
-		if (this.sessionId && this.viewState.session?.status !== "running") {
+		if (this.viewState.session && this.viewState.session.status !== "running") {
 			await this.restart();
 			return;
 		}
 
-		await this.ensureStarted();
+		await this.ensureConnected();
 
 		if (this.isDisposed) {
 			return;
 		}
 
 		this.focus();
-		await this.resizeToFit();
+		void this.resizeToFit();
 	}
 
 	async restart() {
-		if (!this.sessionId) {
+		if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+			await this.ensureConnected();
+		}
+
+		if (this.isDisposed) {
 			return;
 		}
 
+		this.setConnecting(true);
 		this.setError(null);
-
-		try {
-			const snapshot = await restartTerminal({
-				data: { sessionId: this.sessionId },
-			});
-			this.syncSnapshot(snapshot, { resetViewport: true });
-			await this.resizeToFit();
-		} catch (cause) {
-			this.setError(getErrorMessage(cause));
-		}
+		this.sendMessage({ type: "restart" });
 	}
 
 	async stop() {
-		if (!this.sessionId) {
+		if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
 			return;
 		}
 
+		this.setConnecting(true);
 		this.setError(null);
-
-		try {
-			const snapshot = await stopTerminal({
-				data: { sessionId: this.sessionId },
-			});
-			this.syncSnapshot(snapshot, { resetViewport: true });
-		} catch (cause) {
-			this.setError(getErrorMessage(cause));
-		}
+		this.sendMessage({ type: "stop" });
 	}
 
 	focus() {
@@ -247,13 +231,17 @@ class PersistentTerminalController {
 	async dispose(options?: { stop?: boolean }) {
 		this.isDisposed = true;
 		const currentSessionId = this.sessionId;
+		this.setupPromise = null;
+		this.socketReadyPromise = null;
 		this.sessionId = null;
-		this.sequence = 0;
-		this.startupPromise = null;
 
 		this.resizeObserver?.disconnect();
 		this.resizeObserver = null;
 		this.mountElement = null;
+
+		const socket = this.socket;
+		this.socket = null;
+		socket?.close();
 
 		const hostElement = this.hostElement;
 		if (hostElement?.parentElement) {
@@ -338,137 +326,91 @@ class PersistentTerminalController {
 		this.resizeObserver.observe(this.mountElement);
 	}
 
-	private async ensureStarted() {
+	private async ensureConnected() {
 		if (this.isDisposed) {
 			return;
 		}
 
-		if (this.terminal) {
-			return;
+		if (this.setupPromise) {
+			return this.setupPromise;
 		}
 
-		if (this.startupPromise) {
-			return this.startupPromise;
-		}
-
-		this.startupPromise = this.createTerminalSession();
-		return this.startupPromise;
+		this.setupPromise = this.connect();
+		return this.setupPromise;
 	}
 
-	private async createTerminalSession() {
-		if (this.isDisposed) {
-			return;
+	private async resumeExistingSession() {
+		if (
+			this.isDisposed ||
+			this.hasCheckedExistingSession ||
+			this.resumePromise ||
+			this.viewState.session ||
+			this.setupPromise
+		) {
+			return this.resumePromise;
 		}
 
-		this.setConnecting(true);
-		this.setError(null);
+		this.resumePromise = this.loadExistingSession();
+		return this.resumePromise;
+	}
+
+	private async loadExistingSession() {
+		this.hasCheckedExistingSession = true;
 
 		try {
-			const [{ Terminal: XTerm }, { FitAddon }, { WebLinksAddon }] =
-				await Promise.all([
-					import("@xterm/xterm"),
-					import("@xterm/addon-fit"),
-					import("@xterm/addon-web-links"),
-				]);
-
-			const hostElement = this.ensureHostElement();
-
-			if (!hostElement.isConnected) {
-				(this.mountElement ?? getParkingLot()).appendChild(hostElement);
-			}
-
-			const terminal = new XTerm({
-				allowTransparency: true,
-				cursorBlink: true,
-				cursorStyle: "bar",
-				fontFamily:
-					'"JetBrains Mono", "SFMono-Regular", "Cascadia Code", "Menlo", monospace',
-				fontSize: 13,
-				lineHeight: 1.35,
-				scrollback: 20000,
-				theme: {
-					background: "#09090b",
-					foreground: "#f4f4f5",
-					cursor: "#fafafa",
-					selectionBackground: "rgba(96, 165, 250, 0.28)",
-					black: "#09090b",
-					red: "#f87171",
-					green: "#4ade80",
-					yellow: "#facc15",
-					blue: "#60a5fa",
-					magenta: "#c084fc",
-					cyan: "#22d3ee",
-					white: "#fafafa",
-					brightBlack: "#52525b",
-					brightRed: "#fca5a5",
-					brightGreen: "#86efac",
-					brightYellow: "#fde047",
-					brightBlue: "#93c5fd",
-					brightMagenta: "#d8b4fe",
-					brightCyan: "#67e8f9",
-					brightWhite: "#ffffff",
-				},
-			});
-			const fitAddon = new FitAddon();
-
-			terminal.loadAddon(fitAddon);
-			terminal.loadAddon(new WebLinksAddon());
-			terminal.open(hostElement);
-
-			this.terminal = terminal as XTermInstance;
-			this.fitAddon = fitAddon as FitAddonInstance;
-			this.focus();
-			this.fitTerminal();
-
-			const snapshot = await connectTerminal({
+			const existingSession = await getTerminalSession({
 				data: {
 					scopeType: this.scope.scopeType,
 					scopeId: this.scope.scopeId,
-					projectId: this.scope.projectId,
-					cwd: this.scope.cwd,
 					terminalKey: this.scope.terminalKey,
 				},
 			});
 
-			if (this.isDisposed) {
-				await stopTerminal({
-					data: { sessionId: snapshot.sessionId },
-				}).catch(() => {});
+			if (!existingSession || this.isDisposed) {
 				return;
 			}
 
-			const resizedSnapshot = await this.pushResize(snapshot.sessionId);
+			await this.ensureTerminal();
+			this.syncSnapshot(existingSession, { reset: true });
+			await this.ensureConnected();
 
 			if (this.isDisposed) {
-				await stopTerminal({
-					data: { sessionId: resizedSnapshot?.sessionId ?? snapshot.sessionId },
-				}).catch(() => {});
 				return;
 			}
 
-			this.syncSnapshot(resizedSnapshot ?? snapshot, { resetViewport: true });
-			this.setConnecting(false);
-
-			terminal.onData((data) => {
-				const currentSessionId = this.sessionId;
-
-				if (!currentSessionId) {
-					return;
-				}
-
-				void writeTerminal({
-					data: {
-						sessionId: currentSessionId,
-						data,
-					},
-				}).catch((cause) => {
-					this.setError(getErrorMessage(cause));
-				});
-			});
-
-			void this.readLoop();
+			void this.resizeToFit();
 		} catch (cause) {
-			this.startupPromise = null;
+			if (!this.isDisposed) {
+				this.setError(getErrorMessage(cause));
+			}
+		} finally {
+			this.resumePromise = null;
+		}
+	}
+
+	private async connect() {
+		this.setConnecting(true);
+		this.setError(null);
+
+		try {
+			await this.ensureTerminal();
+			await this.ensureSocket();
+
+			if (this.isDisposed) {
+				return;
+			}
+
+			this.sendMessage({
+				type: "connect",
+				scopeType: this.scope.scopeType,
+				scopeId: this.scope.scopeId,
+				projectId: this.scope.projectId,
+				cwd: this.scope.cwd,
+				terminalKey: this.scope.terminalKey,
+			});
+			void this.resizeToFit();
+		} catch (cause) {
+			this.setupPromise = null;
 
 			if (this.isDisposed) {
 				return;
@@ -480,75 +422,203 @@ class PersistentTerminalController {
 		}
 	}
 
-	private async readLoop() {
-		while (this.sessionId) {
-			try {
-				const result = await readTerminal({
-					data: {
-						sessionId: this.sessionId,
-						afterSequence: this.sequence,
-						timeoutMs: 25_000,
-					},
+	private async ensureTerminal() {
+		if (this.terminal) {
+			return;
+		}
+
+		const [{ Terminal: XTerm }, { FitAddon }, { WebLinksAddon }] =
+			await Promise.all([
+				import("@xterm/xterm"),
+				import("@xterm/addon-fit"),
+				import("@xterm/addon-web-links"),
+			]);
+
+		if (this.isDisposed) {
+			return;
+		}
+
+		const hostElement = this.ensureHostElement();
+
+		if (!hostElement.isConnected) {
+			(this.mountElement ?? getParkingLot()).appendChild(hostElement);
+		}
+
+		const terminal = new XTerm({
+			allowTransparency: true,
+			cursorBlink: true,
+			cursorStyle: "bar",
+			fontFamily:
+				'"JetBrains Mono", "SFMono-Regular", "Cascadia Code", "Menlo", monospace',
+			fontSize: 13,
+			lineHeight: 1.35,
+			scrollback: 20000,
+			theme: {
+				background: "#09090b",
+				foreground: "#f4f4f5",
+				cursor: "#fafafa",
+				selectionBackground: "rgba(96, 165, 250, 0.28)",
+				black: "#09090b",
+				red: "#f87171",
+				green: "#4ade80",
+				yellow: "#facc15",
+				blue: "#60a5fa",
+				magenta: "#c084fc",
+				cyan: "#22d3ee",
+				white: "#fafafa",
+				brightBlack: "#52525b",
+				brightRed: "#fca5a5",
+				brightGreen: "#86efac",
+				brightYellow: "#fde047",
+				brightBlue: "#93c5fd",
+				brightMagenta: "#d8b4fe",
+				brightCyan: "#67e8f9",
+				brightWhite: "#ffffff",
+			},
+		});
+		const fitAddon = new FitAddon();
+
+		terminal.loadAddon(fitAddon);
+		terminal.loadAddon(new WebLinksAddon());
+		terminal.open(hostElement);
+		terminal.onData((data) => {
+			if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+				return;
+			}
+
+			this.sendMessage({
+				type: "input",
+				data,
+			});
+		});
+
+		this.terminal = terminal as XTermInstance;
+		this.fitAddon = fitAddon as FitAddonInstance;
+		this.focus();
+		this.fitTerminal();
+	}
+
+	private async ensureSocket() {
+		if (this.socket?.readyState === WebSocket.OPEN) {
+			return;
+		}
+
+		if (this.socketReadyPromise) {
+			return this.socketReadyPromise;
+		}
+
+		this.socketReadyPromise = new Promise<void>((resolve, reject) => {
+			const socket = new WebSocket(resolveTerminalSocketUrl());
+			let isSettled = false;
+
+			const settle = (callback: () => void) => {
+				if (isSettled) {
+					return;
+				}
+
+				isSettled = true;
+				callback();
+			};
+
+			socket.addEventListener("open", () => {
+				settle(() => {
+					this.socket = socket;
+					this.socketReadyPromise = null;
+					resolve();
 				});
+			});
 
-				const activeTerminal = this.terminal;
+			socket.addEventListener("message", (event) => {
+				this.handleSocketMessage(event);
+			});
 
-				if (result.reset) {
-					activeTerminal?.reset();
-					if (result.buffer) {
-						activeTerminal?.write(result.buffer);
-					}
-				} else {
-					for (const chunk of result.chunks) {
-						activeTerminal?.write(chunk.data);
-					}
+			socket.addEventListener("close", () => {
+				if (this.socket === socket) {
+					this.socket = null;
 				}
 
-				this.sequence = result.sequence;
+				this.socketReadyPromise = null;
+				this.setupPromise = null;
+
+				if (!this.isDisposed) {
+					this.setConnecting(false);
+				}
+
+				settle(() => {
+					reject(new Error("Terminal connection closed before it was ready."));
+				});
+			});
+
+			socket.addEventListener("error", () => {
+				if (!this.isDisposed) {
+					this.setError("Terminal connection failed.");
+				}
+
+				settle(() => {
+					reject(new Error("Terminal connection failed."));
+				});
+			});
+		});
+
+		return this.socketReadyPromise;
+	}
+
+	private handleSocketMessage(event: MessageEvent) {
+		const message = parseServerMessage(event.data);
+
+		if (!message) {
+			this.setError("Terminal sent an invalid response.");
+			this.setConnecting(false);
+			return;
+		}
+
+		switch (message.type) {
+			case "snapshot": {
+				this.sessionId = message.session.sessionId;
+				this.setupPromise = null;
+				this.setConnecting(false);
+				this.syncSnapshot(message.session, { reset: message.reset });
+				return;
+			}
+			case "output": {
+				if (this.sessionId && message.sessionId !== this.sessionId) {
+					return;
+				}
+
+				this.terminal?.write(message.data);
 				if (this.viewState.session) {
-					this.setSession({
-						...this.viewState.session,
-						status: result.status,
-						exitCode: result.exitCode,
-						sequence: result.sequence,
-						buffer: result.reset
-							? result.buffer
-							: this.viewState.session.buffer,
-					});
+					this.viewState.session.sequence = message.sequence;
 				}
-
-				if (result.status !== "running") {
-					await sleep(STOPPED_POLL_DELAY_MS);
-				}
-			} catch (cause) {
-				this.setError(getErrorMessage(cause));
-				await sleep(STOPPED_POLL_DELAY_MS);
+				return;
+			}
+			case "error": {
+				this.setupPromise = null;
+				this.setConnecting(false);
+				this.setError(message.message);
 			}
 		}
 	}
 
 	private syncSnapshot(
 		nextSnapshot: TerminalSessionSnapshot,
-		options?: { resetViewport?: boolean },
+		options?: { reset?: boolean },
 	) {
 		if (this.isDisposed) {
 			return;
 		}
 
 		this.sessionId = nextSnapshot.sessionId;
-		this.sequence = nextSnapshot.sequence;
 		this.setSession(nextSnapshot);
 
 		if (!this.terminal) {
 			return;
 		}
 
-		if (options?.resetViewport) {
+		if (options?.reset) {
 			this.terminal.reset();
-		}
-
-		if (nextSnapshot.buffer) {
-			this.terminal.write(nextSnapshot.buffer);
+			if (nextSnapshot.buffer) {
+				this.terminal.write(nextSnapshot.buffer);
+			}
 		}
 	}
 
@@ -565,37 +635,37 @@ class PersistentTerminalController {
 	}
 
 	private async resizeToFit() {
-		const snapshot = await this.pushResize();
+		const size = this.fitTerminal();
 
-		if (snapshot && this.viewState.session) {
-			this.setSession({
-				...this.viewState.session,
-				resolvedCwd: snapshot.resolvedCwd,
-				requestedCwd: snapshot.requestedCwd,
-				shell: snapshot.shell,
-				status: snapshot.status,
-				exitCode: snapshot.exitCode,
-				sequence: snapshot.sequence,
-				warnings: snapshot.warnings,
-			});
+		if (!size || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
+			return;
 		}
+
+		this.sendMessage({
+			type: "resize",
+			cols: size.cols,
+			rows: size.rows,
+		});
 	}
 
-	private async pushResize(sessionIdOverride?: string) {
-		const size = this.fitTerminal();
-		const currentSessionId = sessionIdOverride ?? this.sessionId;
-
-		if (!size || !currentSessionId) {
-			return null;
+	private sendMessage(message: object) {
+		if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+			return;
 		}
 
-		return resizeTerminal({
-			data: {
-				sessionId: currentSessionId,
-				cols: size.cols,
-				rows: size.rows,
-			},
-		});
+		this.socket.send(JSON.stringify(message));
+	}
+}
+
+function parseServerMessage(data: unknown): TerminalSocketServerMessage | null {
+	if (typeof data !== "string") {
+		return null;
+	}
+
+	try {
+		return JSON.parse(data) as TerminalSocketServerMessage;
+	} catch {
+		return null;
 	}
 }
 
@@ -626,12 +696,11 @@ function getParkingLot() {
 	return parkingLot;
 }
 
-function getErrorMessage(cause: unknown) {
-	return cause instanceof Error ? cause.message : "Terminal request failed.";
+function resolveTerminalSocketUrl() {
+	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+	return `${protocol}//${window.location.host}${TERMINAL_SOCKET_PATH}`;
 }
 
-function sleep(durationMs: number) {
-	return new Promise((resolve) => {
-		window.setTimeout(resolve, durationMs);
-	});
+function getErrorMessage(cause: unknown) {
+	return cause instanceof Error ? cause.message : "Terminal request failed.";
 }

@@ -6,9 +6,11 @@ import path from "node:path";
 
 import type {
 	ConnectTerminalInput,
+	GetTerminalSessionInput,
 	ReadTerminalInput,
 	ReadTerminalResult,
 	ResizeTerminalInput,
+	StopScopeTerminalInput,
 	TerminalChunk,
 	TerminalSessionSnapshot,
 	TerminalStatus,
@@ -28,6 +30,21 @@ interface Waiter {
 	resolve: () => void;
 	timer: ReturnType<typeof setTimeout>;
 }
+
+type TerminalSessionListener = (event: TerminalSessionEvent) => void;
+
+type TerminalSessionEvent =
+	| {
+			type: "output";
+			sessionId: string;
+			sequence: number;
+			data: string;
+	  }
+	| {
+			type: "snapshot";
+			session: TerminalSessionSnapshot;
+			reset: boolean;
+	  };
 
 interface PtyExitEvent {
 	exitCode: number;
@@ -78,6 +95,7 @@ interface TerminalSessionRecord {
 
 const sessionsById = new Map<string, TerminalSessionRecord>();
 const sessionIdByScopeKey = new Map<string, string>();
+const sessionListeners = new Map<string, Set<TerminalSessionListener>>();
 const runtimeRequire = createRequire(import.meta.url);
 
 let nodePtyModule: NodePtyModule | null = null;
@@ -95,10 +113,15 @@ function normalizeTerminalKey(terminalKey?: string) {
 
 function matchesScope(
 	session: TerminalSessionRecord,
-	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
+	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId"> & {
+		terminalKey?: string;
+	},
 ) {
 	return (
-		session.scopeType === input.scopeType && session.scopeId === input.scopeId
+		session.scopeType === input.scopeType &&
+		session.scopeId === input.scopeId &&
+		(input.terminalKey === undefined ||
+			session.terminalKey === normalizeTerminalKey(input.terminalKey))
 	);
 }
 
@@ -196,7 +219,36 @@ function appendOutput(session: TerminalSessionRecord, data: string) {
 		session.buffer = session.buffer.slice(-MAX_BUFFER_LENGTH);
 	}
 
+	emitSessionEvent(session.id, {
+		type: "output",
+		sessionId: session.id,
+		sequence: session.sequence,
+		data,
+	});
 	flushWaiters(session);
+}
+
+function emitSessionEvent(sessionId: string, event: TerminalSessionEvent) {
+	const listeners = sessionListeners.get(sessionId);
+
+	if (!listeners || listeners.size === 0) {
+		return;
+	}
+
+	for (const listener of listeners) {
+		listener(event);
+	}
+}
+
+function emitSessionSnapshot(
+	session: TerminalSessionRecord,
+	options?: { reset?: boolean },
+) {
+	emitSessionEvent(session.id, {
+		type: "snapshot",
+		session: serializeSession(session),
+		reset: options?.reset ?? false,
+	});
 }
 
 function flushWaiters(session: TerminalSessionRecord) {
@@ -303,9 +355,11 @@ function attachPty(session: TerminalSessionRecord) {
 			`\r\n[craftdesk] Terminal exited${typeof exitCode === "number" ? ` with code ${exitCode}` : ""}.\r\n`,
 		);
 		refreshProjectSessionCount(session.projectId);
+		emitSessionSnapshot(session);
 	});
 
 	refreshProjectSessionCount(session.projectId);
+	emitSessionSnapshot(session, { reset: true });
 }
 
 function createSession(input: ConnectTerminalInput) {
@@ -337,7 +391,9 @@ function createSession(input: ConnectTerminalInput) {
 }
 
 export function isScopeRunning(
-	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
+	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId"> & {
+		terminalKey?: string;
+	},
 ) {
 	for (const session of sessionsById.values()) {
 		if (matchesScope(session, input) && session.status === "running") {
@@ -364,6 +420,50 @@ export function connectTerminal(input: ConnectTerminalInput) {
 	}
 
 	return serializeSession(createSession(input));
+}
+
+export function getTerminalSession(
+	input: GetTerminalSessionInput,
+): TerminalSessionSnapshot | null {
+	const sessionId = sessionIdByScopeKey.get(getScopeKey(input));
+
+	if (!sessionId) {
+		return null;
+	}
+
+	const session = sessionsById.get(sessionId);
+
+	if (!session) {
+		sessionIdByScopeKey.delete(getScopeKey(input));
+		return null;
+	}
+
+	return serializeSession(session);
+}
+
+export function subscribeToTerminalSession(
+	sessionId: string,
+	listener: TerminalSessionListener,
+) {
+	getSessionOrThrow(sessionId);
+	const listeners =
+		sessionListeners.get(sessionId) ?? new Set<TerminalSessionListener>();
+	listeners.add(listener);
+	sessionListeners.set(sessionId, listeners);
+
+	return () => {
+		const currentListeners = sessionListeners.get(sessionId);
+
+		if (!currentListeners) {
+			return;
+		}
+
+		currentListeners.delete(listener);
+
+		if (currentListeners.size === 0) {
+			sessionListeners.delete(sessionId);
+		}
+	};
 }
 
 export async function readTerminal(
@@ -436,10 +536,12 @@ export function resizeTerminal(input: ResizeTerminalInput) {
 	session.rows = Math.max(8, input.rows);
 
 	if (session.status !== "running" || !session.pty) {
+		emitSessionSnapshot(session);
 		return serializeSession(session);
 	}
 
 	session.pty.resize(session.cols, session.rows);
+	emitSessionSnapshot(session);
 	return serializeSession(session);
 }
 
@@ -470,12 +572,11 @@ export function stopTerminal(sessionId: string) {
 	session.exitCode = null;
 	appendOutput(session, "\r\n[craftdesk] Terminal stopped.\r\n");
 	refreshProjectSessionCount(session.projectId);
+	emitSessionSnapshot(session);
 	return serializeSession(session);
 }
 
-export function stopScopeTerminal(
-	input: Pick<ConnectTerminalInput, "scopeType" | "scopeId">,
-) {
+export function stopScopeTerminal(input: StopScopeTerminalInput) {
 	const matchingSessions = [...sessionsById.values()].filter((session) =>
 		matchesScope(session, input),
 	);

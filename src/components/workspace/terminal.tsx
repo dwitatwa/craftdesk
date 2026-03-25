@@ -9,12 +9,21 @@ import {
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "#/components/ui/button";
-import type { TerminalScope } from "#/lib/terminal";
+import type { TerminalActionRequest, TerminalScope } from "#/lib/terminal";
 import { cn } from "#/lib/utils";
 import {
-	getPersistentTerminalController,
-	usePersistentTerminalController,
+	type TerminalViewState,
+	useTerminalController,
 } from "./terminal-runtime";
+
+export interface TerminalStatusViewState {
+	error: TerminalViewState["error"];
+	isConnecting: TerminalViewState["isConnecting"];
+	session: Pick<
+		NonNullable<TerminalViewState["session"]>,
+		"sessionId" | "status" | "exitCode"
+	> | null;
+}
 
 interface TerminalProps {
 	className?: string;
@@ -29,6 +38,8 @@ interface TerminalProps {
 	showRestartAction?: boolean;
 	showStopAction?: boolean;
 	scope: TerminalScope;
+	actionRequest?: TerminalActionRequest | null;
+	onViewStateChange?: (viewState: TerminalStatusViewState) => void;
 }
 
 export function Terminal({
@@ -44,23 +55,25 @@ export function Terminal({
 	showRestartAction = true,
 	showStopAction = true,
 	scope,
+	actionRequest,
+	onViewStateChange,
 }: TerminalProps) {
 	const hostRef = useRef<HTMLDivElement | null>(null);
-	const { controller, viewState } = usePersistentTerminalController(scope);
-	const { cwd, projectId, scopeId, scopeType, terminalKey } = scope;
+	const onViewStateChangeRef = useRef(onViewStateChange);
+	const { controller, viewState } = useTerminalController(scope);
+	const sessionExitCode = viewState.session?.exitCode ?? null;
+	const sessionId = viewState.session?.sessionId ?? null;
+	const sessionStatus = viewState.session?.status ?? null;
+
+	useEffect(() => {
+		onViewStateChangeRef.current = onViewStateChange;
+	}, [onViewStateChange]);
 
 	useEffect(() => {
 		if (typeof window === "undefined" || isCollapsed) {
 			return;
 		}
 
-		const controller = getPersistentTerminalController({
-			cwd,
-			projectId,
-			scopeId,
-			scopeType,
-			terminalKey,
-		});
 		const mountElement = hostRef.current;
 
 		if (!controller || !mountElement) {
@@ -72,7 +85,45 @@ export function Terminal({
 		return () => {
 			controller.detach(mountElement);
 		};
-	}, [autoStart, cwd, isCollapsed, projectId, scopeId, scopeType, terminalKey]);
+	}, [autoStart, controller, isCollapsed]);
+
+	useEffect(() => {
+		onViewStateChangeRef.current?.({
+			error: viewState.error,
+			isConnecting: viewState.isConnecting,
+			session: sessionId
+				? {
+						sessionId,
+						status: sessionStatus ?? "stopped",
+						exitCode: sessionExitCode,
+					}
+				: null,
+		});
+	}, [
+		sessionExitCode,
+		sessionId,
+		sessionStatus,
+		viewState.error,
+		viewState.isConnecting,
+	]);
+
+	useEffect(() => {
+		if (!actionRequest || !controller) {
+			return;
+		}
+
+		if (actionRequest.type === "start") {
+			void controller.start();
+			return;
+		}
+
+		if (actionRequest.type === "restart") {
+			void controller.restart();
+			return;
+		}
+
+		void controller.stop();
+	}, [actionRequest, controller]);
 
 	const handleStart = async () => {
 		await controller?.start();

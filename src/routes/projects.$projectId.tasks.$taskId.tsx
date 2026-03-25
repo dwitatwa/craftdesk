@@ -377,6 +377,7 @@ function TaskDetailView() {
 								scopeId: task.id,
 								projectId: task.projectId,
 								cwd: task.projectPath,
+								terminalKey: "detail",
 							}}
 						/>
 					</div>

@@ -12,11 +12,9 @@ import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { Terminal } from "#/components/workspace/terminal";
-import {
-	disposePersistentTerminalController,
-	usePersistentTerminalController,
-} from "#/components/workspace/terminal-runtime";
+import { disposePersistentTerminalController } from "#/components/workspace/terminal-runtime";
 import type { TaskCategory } from "#/lib/craftdesk";
+import type { TerminalActionRequest, TerminalStatus } from "#/lib/terminal";
 import { cn } from "#/lib/utils";
 import {
 	createColumn,
@@ -52,6 +50,9 @@ interface ProjectTerminalTab {
 	label: string;
 	terminalKey: string;
 	autoStart: boolean;
+	status: TerminalStatus | "idle";
+	isConnecting: boolean;
+	actionRequest: TerminalActionRequest | null;
 }
 
 interface ProjectTerminalWorkspaceState {
@@ -65,6 +66,16 @@ const projectTerminalWorkspaces = new Map<
 	ProjectTerminalWorkspaceState
 >();
 
+let nextTerminalActionNonce = 1;
+
+function createTerminalActionRequest(
+	type: TerminalActionRequest["type"],
+): TerminalActionRequest {
+	const nonce = nextTerminalActionNonce;
+	nextTerminalActionNonce += 1;
+	return { type, nonce };
+}
+
 function createProjectTerminalTab(
 	terminalNumber: number,
 	options?: { autoStart?: boolean },
@@ -76,6 +87,9 @@ function createProjectTerminalTab(
 		label: `Terminal ${terminalNumber}`,
 		terminalKey,
 		autoStart: options?.autoStart ?? false,
+		status: "idle",
+		isConnecting: false,
+		actionRequest: null,
 	};
 }
 
@@ -481,6 +495,76 @@ function ProjectDetailView() {
 		}));
 	};
 
+	const handleStartProjectTerminalTab = (tabId: string) => {
+		setIsTerminalCollapsed(false);
+		updateProjectTerminalState((currentState) => ({
+			...currentState,
+			activeTabId: tabId,
+			tabs: currentState.tabs.map((tab) =>
+				tab.id === tabId
+					? {
+							...tab,
+							autoStart: true,
+							isConnecting: true,
+							actionRequest: createTerminalActionRequest("start"),
+						}
+					: tab,
+			),
+		}));
+	};
+
+	const handleStopProjectTerminalTab = async (tabId: string) => {
+		if (!workspace) {
+			return;
+		}
+
+		const tabToStop = projectTerminalState.tabs.find((tab) => tab.id === tabId);
+
+		if (!tabToStop) {
+			return;
+		}
+
+		if (projectTerminalState.activeTabId === tabId && !isTerminalCollapsed) {
+			updateProjectTerminalState((currentState) => ({
+				...currentState,
+				tabs: currentState.tabs.map((tab) =>
+					tab.id === tabId
+						? {
+								...tab,
+								autoStart: false,
+								isConnecting: true,
+								actionRequest: createTerminalActionRequest("stop"),
+							}
+						: tab,
+				),
+			}));
+			return;
+		}
+
+		await stopScopeTerminal({
+			data: {
+				scopeType: "project",
+				scopeId: workspace.project.id,
+				terminalKey: tabToStop.terminalKey,
+			},
+		});
+
+		updateProjectTerminalState((currentState) => ({
+			...currentState,
+			tabs: currentState.tabs.map((tab) =>
+				tab.id === tabId
+					? {
+							...tab,
+							autoStart: false,
+							status: "stopped",
+							isConnecting: false,
+							actionRequest: null,
+						}
+					: tab,
+			),
+		}));
+	};
+
 	const handleCloseProjectTerminalTab = async (tabId: string) => {
 		if (!workspace) {
 			return;
@@ -651,9 +735,9 @@ function ProjectDetailView() {
 														key={tab.id}
 														tab={tab}
 														isActive={tab.id === activeProjectTerminalTab.id}
-														projectId={workspace.project.id}
-														cwd={workspace.project.path}
 														onSelect={handleSelectProjectTerminalTab}
+														onStart={handleStartProjectTerminalTab}
+														onStop={handleStopProjectTerminalTab}
 														onClose={handleCloseProjectTerminalTab}
 													/>
 												);
@@ -675,8 +759,29 @@ function ProjectDetailView() {
 									</div>
 									{!isTerminalCollapsed && (
 										<Terminal
+											key={activeProjectTerminalTab.id}
+											actionRequest={activeProjectTerminalTab.actionRequest}
 											autoStart={activeProjectTerminalTab.autoStart}
 											className="min-h-0 flex-1"
+											onViewStateChange={(viewState) => {
+												updateProjectTerminalState((currentState) => ({
+													...currentState,
+													tabs: currentState.tabs.map((tab) =>
+														tab.id === activeProjectTerminalTab.id
+															? {
+																	...tab,
+																	status:
+																		viewState.session?.status ??
+																		(tab.status === "idle"
+																			? "idle"
+																			: tab.status),
+																	isConnecting: viewState.isConnecting,
+																	actionRequest: null,
+																}
+															: tab,
+													),
+												}));
+											}}
 											showHeader={false}
 											showStartAction={false}
 											showRestartAction={false}
@@ -725,38 +830,28 @@ function clampProjectTerminalHeight(height: number, containerHeight: number) {
 function ProjectTerminalTabButton({
 	tab,
 	isActive,
-	projectId,
-	cwd,
 	onSelect,
+	onStart,
+	onStop,
 	onClose,
 }: {
 	tab: ProjectTerminalTab;
 	isActive: boolean;
-	projectId: string;
-	cwd: string;
 	onSelect: (tabId: string) => void;
+	onStart: (tabId: string) => void;
+	onStop: (tabId: string) => Promise<void>;
 	onClose: (tabId: string) => Promise<void>;
 }) {
-	const scope = {
-		scopeType: "project" as const,
-		scopeId: projectId,
-		projectId,
-		cwd,
-		terminalKey: tab.terminalKey,
-	};
-	const { controller, viewState } = usePersistentTerminalController(scope);
-	const { isConnecting, session } = viewState;
-	const isRunning = session?.status === "running";
-	const canStart = !isConnecting && session?.status !== "running";
-	const canStop = !isConnecting && isRunning;
+	const isRunning = tab.status === "running";
+	const canStart = !tab.isConnecting && tab.status !== "running";
+	const canStop = !tab.isConnecting && isRunning;
 
 	const handleStart = () => {
-		onSelect(tab.id);
-		void controller?.start();
+		onStart(tab.id);
 	};
 
 	const handleStop = () => {
-		void controller?.stop();
+		void onStop(tab.id);
 	};
 
 	const handleClose = () => {

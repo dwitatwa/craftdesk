@@ -12,6 +12,12 @@ export interface TerminalScope {
 
 export interface ConnectTerminalInput extends TerminalScope {}
 
+export interface GetTerminalSessionInput {
+	scopeType: TerminalScopeType;
+	scopeId: string;
+	terminalKey?: string;
+}
+
 export interface TerminalChunk {
 	sequence: number;
 	data: string;
@@ -71,4 +77,63 @@ export interface StopTerminalInput {
 export interface StopScopeTerminalInput {
 	scopeType: TerminalScopeType;
 	scopeId: string;
+	terminalKey?: string;
 }
+
+export interface TerminalActionRequest {
+	type: "start" | "restart" | "stop";
+	nonce: number;
+}
+
+export interface TerminalSocketConnectMessage extends ConnectTerminalInput {
+	type: "connect";
+}
+
+export interface TerminalSocketInputMessage {
+	type: "input";
+	data: string;
+}
+
+export interface TerminalSocketResizeMessage {
+	type: "resize";
+	cols: number;
+	rows: number;
+}
+
+export interface TerminalSocketRestartMessage {
+	type: "restart";
+}
+
+export interface TerminalSocketStopMessage {
+	type: "stop";
+}
+
+export type TerminalSocketClientMessage =
+	| TerminalSocketConnectMessage
+	| TerminalSocketInputMessage
+	| TerminalSocketResizeMessage
+	| TerminalSocketRestartMessage
+	| TerminalSocketStopMessage;
+
+export interface TerminalSocketSnapshotMessage {
+	type: "snapshot";
+	session: TerminalSessionSnapshot;
+	reset: boolean;
+}
+
+export interface TerminalSocketOutputMessage {
+	type: "output";
+	sessionId: string;
+	sequence: number;
+	data: string;
+}
+
+export interface TerminalSocketErrorMessage {
+	type: "error";
+	message: string;
+}
+
+export type TerminalSocketServerMessage =
+	| TerminalSocketSnapshotMessage
+	| TerminalSocketOutputMessage
+	| TerminalSocketErrorMessage;

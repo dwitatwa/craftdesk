@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import type {
 	ConnectTerminalInput,
+	GetTerminalSessionInput,
 	ReadTerminalInput,
 	ResizeTerminalInput,
 	RestartTerminalInput,
@@ -17,6 +18,15 @@ export const connectTerminal = createServerFn({ method: "POST" })
 			"#/server/terminal-manager"
 		);
 		return connectScopedTerminal(data);
+	});
+
+export const getTerminalSession = createServerFn({ method: "POST" })
+	.inputValidator((input: GetTerminalSessionInput) => input)
+	.handler(async ({ data }) => {
+		const { getTerminalSession: getScopedTerminalSession } = await import(
+			"#/server/terminal-manager"
+		);
+		return getScopedTerminalSession(data);
 	});
 
 export const readTerminal = createServerFn({ method: "POST" })
