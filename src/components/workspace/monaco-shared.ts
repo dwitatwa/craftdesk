@@ -29,8 +29,10 @@ let isMonacoConfigured = false;
 
 const VESPER_THEME_COLORS: monaco.editor.IColors = {
 	"diffEditor.insertedLineBackground": "#99FFE415",
+	"diffEditorOverview.insertedForeground": "#99FFE466",
 	"diffEditor.insertedTextBackground": "#99FFE415",
 	"diffEditor.removedLineBackground": "#FF808015",
+	"diffEditorOverview.removedForeground": "#FF808066",
 	"diffEditor.removedTextBackground": "#FF808015",
 	"editor.background": "#101010",
 	"editor.foreground": "#FFFFFF",

@@ -30,9 +30,22 @@ export function resolveSelectedChange(
 	current: GitSelectedChange | null,
 	overview: GitRepositoryOverview,
 ) {
+	if (!current) {
+		return null;
+	}
+
+	const preferredChanges =
+		current.diffMode === "staged" ? overview.staged : overview.unstaged;
+	const fallbackChanges =
+		current.diffMode === "staged" ? overview.unstaged : overview.staged;
+	const preferredMode = current.diffMode;
+	const fallbackMode = current.diffMode === "staged" ? "unstaged" : "staged";
+
 	return (
-		findMatchingChange(current, overview.unstaged, "unstaged") ??
-		findMatchingChange(current, overview.staged, "staged") ??
+		findMatchingChange(current, preferredChanges, preferredMode, true) ??
+		findMatchingChange(current, fallbackChanges, fallbackMode, true) ??
+		findMatchingChange(current, preferredChanges, preferredMode, false) ??
+		findMatchingChange(current, fallbackChanges, fallbackMode, false) ??
 		null
 	);
 }
@@ -41,39 +54,27 @@ function findMatchingChange(
 	current: GitSelectedChange | null,
 	changes: GitChange[],
 	diffMode: GitDiffMode,
+	requireCodeMatch: boolean,
 ) {
 	if (!current) {
 		return null;
 	}
 
-	const exactMatch = changes.find(
+	const match = changes.find(
 		(change) =>
 			change.path === current.path &&
-			change.code === current.code &&
-			change.originalPath === current.originalPath,
+			change.originalPath === current.originalPath &&
+			(!requireCodeMatch || change.code === current.code),
 	);
 
-	if (exactMatch) {
+	if (match) {
 		return {
-			...exactMatch,
+			...match,
 			diffMode,
 		};
 	}
 
-	const pathMatch = changes.find(
-		(change) =>
-			change.path === current.path &&
-			change.originalPath === current.originalPath,
-	);
-
-	if (!pathMatch) {
-		return null;
-	}
-
-	return {
-		...pathMatch,
-		diffMode,
-	};
+	return null;
 }
 
 export function delay(timeoutMs: number) {
