@@ -156,9 +156,10 @@ export function resolveBranchRowActionState({
 		canDelete: !branch.isCurrent,
 		canPull: branch.isCurrent
 			? Boolean(
-					currentBranch?.upstream &&
-						currentBranch.behind > 0 &&
-						currentBranch.ahead === 0,
+					currentBranch &&
+						!currentBranch.detached &&
+						currentBranch.upstream &&
+						currentBranch.behind > 0,
 				)
 			: false,
 		canPush,
