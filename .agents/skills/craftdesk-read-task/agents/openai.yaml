@@ -1,0 +1,4 @@
+interface:
+  display_name: "Craftdesk Read Task"
+  short_description: "Read Craftdesk task context from the terminal"
+  default_prompt: "Use $craftdesk-read-task to load an existing Craftdesk task by explicit task id, read its title, status, notes, category, and project context from the local database, and report the result back clearly without modifying the task."
