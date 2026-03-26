@@ -20,7 +20,7 @@ export function TaskNotesEditor({
 }: TaskNotesEditorProps) {
 	const [draftNotes, setDraftNotes] = useState(initialNotes);
 	const [savedNotes, setSavedNotes] = useState(initialNotes);
-	const [mode, setMode] = useState<"write" | "preview">("write");
+	const [mode, setMode] = useState<"write" | "preview">("preview");
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveError, setSaveError] = useState<string | null>(null);
 
