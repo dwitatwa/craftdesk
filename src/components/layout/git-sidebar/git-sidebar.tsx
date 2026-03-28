@@ -101,6 +101,7 @@ export function GitSidebar({
 		handleGitGroupAction,
 		handleApplyStash,
 		handlePullCurrentBranch,
+		handleUpdateBranchFromUpstream,
 		handlePushBranchToRemote,
 		handlePushCurrentBranch,
 		handleRefresh,
@@ -476,9 +477,15 @@ export function GitSidebar({
 
 		void handlePushBranchToRemote(branch.name);
 	};
-	const handlePullFromContextMenu = () => {
+	const handlePullFromContextMenu = (branch: GitBranchListEntry) => {
 		setBranchContextMenuState(null);
-		void handlePullCurrentBranch();
+
+		if (branch.isCurrent) {
+			void handlePullCurrentBranch();
+			return;
+		}
+
+		void handleUpdateBranchFromUpstream(branch.name);
 	};
 	const handleCreatePullRequestFromContextMenu = () => {
 		const contextMenuPullRequestUrl =
@@ -859,37 +866,44 @@ export function GitSidebar({
 							<span>Checkout Branch</span>
 						</button>
 					) : null}
-					{contextMenuBranchActions.canPush ? (
-						<button
-							type="button"
-							role="menuitem"
-							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-							disabled={isBranchActionDisabled}
-							onClick={() => {
-								handlePushFromContextMenu(contextMenuBranch);
-							}}
-						>
-							<ArrowUpToLine className="size-3 text-zinc-400" />
-							<span>
-								{contextMenuBranch.isCurrent &&
-								!contextMenuBranchActions.hasUpstream
-									? "Publish Branch"
-									: "Push Branch"}
-							</span>
-						</button>
-					) : null}
-					{contextMenuBranchActions.canPull ? (
-						<button
-							type="button"
-							role="menuitem"
-							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-							disabled={isBranchActionDisabled}
-							onClick={handlePullFromContextMenu}
-						>
-							<ArrowDownToLine className="size-3 text-zinc-400" />
-							<span>Pull Branch</span>
-						</button>
-					) : null}
+					<button
+						type="button"
+						role="menuitem"
+						className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+						disabled={
+							isBranchActionDisabled || !contextMenuBranchActions.canPush
+						}
+						title={
+							!contextMenuBranchActions.canPush
+								? (contextMenuBranchActions.pushDisabledReason ?? undefined)
+								: undefined
+						}
+						onClick={() => {
+							handlePushFromContextMenu(contextMenuBranch);
+						}}
+					>
+						<ArrowUpToLine className="size-3 text-zinc-400" />
+						<span>{contextMenuBranchActions.pushLabel}</span>
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+						disabled={
+							isBranchActionDisabled || !contextMenuBranchActions.canPull
+						}
+						title={
+							!contextMenuBranchActions.canPull
+								? (contextMenuBranchActions.pullDisabledReason ?? undefined)
+								: undefined
+						}
+						onClick={() => {
+							handlePullFromContextMenu(contextMenuBranch);
+						}}
+					>
+						<ArrowDownToLine className="size-3 text-zinc-400" />
+						<span>{contextMenuBranchActions.pullLabel}</span>
+					</button>
 					{contextMenuBranchActions.canCreatePullRequest ? (
 						<button
 							type="button"

@@ -529,6 +529,9 @@ export async function applyGitBranchMutation(input: GitBranchMutationInput) {
 		}
 
 		await runGit(["pull"], repoRoot);
+	} else if (input.action === "update-branch") {
+		const branchName = await requireValidBranchName(input.branchName);
+		await updateLocalBranchFromUpstream(repoRoot, branchName);
 	} else if (input.action === "push-branch") {
 		const branchName = await requireValidBranchName(input.branchName);
 		const upstream = await loadBranchUpstream(repoRoot, branchName);
@@ -625,6 +628,66 @@ async function pushBranchToRemote(
 	}
 
 	await runGit(["push", "-u", "origin", branchName], repoRoot);
+}
+
+async function updateLocalBranchFromUpstream(
+	repoRoot: string,
+	branchName: string,
+) {
+	const branchSummary = await loadBranchSummary(repoRoot);
+
+	if (branchSummary.name === branchName) {
+		throw new Error(`Use pull to update the current branch "${branchName}".`);
+	}
+
+	const upstream = await loadBranchUpstream(repoRoot, branchName);
+
+	if (!upstream) {
+		throw new Error(`Branch "${branchName}" has no upstream to update from.`);
+	}
+
+	const [remoteName, ...remoteBranchSegments] = upstream.split("/");
+	const remoteBranchName = remoteBranchSegments.join("/");
+
+	if (!remoteName || !remoteBranchName) {
+		throw new Error(
+			`Branch "${branchName}" has an invalid upstream reference "${upstream}".`,
+		);
+	}
+
+	await runGit(["fetch", remoteName, remoteBranchName], repoRoot);
+
+	const { ahead, behind } = await loadAheadBehindCounts(
+		repoRoot,
+		branchName,
+		upstream,
+	);
+
+	if (behind === 0) {
+		throw new Error(
+			`Branch "${branchName}" is already in sync with ${upstream}.`,
+		);
+	}
+
+	if (ahead > 0) {
+		throw new Error(
+			`Branch "${branchName}" has local commits. Checkout the branch to merge or rebase with ${upstream}.`,
+		);
+	}
+
+	const isFastForward = await runGit(
+		["merge-base", "--is-ancestor", branchName, upstream],
+		repoRoot,
+		[0, 1],
+	);
+
+	if (isFastForward.code !== 0) {
+		throw new Error(
+			`Branch "${branchName}" cannot be fast-forwarded to ${upstream}. Checkout the branch to reconcile the history.`,
+		);
+	}
+
+	await runGit(["branch", "-f", branchName, upstream], repoRoot);
 }
 
 export async function waitForGitRepositoryChange(
@@ -794,15 +857,11 @@ async function loadBranchSummary(repoRoot: string): Promise<GitBranchSummary> {
 	let behind = 0;
 
 	if (upstream) {
-		const aheadBehindResult = await runGit(
-			["rev-list", "--left-right", "--count", `HEAD...${upstream}`],
+		({ ahead, behind } = await loadAheadBehindCounts(
 			repoRoot,
-		);
-		const [aheadValue, behindValue] = aheadBehindResult.stdout
-			.trim()
-			.split(/\s+/);
-		ahead = Number.parseInt(aheadValue ?? "0", 10);
-		behind = Number.parseInt(behindValue ?? "0", 10);
+			"HEAD",
+			upstream,
+		));
 	}
 
 	return {
@@ -811,6 +870,25 @@ async function loadBranchSummary(repoRoot: string): Promise<GitBranchSummary> {
 		ahead,
 		behind,
 		detached: !branchName,
+	};
+}
+
+async function loadAheadBehindCounts(
+	repoRoot: string,
+	sourceRef: string,
+	upstreamRef: string,
+) {
+	const aheadBehindResult = await runGit(
+		["rev-list", "--left-right", "--count", `${sourceRef}...${upstreamRef}`],
+		repoRoot,
+	);
+	const [aheadValue, behindValue] = aheadBehindResult.stdout
+		.trim()
+		.split(/\s+/);
+
+	return {
+		ahead: Number.parseInt(aheadValue ?? "0", 10),
+		behind: Number.parseInt(behindValue ?? "0", 10),
 	};
 }
 

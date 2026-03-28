@@ -701,6 +701,16 @@ export function useGitSidebarState({
 		[runGitBranchMutation],
 	);
 
+	const handleUpdateBranchFromUpstream = useCallback(
+		async (branchName: string) =>
+			runGitBranchMutation("update-branch", {
+				branchName,
+				mutationKey: `branch:update:${branchName}`,
+				errorMessage: "Failed to update branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
 	const handlePushCurrentBranch = useCallback(
 		async () =>
 			runGitBranchMutation("push-current", {
@@ -732,6 +742,7 @@ export function useGitSidebarState({
 		handleMergeBranchIntoCurrent,
 		handleApplyStash,
 		handlePullCurrentBranch,
+		handleUpdateBranchFromUpstream,
 		handlePushBranchToRemote,
 		handlePushCurrentBranch,
 		handleGitCommit,

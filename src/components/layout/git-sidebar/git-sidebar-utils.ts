@@ -134,7 +134,9 @@ export function resolveBranchRowActionState({
 	pendingMutationKey: string;
 }) {
 	const isCheckingOut = pendingMutationKey === `branch:checkout:${branch.name}`;
-	const isPulling = branch.isCurrent && pendingMutationKey === "branch:pull";
+	const isPulling = branch.isCurrent
+		? pendingMutationKey === "branch:pull"
+		: pendingMutationKey === `branch:update:${branch.name}`;
 	const isPushing = branch.isCurrent
 		? pendingMutationKey === "branch:push"
 		: pendingMutationKey === `branch:push:${branch.name}`;
@@ -150,23 +152,65 @@ export function resolveBranchRowActionState({
 		: !branch.upstream
 			? remotes.length > 0
 			: branch.ahead > 0;
+	const pushLabel =
+		branch.isCurrent && !currentBranch?.detached && !hasUpstream
+			? "Publish Branch"
+			: "Push Branch";
+	const pushDisabledReason = canPush
+		? null
+		: branch.isCurrent
+			? !currentBranch
+				? "Push status is unavailable."
+				: currentBranch.detached
+					? "Checkout a branch before pushing."
+					: currentBranch.upstream
+						? currentBranch.behind > 0
+							? "This branch is behind its upstream and has nothing to push."
+							: "This branch is already in sync with its upstream."
+						: "Publish is unavailable for this branch."
+			: !branch.upstream
+				? "Add a remote before pushing this branch."
+				: branch.behind > 0
+					? "This branch is behind its upstream. Update it before pushing."
+					: "This branch is already in sync with its upstream.";
+	const canPull = branch.isCurrent
+		? Boolean(
+				currentBranch &&
+					!currentBranch.detached &&
+					currentBranch.upstream &&
+					currentBranch.behind > 0,
+			)
+		: Boolean(branch.upstream && branch.behind > 0 && branch.ahead === 0);
+	const pullLabel = branch.isCurrent ? "Pull Branch" : "Update Branch";
+	const pullDisabledReason = canPull
+		? null
+		: branch.isCurrent
+			? !currentBranch
+				? "Pull status is unavailable."
+				: currentBranch.detached
+					? "Checkout a branch before pulling."
+					: !currentBranch.upstream
+						? "Set an upstream branch before pulling."
+						: "This branch is already in sync with its upstream."
+			: !branch.upstream
+				? "Set an upstream branch before updating."
+				: branch.behind === 0
+					? "This branch is already in sync with its upstream."
+					: "This branch has local commits. Update it after checking it out.";
 
 	return {
 		canCheckout: !branch.isCurrent,
 		canDelete: !branch.isCurrent,
-		canPull: branch.isCurrent
-			? Boolean(
-					currentBranch &&
-						!currentBranch.detached &&
-						currentBranch.upstream &&
-						currentBranch.behind > 0,
-				)
-			: false,
+		canPull,
 		canPush,
 		canCreatePullRequest: Boolean(branchPullRequestUrl),
 		hasUpstream,
 		isCheckingOut,
 		isPulling,
 		isPushing,
+		pullLabel,
+		pullDisabledReason,
+		pushDisabledReason,
+		pushLabel,
 	};
 }

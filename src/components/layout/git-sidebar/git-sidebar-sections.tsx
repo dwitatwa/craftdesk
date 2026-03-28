@@ -732,7 +732,7 @@ export function BranchRow({
 	const busyLabel = isCheckingOut
 		? `Checking out ${branch.name}`
 		: isPulling
-			? `Pulling ${branch.name}`
+			? `${branch.isCurrent ? "Pulling" : "Updating"} ${branch.name}`
 			: hasBranchUpstream
 				? `Pushing ${branch.name}`
 				: `Publishing ${branch.name}`;

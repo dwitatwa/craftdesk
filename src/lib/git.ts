@@ -62,6 +62,7 @@ export interface GitBranchMutationInput {
 		| "delete-local"
 		| "merge-into-current"
 		| "pull-current"
+		| "update-branch"
 		| "push-branch"
 		| "push-current";
 	branchName?: string;
