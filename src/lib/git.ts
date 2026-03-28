@@ -58,6 +58,7 @@ export interface GitBranchMutationInput {
 	action:
 		| "create-local"
 		| "checkout-local"
+		| "checkout-remote"
 		| "delete-local"
 		| "merge-into-current"
 		| "pull-current"
@@ -108,6 +109,13 @@ export interface GitRemote {
 	name: string;
 	fetchUrl: string | null;
 	pushUrl: string | null;
+	branches: GitRemoteBranch[];
+}
+
+export interface GitRemoteBranch {
+	name: string;
+	refName: string;
+	lastCommitRelativeDate: string;
 }
 
 export interface GitStashEntry {

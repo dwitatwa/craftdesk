@@ -83,11 +83,15 @@ export function GitSidebar({
 	const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 	const [discardTarget, setDiscardTarget] =
 		useState<GitSidebarDiscardTarget | null>(null);
+	const [remoteOpenState, setRemoteOpenState] = useState<
+		Record<string, boolean>
+	>({});
 	const branchCommitsRequestIdRef = useRef(0);
 	const branchContextMenuRef = useRef<HTMLDivElement | null>(null);
 	const {
 		error,
 		handleCheckoutLocalBranch,
+		handleCheckoutRemoteBranch,
 		handleCreateLocalBranch,
 		handleDeleteLocalBranch,
 		handleDiscardChanges,
@@ -98,9 +102,11 @@ export function GitSidebar({
 		handlePushBranchToRemote,
 		handlePushCurrentBranch,
 		handleRefresh,
+		handleRefreshRemotes,
 		handleStageSelectedChanges,
 		handleUnstageSelectedChanges,
 		isLoading,
+		isRefreshingRemotes,
 		overview,
 		pendingMutationKey,
 	} = useGitSidebarState({
@@ -148,6 +154,23 @@ export function GitSidebar({
 			setActiveSelectionMode(null);
 		}
 	}, [activeSelectionMode, overview]);
+
+	useEffect(() => {
+		if (!overview) {
+			setRemoteOpenState({});
+			return;
+		}
+
+		setRemoteOpenState((currentState) => {
+			const nextState: Record<string, boolean> = {};
+
+			for (const remote of overview.remotes) {
+				nextState[remote.name] = currentState[remote.name] ?? true;
+			}
+
+			return nextState;
+		});
+	}, [overview]);
 
 	useEffect(() => {
 		if (!branchCommitsBranchName || !activeProjectPath) {
@@ -356,6 +379,12 @@ export function GitSidebar({
 		: false;
 	const isBranchCommitsDialogOpen = Boolean(branchCommitsBranchName);
 	const currentBranch = overview?.branch ?? null;
+	const activeRemoteRefName = currentBranch?.upstream ?? null;
+	const pendingRemoteCheckoutRefName = pendingMutationKey.startsWith(
+		"branch:checkout-remote:",
+	)
+		? pendingMutationKey.slice("branch:checkout-remote:".length)
+		: null;
 	const orderedBranches = overview
 		? [
 				...overview.branches.filter((branch) => branch.isCurrent),
@@ -660,11 +689,48 @@ export function GitSidebar({
 								}
 								title={`Remotes (${overview.remotes.length})`}
 								icon={GitFork}
+								rightElement={
+									<Button
+										type="button"
+										variant="ghost"
+										size="icon-xs"
+										className="size-5 text-muted-foreground/40 hover:text-foreground"
+										onClick={(event) => {
+											event.preventDefault();
+											event.stopPropagation();
+											void handleRefreshRemotes();
+										}}
+										disabled={isRefreshingRemotes}
+										aria-label="Refresh remotes"
+										title="Refresh remotes"
+									>
+										{isRefreshingRemotes ? (
+											<LoaderCircle className="size-2.5 animate-spin" />
+										) : (
+											<RefreshCcw className="size-2.5" />
+										)}
+									</Button>
+								}
 							>
 								{overview.remotes.length > 0 ? (
-									<div className="space-y-0.5">
+									<div className="space-y-0.5" role="tree">
 										{overview.remotes.map((remote) => (
-											<RemoteRow key={remote.name} remote={remote} />
+											<RemoteRow
+												key={remote.name}
+												remote={remote}
+												isOpen={remoteOpenState[remote.name] ?? true}
+												onOpenChange={(open) => {
+													setRemoteOpenState((currentState) => ({
+														...currentState,
+														[remote.name]: open,
+													}));
+												}}
+												activeRefName={activeRemoteRefName}
+												onCheckoutBranch={(refName) => {
+													void handleCheckoutRemoteBranch(refName);
+												}}
+												pendingCheckoutRefName={pendingRemoteCheckoutRefName}
+											/>
 										))}
 									</div>
 								) : (

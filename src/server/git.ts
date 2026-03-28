@@ -16,6 +16,13 @@ export const getGitRepositoryOverview = createServerFn({ method: "GET" })
 		return loadGitRepositoryOverview(data);
 	});
 
+export const getGitRemotes = createServerFn({ method: "GET" })
+	.inputValidator((input: GitRepositoryOverviewInput) => input)
+	.handler(async ({ data }) => {
+		const { loadGitRemotes } = await import("#/server/git-service");
+		return loadGitRemotes(data);
+	});
+
 export const getGitBranchCommits = createServerFn({ method: "GET" })
 	.inputValidator((input: GitBranchCommitPreviewInput) => input)
 	.handler(async ({ data }) => {

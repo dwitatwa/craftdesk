@@ -106,6 +106,13 @@ export async function loadGitRepositoryOverview(
 	};
 }
 
+export async function loadGitRemotes(
+	input: GitRepositoryOverviewInput,
+): Promise<GitRemote[]> {
+	const repoRoot = await resolveGitRepositoryRoot(input.cwd);
+	return loadRemotes(repoRoot);
+}
+
 export async function loadGitBranchCommits(
 	input: GitBranchCommitPreviewInput,
 ): Promise<GitCommitPreview[]> {
@@ -460,6 +467,27 @@ export async function applyGitBranchMutation(input: GitBranchMutationInput) {
 	} else if (input.action === "checkout-local") {
 		const branchName = await requireValidBranchName(input.branchName);
 		await runGit(["checkout", branchName], repoRoot);
+	} else if (input.action === "checkout-remote") {
+		const remoteRefName = await requireValidRemoteBranchRefName(
+			repoRoot,
+			input.branchName,
+		);
+		const localBranchName = await requireValidBranchName(
+			getLocalBranchNameFromRemoteRef(remoteRefName),
+		);
+		const hasLocalBranch = await checkLocalBranchExists(
+			repoRoot,
+			localBranchName,
+		);
+
+		if (hasLocalBranch) {
+			await runGit(["checkout", localBranchName], repoRoot);
+		} else {
+			await runGit(
+				["checkout", "--track", "-b", localBranchName, remoteRefName],
+				repoRoot,
+			);
+		}
 	} else if (input.action === "delete-local") {
 		const branchName = await requireValidBranchName(input.branchName);
 		const branchSummary = await loadBranchSummary(repoRoot);
@@ -854,10 +882,21 @@ async function loadCommitPreview(
 }
 
 async function loadRemotes(repoRoot: string): Promise<GitRemote[]> {
-	const result = await runGit(["remote", "-v"], repoRoot);
+	const [remoteResult, remoteBranchResult] = await Promise.all([
+		runGit(["remote", "-v"], repoRoot),
+		runGit(
+			[
+				"for-each-ref",
+				"--sort=-committerdate",
+				"--format=%(refname:short)%09%(committerdate:relative)",
+				"refs/remotes",
+			],
+			repoRoot,
+		),
+	]);
 	const remotes = new Map<string, GitRemote>();
 
-	for (const line of result.stdout.split(/\r?\n/).filter(Boolean)) {
+	for (const line of remoteResult.stdout.split(/\r?\n/).filter(Boolean)) {
 		const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
 
 		if (!match) {
@@ -869,6 +908,7 @@ async function loadRemotes(repoRoot: string): Promise<GitRemote[]> {
 			name,
 			fetchUrl: null,
 			pushUrl: null,
+			branches: [],
 		};
 
 		if (type === "fetch") {
@@ -880,7 +920,48 @@ async function loadRemotes(repoRoot: string): Promise<GitRemote[]> {
 		remotes.set(name, existing);
 	}
 
-	return [...remotes.values()];
+	for (const line of remoteBranchResult.stdout.split(/\r?\n/).filter(Boolean)) {
+		const [refName = "", lastCommitRelativeDate = ""] = line.split("\t");
+		const separatorIndex = refName.indexOf("/");
+
+		if (separatorIndex <= 0) {
+			continue;
+		}
+
+		const remoteName = refName.slice(0, separatorIndex);
+		const branchName = refName.slice(separatorIndex + 1);
+
+		if (!branchName || branchName === "HEAD") {
+			continue;
+		}
+
+		const existing = remotes.get(remoteName) ?? {
+			name: remoteName,
+			fetchUrl: null,
+			pushUrl: null,
+			branches: [],
+		};
+
+		existing.branches.push({
+			name: branchName,
+			refName,
+			lastCommitRelativeDate,
+		});
+
+		remotes.set(remoteName, existing);
+	}
+
+	return [...remotes.values()].sort((left, right) => {
+		if (left.name === "origin") {
+			return -1;
+		}
+
+		if (right.name === "origin") {
+			return 1;
+		}
+
+		return left.name.localeCompare(right.name);
+	});
 }
 
 async function loadStashes(repoRoot: string): Promise<GitStashEntry[]> {
@@ -902,6 +983,29 @@ async function loadStashes(repoRoot: string): Promise<GitStashEntry[]> {
 				commitSha,
 			};
 		});
+}
+
+async function checkLocalBranchExists(
+	repoRoot: string,
+	branchName: string,
+): Promise<boolean> {
+	const result = await runGit(
+		["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`],
+		repoRoot,
+		[0, 1],
+	);
+
+	return result.code === 0;
+}
+
+function getLocalBranchNameFromRemoteRef(remoteRefName: string) {
+	const separatorIndex = remoteRefName.indexOf("/");
+
+	if (separatorIndex <= 0 || separatorIndex === remoteRefName.length - 1) {
+		throw new Error("Remote branch reference is invalid.");
+	}
+
+	return remoteRefName.slice(separatorIndex + 1);
 }
 
 async function ensureGitRepositoryWatchVersion(repoRoot: string) {
@@ -1074,17 +1178,46 @@ async function requireValidBranchName(branchName: string | undefined) {
 	return trimmedBranchName;
 }
 
+async function requireValidRemoteBranchRefName(
+	repoRoot: string,
+	branchName: string | undefined,
+) {
+	const trimmedBranchName = branchName?.trim();
+
+	if (!trimmedBranchName) {
+		throw new Error("Remote branch reference is required.");
+	}
+
+	const result = await runGit(
+		["show-ref", "--verify", "--quiet", `refs/remotes/${trimmedBranchName}`],
+		repoRoot,
+		[0, 1],
+	);
+
+	if (result.code !== 0) {
+		throw new Error(`Remote branch "${trimmedBranchName}" could not be found.`);
+	}
+
+	return trimmedBranchName;
+}
+
 async function runGit(
 	args: string[],
 	cwd: string,
 	allowedExitCodes: number[] = [0],
 ) {
 	try {
-		return await execFileAsync("git", args, {
+		const result = await execFileAsync("git", args, {
 			cwd,
 			maxBuffer: DEFAULT_MAX_BUFFER,
 			windowsHide: true,
 		});
+
+		return {
+			stdout: result.stdout,
+			stderr: result.stderr,
+			code: 0,
+		};
 	} catch (error) {
 		if (!isExecError(error)) {
 			throw error;
@@ -1100,6 +1233,7 @@ async function runGit(
 			return {
 				stdout: error.stdout ?? "",
 				stderr: error.stderr ?? "",
+				code: exitCode,
 			};
 		}
 

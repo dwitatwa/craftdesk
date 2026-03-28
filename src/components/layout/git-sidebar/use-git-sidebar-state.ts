@@ -13,6 +13,7 @@ import type {
 	GitSelectedChange,
 } from "#/lib/git";
 import {
+	getGitRemotes,
 	getGitRepositoryOverview,
 	mutateGitBranch,
 	mutateGitChange,
@@ -40,6 +41,7 @@ export function useGitSidebarState({
 	const [overview, setOverview] = useState<GitRepositoryOverview | null>(null);
 	const [error, setError] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
+	const [isRefreshingRemotes, setIsRefreshingRemotes] = useState(false);
 	const [pendingMutationKey, setPendingMutationKey] = useState("");
 	const activeProjectPathRef = useRef(activeProjectPath);
 	const loadedProjectPathRef = useRef("");
@@ -300,6 +302,38 @@ export function useGitSidebarState({
 		}
 	}, [activeProjectPath, loadOverview]);
 
+	const handleRefreshRemotes = useCallback(async () => {
+		if (!activeProjectPath) {
+			return;
+		}
+
+		setIsRefreshingRemotes(true);
+		setError("");
+
+		try {
+			const nextRemotes = await getGitRemotes({
+				data: {
+					cwd: activeProjectPath,
+				},
+			});
+
+			setOverview((currentOverview) =>
+				currentOverview
+					? {
+							...currentOverview,
+							remotes: nextRemotes,
+						}
+					: currentOverview,
+			);
+		} catch (cause) {
+			setError(
+				cause instanceof Error ? cause.message : "Failed to refresh remotes.",
+			);
+		} finally {
+			setIsRefreshingRemotes(false);
+		}
+	}, [activeProjectPath]);
+
 	const handleGitAction = useCallback(
 		async (change: GitChange, action: "stage" | "unstage" | "discard") => {
 			if (!activeProjectPath) {
@@ -515,6 +549,16 @@ export function useGitSidebarState({
 		[runGitBranchMutation],
 	);
 
+	const handleCheckoutRemoteBranch = useCallback(
+		async (refName: string) =>
+			runGitBranchMutation("checkout-remote", {
+				branchName: refName,
+				mutationKey: `branch:checkout-remote:${refName}`,
+				errorMessage: "Failed to checkout remote branch.",
+			}),
+		[runGitBranchMutation],
+	);
+
 	const handleDeleteLocalBranch = useCallback(
 		async (branchName: string) =>
 			runGitBranchMutation("delete-local", {
@@ -566,6 +610,7 @@ export function useGitSidebarState({
 	return {
 		error,
 		handleCheckoutLocalBranch,
+		handleCheckoutRemoteBranch,
 		handleDiscardChanges,
 		handleGitAction,
 		handleCreateLocalBranch,
@@ -577,9 +622,11 @@ export function useGitSidebarState({
 		handleGitCommit,
 		handleGitGroupAction,
 		handleRefresh,
+		handleRefreshRemotes,
 		handleStageSelectedChanges,
 		handleUnstageSelectedChanges,
 		isLoading,
+		isRefreshingRemotes,
 		overview,
 		pendingMutationKey,
 	};

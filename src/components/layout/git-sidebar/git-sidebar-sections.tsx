@@ -1,8 +1,10 @@
 import {
+	ArrowRightLeft,
 	Check,
 	ChevronDown,
 	GitBranch,
 	GitCommitHorizontal,
+	GitFork,
 	LoaderCircle,
 	Minus,
 	Plus,
@@ -25,6 +27,7 @@ import type {
 	GitCommitPreview,
 	GitDiffMode,
 	GitRemote,
+	GitRemoteBranch,
 	GitRepositoryOverview,
 	GitSelectedChange,
 	GitStashEntry,
@@ -727,20 +730,119 @@ export function BranchRow({
 	);
 }
 
-export function RemoteRow({ remote }: { remote: GitRemote }) {
+export function RemoteRow({
+	remote,
+	isOpen,
+	onOpenChange,
+	activeRefName,
+	onCheckoutBranch,
+	pendingCheckoutRefName,
+}: {
+	remote: GitRemote;
+	isOpen: boolean;
+	onOpenChange: (open: boolean) => void;
+	activeRefName?: string | null;
+	onCheckoutBranch: (refName: string) => void;
+	pendingCheckoutRefName?: string | null;
+}) {
+	const remoteTitle = [remote.fetchUrl, remote.pushUrl]
+		.filter(Boolean)
+		.join("\n");
+
 	return (
-		<div className="rounded-md py-1.5 px-1 transition-colors hover:bg-white/[0.04]">
-			<div className="text-[12px] font-bold text-foreground/90">
-				{remote.name}
-			</div>
-			<div className="space-y-0.5 mt-0.5 text-[10px] font-mono text-muted-foreground/50">
-				<div className="truncate">
-					<span className="opacity-35">f:</span> {remote.fetchUrl ?? "—"}
+		<div className="py-0.5">
+			<button
+				type="button"
+				className="flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left text-[12px] text-muted-foreground transition-colors hover:bg-sidebar-accent/40 hover:text-foreground"
+				onClick={() => onOpenChange(!isOpen)}
+				title={remoteTitle || remote.name}
+				aria-expanded={isOpen}
+			>
+				<ChevronDown
+					className={cn(
+						"size-3 shrink-0 transition-transform duration-150",
+						isOpen ? "rotate-0" : "-rotate-90",
+					)}
+				/>
+				<GitFork className="size-3 shrink-0 text-muted-foreground/70" />
+				<span className="min-w-0 truncate font-medium text-foreground/90">
+					{remote.name}
+				</span>
+			</button>
+
+			{isOpen ? (
+				<div className="mt-0.5 space-y-0.5 pl-4">
+					{remote.branches.length > 0 ? (
+						remote.branches.map((branch) => (
+							<RemoteBranchRow
+								key={branch.refName}
+								branch={branch}
+								isActive={branch.refName === activeRefName}
+								isCheckingOut={branch.refName === pendingCheckoutRefName}
+								onCheckout={() => onCheckoutBranch(branch.refName)}
+							/>
+						))
+					) : (
+						<EmptyState label="No remote-tracking branches were found." />
+					)}
 				</div>
-				<div className="truncate">
-					<span className="opacity-35">p:</span> {remote.pushUrl ?? "—"}
-				</div>
-			</div>
+			) : null}
+		</div>
+	);
+}
+
+function RemoteBranchRow({
+	branch,
+	isActive = false,
+	isCheckingOut = false,
+	onCheckout,
+}: {
+	branch: GitRemoteBranch;
+	isActive?: boolean;
+	isCheckingOut?: boolean;
+	onCheckout: () => void;
+}) {
+	return (
+		<div
+			className={cn(
+				"flex items-center gap-2 rounded-md px-1 py-1 text-[12px] transition-colors",
+				isActive
+					? "bg-sidebar-accent/60 text-sidebar-accent-foreground"
+					: "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-foreground",
+			)}
+			title={branch.refName}
+		>
+			<GitBranch className="size-3 shrink-0 text-muted-foreground/65" />
+			<span className="min-w-0 flex-1 truncate font-medium">{branch.name}</span>
+			<span
+				className={cn(
+					"shrink-0 text-[10px]",
+					isActive
+						? "text-sidebar-accent-foreground/65"
+						: "text-muted-foreground/45",
+				)}
+			>
+				{branch.lastCommitRelativeDate}
+			</span>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon-xs"
+				className="size-5 shrink-0 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+				onClick={(event) => {
+					event.stopPropagation();
+					onCheckout();
+				}}
+				disabled={isCheckingOut}
+				aria-label={`Checkout ${branch.name} to local branch`}
+				title={`Checkout ${branch.name} to local branch`}
+			>
+				{isCheckingOut ? (
+					<LoaderCircle className="size-2.5 animate-spin" />
+				) : (
+					<ArrowRightLeft className="size-2.5" />
+				)}
+			</Button>
 		</div>
 	);
 }
