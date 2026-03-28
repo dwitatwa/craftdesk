@@ -17,6 +17,7 @@ import {
 	getGitRepositoryOverview,
 	mutateGitBranch,
 	mutateGitChange,
+	mutateGitStash,
 	waitForGitRepositoryChange,
 } from "#/server/git";
 import { delay, resolveSelectedChange } from "./git-sidebar-utils";
@@ -493,6 +494,118 @@ export function useGitSidebarState({
 		[activeProjectPath, handleRefresh],
 	);
 
+	const handleStashChanges = useCallback(
+		async (
+			changes: GitChange[],
+			target: "staged" | "unstaged",
+			options: {
+				singleChangeCode?: string;
+			} = {},
+		) => {
+			if (!activeProjectPath || changes.length === 0) {
+				return false;
+			}
+
+			const uniquePaths = [...new Set(changes.map((change) => change.path))];
+			const isSinglePath = uniquePaths.length === 1;
+			const primaryPath = uniquePaths[0];
+			const mutationKey = isSinglePath
+				? `stash:${target}:${primaryPath}:${options.singleChangeCode ?? "selected"}`
+				: `stash:${target}:selected`;
+
+			setPendingMutationKey(mutationKey);
+			setError("");
+
+			try {
+				await mutateGitStash({
+					data: {
+						cwd: activeProjectPath,
+						action: "push",
+						target,
+						paths: uniquePaths,
+						includeUntracked: changes.some(
+							(change) => change.kind === "untracked",
+						),
+					},
+				});
+				await handleRefresh();
+				return true;
+			} catch (cause) {
+				setError(
+					cause instanceof Error
+						? cause.message
+						: `Failed to stash ${target} changes.`,
+				);
+				return false;
+			} finally {
+				setPendingMutationKey("");
+			}
+		},
+		[activeProjectPath, handleRefresh],
+	);
+
+	const handleApplyStash = useCallback(
+		async (stashName: string) => {
+			if (!activeProjectPath) {
+				return false;
+			}
+
+			setPendingMutationKey(`stash:apply:${stashName}`);
+			setError("");
+
+			try {
+				await mutateGitStash({
+					data: {
+						cwd: activeProjectPath,
+						action: "apply",
+						stashName,
+					},
+				});
+				await handleRefresh();
+				return true;
+			} catch (cause) {
+				setError(
+					cause instanceof Error ? cause.message : "Failed to apply stash.",
+				);
+				return false;
+			} finally {
+				setPendingMutationKey("");
+			}
+		},
+		[activeProjectPath, handleRefresh],
+	);
+
+	const handleDeleteStash = useCallback(
+		async (stashName: string) => {
+			if (!activeProjectPath) {
+				return false;
+			}
+
+			setPendingMutationKey(`stash:delete:${stashName}`);
+			setError("");
+
+			try {
+				await mutateGitStash({
+					data: {
+						cwd: activeProjectPath,
+						action: "delete",
+						stashName,
+					},
+				});
+				await handleRefresh();
+				return true;
+			} catch (cause) {
+				setError(
+					cause instanceof Error ? cause.message : "Failed to delete stash.",
+				);
+				return false;
+			} finally {
+				setPendingMutationKey("");
+			}
+		},
+		[activeProjectPath, handleRefresh],
+	);
+
 	const runGitBranchMutation = useCallback(
 		async (
 			action: GitBranchMutationInput["action"],
@@ -614,8 +727,10 @@ export function useGitSidebarState({
 		handleDiscardChanges,
 		handleGitAction,
 		handleCreateLocalBranch,
+		handleDeleteStash,
 		handleDeleteLocalBranch,
 		handleMergeBranchIntoCurrent,
+		handleApplyStash,
 		handlePullCurrentBranch,
 		handlePushBranchToRemote,
 		handlePushCurrentBranch,
@@ -623,6 +738,7 @@ export function useGitSidebarState({
 		handleGitGroupAction,
 		handleRefresh,
 		handleRefreshRemotes,
+		handleStashChanges,
 		handleStageSelectedChanges,
 		handleUnstageSelectedChanges,
 		isLoading,

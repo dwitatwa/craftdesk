@@ -2,6 +2,7 @@ import {
 	ArrowRightLeft,
 	Check,
 	ChevronDown,
+	Ellipsis,
 	GitBranch,
 	GitCommitHorizontal,
 	GitFork,
@@ -9,7 +10,9 @@ import {
 	Minus,
 	Plus,
 	RotateCcw,
+	ScrollText,
 	Send,
+	Trash2,
 } from "lucide-react";
 import type {
 	ComponentType,
@@ -17,7 +20,7 @@ import type {
 	MouseEvent,
 	ReactNode,
 } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "#/components/ui/button";
 import { Textarea } from "#/components/ui/textarea";
@@ -171,7 +174,7 @@ export function ChangeGroup({
 	diffMode: GitDiffMode;
 	onAction: (
 		change: GitChange,
-		action: "stage" | "unstage" | "discard",
+		action: "stage" | "unstage" | "discard" | "stash",
 	) => Promise<boolean>;
 	onDiscardRequest: (change: GitChange) => void;
 	onGroupAction: (action: "stage-all" | "unstage-all") => Promise<void>;
@@ -181,14 +184,69 @@ export function ChangeGroup({
 	onStartSelectionMode: (diffMode: GitDiffMode) => void;
 	onCancelSelectionMode: () => void;
 	onToggleSelection: (change: GitChange) => void;
-	onSelectedAction: (action: "stage" | "unstage" | "discard") => void;
+	onSelectedAction: (action: "stage" | "unstage" | "discard" | "stash") => void;
 }) {
+	const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+	const actionMenuRef = useRef<HTMLDivElement | null>(null);
+	const actionMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const isGroupMutating = pendingMutationKey === `${diffMode}:all`;
 	const isSelectionModeActive = activeSelectionMode === diffMode;
 	const selectedCount = selectedPaths.length;
 	const isStageSelectedPending = pendingMutationKey === "stage:selected";
 	const isUnstageSelectedPending = pendingMutationKey === "unstage:selected";
 	const isDiscardSelectedPending = pendingMutationKey === "discard:selected";
+	const isStashSelectedPending =
+		pendingMutationKey === `stash:${diffMode}:selected`;
+
+	useEffect(() => {
+		if (!isSelectionModeActive) {
+			setIsActionMenuOpen(false);
+		}
+	}, [isSelectionModeActive]);
+
+	useEffect(() => {
+		if (!isActionMenuOpen) {
+			return;
+		}
+
+		const handlePointerDown = (event: PointerEvent) => {
+			const target = event.target as Node;
+
+			if (
+				actionMenuRef.current?.contains(target) ||
+				actionMenuTriggerRef.current?.contains(target)
+			) {
+				return;
+			}
+
+			setIsActionMenuOpen(false);
+		};
+
+		const handleEscape = (event: globalThis.KeyboardEvent) => {
+			if (event.key !== "Escape") {
+				return;
+			}
+
+			setIsActionMenuOpen(false);
+		};
+
+		window.addEventListener("pointerdown", handlePointerDown);
+		window.addEventListener("keydown", handleEscape);
+
+		return () => {
+			window.removeEventListener("pointerdown", handlePointerDown);
+			window.removeEventListener("keydown", handleEscape);
+		};
+	}, [isActionMenuOpen]);
+
+	const handleSelectionMenuAction = (
+		event: MouseEvent<HTMLButtonElement>,
+		action: "stage" | "unstage" | "discard" | "stash",
+	) => {
+		event.stopPropagation();
+		setIsActionMenuOpen(false);
+		onSelectedAction(action);
+	};
 
 	return (
 		<div className="space-y-1">
@@ -205,80 +263,99 @@ export function ChangeGroup({
 					<div className="flex items-center gap-1">
 						{isSelectionModeActive ? (
 							<>
-								{diffMode === "unstaged" ? (
-									<>
-										<Button
-											type="button"
-											variant="ghost"
-											size="xs"
-											className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-foreground"
-											onClick={(event) => {
-												event.stopPropagation();
-												onSelectedAction("stage");
-											}}
-											disabled={selectedCount === 0 || isStageSelectedPending}
-											title={
-												selectedCount > 0
-													? `Stage ${selectedCount} selected changes`
-													: "Select unstaged files to stage"
-											}
-										>
-											{isStageSelectedPending ? (
-												<LoaderCircle className="size-2.5 animate-spin" />
-											) : (
-												<Plus className="size-2.5" />
-											)}
-											<span>Stage</span>
-										</Button>
-										<Button
-											type="button"
-											variant="ghost"
-											size="xs"
-											className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-red-300"
-											onClick={(event) => {
-												event.stopPropagation();
-												onSelectedAction("discard");
-											}}
-											disabled={selectedCount === 0 || isDiscardSelectedPending}
-											title={
-												selectedCount > 0
-													? `Discard ${selectedCount} selected changes`
-													: "Select unstaged files to discard"
-											}
-										>
-											{isDiscardSelectedPending ? (
-												<LoaderCircle className="size-2.5 animate-spin" />
-											) : (
-												<RotateCcw className="size-2.5" />
-											)}
-											<span>Discard</span>
-										</Button>
-									</>
-								) : (
-									<Button
+								<div className="relative">
+									<button
+										ref={actionMenuTriggerRef}
 										type="button"
-										variant="ghost"
-										size="xs"
-										className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/50 hover:text-foreground"
+										className="flex size-5 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-white/8 hover:text-foreground"
 										onClick={(event) => {
 											event.stopPropagation();
-											onSelectedAction("unstage");
+											setIsActionMenuOpen((currentOpen) => !currentOpen);
 										}}
-										disabled={selectedCount === 0 || isUnstageSelectedPending}
-										title={
-											selectedCount > 0
-												? `Unstage ${selectedCount} selected changes`
-												: "Select staged files to unstage"
-										}
+										aria-haspopup="menu"
+										aria-expanded={isActionMenuOpen}
+										title={`Selected ${title.toLowerCase()} actions`}
 									>
-										{isUnstageSelectedPending ? (
-											<LoaderCircle className="size-2.5 animate-spin" />
-										) : (
-											<Minus className="size-2.5" />
-										)}
-										<span>Unstage</span>
-									</Button>
-								)}
+										<Ellipsis className="size-2.5" />
+									</button>
+									{isActionMenuOpen ? (
+										<div
+											ref={actionMenuRef}
+											role="menu"
+											aria-label={`Selected ${title.toLowerCase()} actions`}
+											className="absolute top-full right-0 z-20 mt-1 min-w-[148px] overflow-hidden rounded-lg border border-white/8 bg-[#0e0e10] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+										>
+											<button
+												type="button"
+												role="menuitem"
+												className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+												onClick={(event) => {
+													handleSelectionMenuAction(event, "stash");
+												}}
+												disabled={selectedCount === 0 || isStashSelectedPending}
+											>
+												{isStashSelectedPending ? (
+													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+												) : (
+													<ScrollText className="size-3 text-zinc-400" />
+												)}
+												<span>Stash</span>
+											</button>
+											<button
+												type="button"
+												role="menuitem"
+												className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+												onClick={(event) => {
+													handleSelectionMenuAction(
+														event,
+														diffMode === "staged" ? "unstage" : "stage",
+													);
+												}}
+												disabled={
+													selectedCount === 0 ||
+													(diffMode === "staged"
+														? isUnstageSelectedPending
+														: isStageSelectedPending)
+												}
+											>
+												{diffMode === "staged" ? (
+													isUnstageSelectedPending ? (
+														<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+													) : (
+														<Minus className="size-3 text-zinc-400" />
+													)
+												) : isStageSelectedPending ? (
+													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+												) : (
+													<Plus className="size-3 text-zinc-400" />
+												)}
+												<span>
+													{diffMode === "staged" ? "Unstage" : "Stage"}
+												</span>
+											</button>
+											{diffMode === "unstaged" ? (
+												<button
+													type="button"
+													role="menuitem"
+													className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+													onClick={(event) => {
+														handleSelectionMenuAction(event, "discard");
+													}}
+													disabled={
+														selectedCount === 0 || isDiscardSelectedPending
+													}
+												>
+													{isDiscardSelectedPending ? (
+														<LoaderCircle className="size-3 animate-spin text-red-300/70" />
+													) : (
+														<RotateCcw className="size-3 text-red-300/70" />
+													)}
+													<span>Discard</span>
+												</button>
+											) : null}
+										</div>
+									) : null}
+								</div>
 								<Button
 									type="button"
 									variant="ghost"
@@ -353,9 +430,11 @@ export function ChangeGroup({
 								? `unstage:${change.path}:${change.code}`
 								: `stage:${change.path}:${change.code}`;
 						const discardMutationKey = `discard:${change.path}:${change.code}`;
+						const stashMutationKey = `stash:${diffMode}:${change.path}:${change.code}`;
 						const isMutating =
 							pendingMutationKey === actionMutationKey ||
-							pendingMutationKey === discardMutationKey;
+							pendingMutationKey === discardMutationKey ||
+							pendingMutationKey === stashMutationKey;
 
 						return (
 							<div
@@ -448,9 +527,28 @@ export function ChangeGroup({
 									<div
 										className={cn(
 											"flex shrink-0 items-center gap-0.5",
-											diffMode === "unstaged" ? "w-[44px]" : "w-[22px]",
+											diffMode === "unstaged" ? "w-[66px]" : "w-[44px]",
 										)}
 									>
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon-xs"
+											className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+											onClick={(e) => {
+												e.stopPropagation();
+												void onAction(change, "stash");
+											}}
+											disabled={isMutating}
+											aria-label="Stash file"
+											title="Stash file"
+										>
+											{pendingMutationKey === stashMutationKey ? (
+												<LoaderCircle className="size-2.5 animate-spin" />
+											) : (
+												<ScrollText className="size-2.5" />
+											)}
+										</Button>
 										{diffMode === "unstaged" ? (
 											<Button
 												type="button"
@@ -847,9 +945,21 @@ function RemoteBranchRow({
 	);
 }
 
-export function StashRow({ stash }: { stash: GitStashEntry }) {
+export function StashRow({
+	stash,
+	onApply,
+	onDelete,
+	isApplying = false,
+	isDeleting = false,
+}: {
+	stash: GitStashEntry;
+	onApply: () => void;
+	onDelete: () => void;
+	isApplying?: boolean;
+	isDeleting?: boolean;
+}) {
 	return (
-		<div className="cursor-pointer rounded-md py-1.5 px-1 transition-colors hover:bg-white/[0.04]">
+		<div className="rounded-md py-1.5 px-1 transition-colors hover:bg-white/[0.04]">
 			<div className="flex items-center justify-between gap-2.5">
 				<div className="min-w-0">
 					<div className="truncate text-[12px] font-bold text-foreground/90">
@@ -862,6 +972,40 @@ export function StashRow({ stash }: { stash: GitStashEntry }) {
 				<div className="shrink-0 text-[10px] text-muted-foreground/35">
 					{stash.relativeDate}
 				</div>
+			</div>
+			<div className="mt-1.5 flex items-center justify-end gap-1">
+				<Button
+					type="button"
+					variant="ghost"
+					size="xs"
+					className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/55 hover:text-foreground"
+					onClick={onApply}
+					disabled={isApplying || isDeleting}
+					title={`Apply ${stash.name}`}
+				>
+					{isApplying ? (
+						<LoaderCircle className="size-2.5 animate-spin" />
+					) : (
+						<ArrowRightLeft className="size-2.5" />
+					)}
+					<span>Apply</span>
+				</Button>
+				<Button
+					type="button"
+					variant="ghost"
+					size="xs"
+					className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/55 hover:text-red-300"
+					onClick={onDelete}
+					disabled={isApplying || isDeleting}
+					title={`Delete ${stash.name}`}
+				>
+					{isDeleting ? (
+						<LoaderCircle className="size-2.5 animate-spin" />
+					) : (
+						<Trash2 className="size-2.5" />
+					)}
+					<span>Delete</span>
+				</Button>
 			</div>
 		</div>
 	);

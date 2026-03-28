@@ -7,6 +7,7 @@ import type {
 	GitDiffInput,
 	GitRepositoryChangeWaitInput,
 	GitRepositoryOverviewInput,
+	GitStashMutationInput,
 } from "#/lib/git";
 
 export const getGitRepositoryOverview = createServerFn({ method: "GET" })
@@ -57,4 +58,11 @@ export const mutateGitBranch = createServerFn({ method: "POST" })
 	.handler(async ({ data }) => {
 		const { applyGitBranchMutation } = await import("#/server/git-service");
 		return applyGitBranchMutation(data);
+	});
+
+export const mutateGitStash = createServerFn({ method: "POST" })
+	.inputValidator((input: GitStashMutationInput) => input)
+	.handler(async ({ data }) => {
+		const { applyGitStashMutation } = await import("#/server/git-service");
+		return applyGitStashMutation(data);
 	});

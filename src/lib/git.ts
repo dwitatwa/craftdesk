@@ -67,6 +67,16 @@ export interface GitBranchMutationInput {
 	branchName?: string;
 }
 
+export interface GitStashMutationInput {
+	cwd: string;
+	action: "push" | "apply" | "delete";
+	target?: GitDiffMode;
+	paths?: string[];
+	includeUntracked?: boolean;
+	message?: string;
+	stashName?: string;
+}
+
 export interface GitChange {
 	path: string;
 	originalPath: string | null;

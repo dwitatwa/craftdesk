@@ -23,6 +23,7 @@ import type {
 	GitRepositoryOverview,
 	GitRepositoryOverviewInput,
 	GitStashEntry,
+	GitStashMutationInput,
 } from "#/lib/git";
 
 const execFileAsync = promisify(execFile);
@@ -544,6 +545,51 @@ export async function applyGitBranchMutation(input: GitBranchMutationInput) {
 			branchSummary.name,
 			branchSummary.upstream,
 		);
+	}
+
+	signalGitRepositoryChange(repoRoot);
+
+	return {
+		ok: true,
+	};
+}
+
+export async function applyGitStashMutation(input: GitStashMutationInput) {
+	const repoRoot = await resolveGitRepositoryRoot(input.cwd);
+
+	if (input.action === "push") {
+		const target = requireValidStashTarget(input.target);
+		const stashPaths = [
+			...new Set(input.paths?.map((path) => path.trim()).filter(Boolean)),
+		];
+
+		if (stashPaths.length === 0) {
+			throw new Error("At least one path is required to create a stash.");
+		}
+
+		const stashMessage =
+			input.message?.trim() ||
+			(target === "staged" ? "Stash staged changes" : "Stash unstaged changes");
+		const args = ["stash", "push"];
+
+		if (target === "staged") {
+			args.push("--staged");
+		} else if (input.includeUntracked) {
+			args.push("--include-untracked");
+		} else {
+			args.push("--keep-index");
+		}
+
+		args.push("-m", stashMessage, "--", ...stashPaths);
+		await runGit(args, repoRoot);
+	} else if (input.action === "apply") {
+		const stashName = requireValidStashName(input.stashName);
+		await runGit(["stash", "apply", "--index", stashName], repoRoot);
+	} else if (input.action === "delete") {
+		const stashName = requireValidStashName(input.stashName);
+		await runGit(["stash", "drop", stashName], repoRoot);
+	} else {
+		throw new Error("Unsupported stash action.");
 	}
 
 	signalGitRepositoryChange(repoRoot);
@@ -1176,6 +1222,28 @@ async function requireValidBranchName(branchName: string | undefined) {
 		process.cwd(),
 	);
 	return trimmedBranchName;
+}
+
+function requireValidStashTarget(target: GitStashMutationInput["target"]) {
+	if (target === "staged" || target === "unstaged") {
+		return target;
+	}
+
+	throw new Error("A stash target is required.");
+}
+
+function requireValidStashName(stashName: string | undefined) {
+	const trimmedStashName = stashName?.trim();
+
+	if (!trimmedStashName) {
+		throw new Error("Stash reference is required.");
+	}
+
+	if (!/^stash@\{\d+\}$/.test(trimmedStashName)) {
+		throw new Error("Invalid stash reference.");
+	}
+
+	return trimmedStashName;
 }
 
 async function requireValidRemoteBranchRefName(

@@ -92,17 +92,20 @@ export function GitSidebar({
 		error,
 		handleCheckoutLocalBranch,
 		handleCheckoutRemoteBranch,
+		handleDeleteStash,
 		handleCreateLocalBranch,
 		handleDeleteLocalBranch,
 		handleDiscardChanges,
 		handleGitAction,
 		handleGitCommit,
 		handleGitGroupAction,
+		handleApplyStash,
 		handlePullCurrentBranch,
 		handlePushBranchToRemote,
 		handlePushCurrentBranch,
 		handleRefresh,
 		handleRefreshRemotes,
+		handleStashChanges,
 		handleStageSelectedChanges,
 		handleUnstageSelectedChanges,
 		isLoading,
@@ -319,7 +322,7 @@ export function GitSidebar({
 
 	const handleSelectedAction = async (
 		diffMode: GitDiffMode,
-		action: "stage" | "unstage" | "discard",
+		action: "stage" | "unstage" | "discard" | "stash",
 	) => {
 		if (!overview || activeSelectionMode !== diffMode) {
 			return;
@@ -346,7 +349,9 @@ export function GitSidebar({
 		const didApply =
 			action === "stage"
 				? await handleStageSelectedChanges(selectedChanges)
-				: await handleUnstageSelectedChanges(selectedChanges);
+				: action === "unstage"
+					? await handleUnstageSelectedChanges(selectedChanges)
+					: await handleStashChanges(selectedChanges, diffMode);
 
 		if (!didApply) {
 			return;
@@ -555,7 +560,15 @@ export function GitSidebar({
 										selectedChange={selectedChange}
 										onSelectChange={onSelectChange}
 										diffMode="staged"
-										onAction={handleGitAction}
+										onAction={(change, action) => {
+											if (action === "stash") {
+												return handleStashChanges([change], "staged", {
+													singleChangeCode: change.code,
+												});
+											}
+
+											return handleGitAction(change, action);
+										}}
 										onDiscardRequest={handleSingleDiscardRequest}
 										onGroupAction={handleGitGroupAction}
 										pendingMutationKey={pendingMutationKey}
@@ -576,7 +589,15 @@ export function GitSidebar({
 										selectedChange={selectedChange}
 										onSelectChange={onSelectChange}
 										diffMode="unstaged"
-										onAction={handleGitAction}
+										onAction={(change, action) => {
+											if (action === "stash") {
+												return handleStashChanges([change], "unstaged", {
+													singleChangeCode: change.code,
+												});
+											}
+
+											return handleGitAction(change, action);
+										}}
 										onDiscardRequest={handleSingleDiscardRequest}
 										onGroupAction={handleGitGroupAction}
 										pendingMutationKey={pendingMutationKey}
@@ -752,7 +773,22 @@ export function GitSidebar({
 								{overview.stashes.length > 0 ? (
 									<div className="space-y-0.5">
 										{overview.stashes.map((stash) => (
-											<StashRow key={stash.name} stash={stash} />
+											<StashRow
+												key={stash.name}
+												stash={stash}
+												onApply={() => {
+													void handleApplyStash(stash.name);
+												}}
+												onDelete={() => {
+													void handleDeleteStash(stash.name);
+												}}
+												isApplying={
+													pendingMutationKey === `stash:apply:${stash.name}`
+												}
+												isDeleting={
+													pendingMutationKey === `stash:delete:${stash.name}`
+												}
+											/>
 										))}
 									</div>
 								) : (
