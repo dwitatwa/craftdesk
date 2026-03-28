@@ -1,6 +1,6 @@
 {
   "name": "craftdeskide",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "type": "module",
   "bin": {
     "craftdesk": "./bin/craftdesk.js"
