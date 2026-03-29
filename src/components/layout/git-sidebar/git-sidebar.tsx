@@ -53,6 +53,7 @@ import { useGitSidebarState } from "./use-git-sidebar-state";
 
 export function GitSidebar({
 	activeProject,
+	onOpenProjectFile,
 	selectedChange,
 	onSelectChange,
 	onDiffRefresh,
@@ -564,6 +565,7 @@ export function GitSidebar({
 									<ChangeGroup
 										title="Staged"
 										changes={overview.staged}
+										onOpenFile={onOpenProjectFile}
 										selectedChange={selectedChange}
 										onSelectChange={onSelectChange}
 										diffMode="staged"
@@ -593,6 +595,7 @@ export function GitSidebar({
 									<ChangeGroup
 										title="Unstaged"
 										changes={overview.unstaged}
+										onOpenFile={onOpenProjectFile}
 										selectedChange={selectedChange}
 										onSelectChange={onSelectChange}
 										diffMode="unstaged"

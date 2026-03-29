@@ -3,6 +3,7 @@ import {
 	Check,
 	ChevronDown,
 	Ellipsis,
+	FileText,
 	GitBranch,
 	GitCommitHorizontal,
 	GitFork,
@@ -19,6 +20,7 @@ import type {
 	KeyboardEvent,
 	MouseEvent,
 	ReactNode,
+	Ref,
 } from "react";
 import { useEffect, useRef, useState } from "react";
 
@@ -44,6 +46,79 @@ import {
 const GIT_SECTION_HEADER_CLASS =
 	"flex items-center justify-between gap-3 py-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground";
 const GIT_SECTION_BODY_CLASS = "pl-3.5 pt-1.5 pb-1";
+
+type ChangeMenuAction = {
+	action: "open-file" | "stage" | "unstage" | "discard" | "stash";
+	disabled?: boolean;
+	icon: ReactNode;
+	label: string;
+	onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
+	tone?: "default" | "danger";
+};
+
+function ChangeActionMenu({
+	actions,
+	ariaLabel,
+	containerRef,
+	isOpen,
+	onOpenChange,
+	triggerTitle,
+}: {
+	actions: ChangeMenuAction[];
+	ariaLabel: string;
+	containerRef?: Ref<HTMLDivElement>;
+	isOpen: boolean;
+	onOpenChange: (open: boolean) => void;
+	triggerTitle: string;
+}) {
+	return (
+		<div ref={containerRef} className="relative shrink-0">
+			<button
+				type="button"
+				className="flex size-5 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-white/8 hover:text-foreground"
+				onClick={(event) => {
+					event.stopPropagation();
+					onOpenChange(!isOpen);
+				}}
+				aria-haspopup="menu"
+				aria-expanded={isOpen}
+				title={triggerTitle}
+			>
+				<Ellipsis className="size-2.5" />
+			</button>
+			{isOpen ? (
+				<div
+					role="menu"
+					aria-label={ariaLabel}
+					className="absolute top-full right-0 z-20 mt-1 min-w-[148px] overflow-hidden rounded-lg border border-white/8 bg-[#0e0e10] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+				>
+					{actions.map((item) => (
+						<button
+							key={item.action}
+							type="button"
+							role="menuitem"
+							className={cn(
+								"flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+								item.tone === "danger"
+									? "text-red-300 hover:bg-red-500/10"
+									: "text-zinc-200 hover:bg-white/5",
+							)}
+							onClick={(event) => {
+								event.stopPropagation();
+								onOpenChange(false);
+								item.onSelect(event);
+							}}
+							disabled={item.disabled}
+						>
+							{item.icon}
+							<span>{item.label}</span>
+						</button>
+					))}
+				</div>
+			) : null}
+		</div>
+	);
+}
 
 export function CommitSection({
 	onCommit,
@@ -153,6 +228,7 @@ export function SidebarSection({
 export function ChangeGroup({
 	title,
 	changes,
+	onOpenFile,
 	selectedChange,
 	onSelectChange,
 	diffMode,
@@ -169,6 +245,7 @@ export function ChangeGroup({
 }: {
 	title: string;
 	changes: GitChange[];
+	onOpenFile: (relativePath: string) => Promise<void> | void;
 	selectedChange: GitSelectedChange | null;
 	onSelectChange: (change: GitSelectedChange) => void;
 	diffMode: GitDiffMode;
@@ -186,9 +263,9 @@ export function ChangeGroup({
 	onToggleSelection: (change: GitChange) => void;
 	onSelectedAction: (action: "stage" | "unstage" | "discard" | "stash") => void;
 }) {
-	const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
-	const actionMenuRef = useRef<HTMLDivElement | null>(null);
-	const actionMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+	const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
+	const activeMenuRef = useRef<HTMLDivElement | null>(null);
+	const selectionMenuKey = `${diffMode}:selection`;
 	const isGroupMutating = pendingMutationKey === `${diffMode}:all`;
 	const isSelectionModeActive = activeSelectionMode === diffMode;
 	const selectedCount = selectedPaths.length;
@@ -197,29 +274,27 @@ export function ChangeGroup({
 	const isDiscardSelectedPending = pendingMutationKey === "discard:selected";
 	const isStashSelectedPending =
 		pendingMutationKey === `stash:${diffMode}:selected`;
+	const isSelectionMenuOpen = openMenuKey === selectionMenuKey;
 
 	useEffect(() => {
-		if (!isSelectionModeActive) {
-			setIsActionMenuOpen(false);
+		if (!isSelectionModeActive && isSelectionMenuOpen) {
+			setOpenMenuKey(null);
 		}
-	}, [isSelectionModeActive]);
+	}, [isSelectionMenuOpen, isSelectionModeActive]);
 
 	useEffect(() => {
-		if (!isActionMenuOpen) {
+		if (!openMenuKey) {
 			return;
 		}
 
 		const handlePointerDown = (event: PointerEvent) => {
 			const target = event.target as Node;
 
-			if (
-				actionMenuRef.current?.contains(target) ||
-				actionMenuTriggerRef.current?.contains(target)
-			) {
+			if (activeMenuRef.current?.contains(target)) {
 				return;
 			}
 
-			setIsActionMenuOpen(false);
+			setOpenMenuKey(null);
 		};
 
 		const handleEscape = (event: globalThis.KeyboardEvent) => {
@@ -227,7 +302,7 @@ export function ChangeGroup({
 				return;
 			}
 
-			setIsActionMenuOpen(false);
+			setOpenMenuKey(null);
 		};
 
 		window.addEventListener("pointerdown", handlePointerDown);
@@ -237,16 +312,64 @@ export function ChangeGroup({
 			window.removeEventListener("pointerdown", handlePointerDown);
 			window.removeEventListener("keydown", handleEscape);
 		};
-	}, [isActionMenuOpen]);
+	}, [openMenuKey]);
 
-	const handleSelectionMenuAction = (
-		event: MouseEvent<HTMLButtonElement>,
-		action: "stage" | "unstage" | "discard" | "stash",
-	) => {
-		event.stopPropagation();
-		setIsActionMenuOpen(false);
-		onSelectedAction(action);
-	};
+	const selectionMenuActions: ChangeMenuAction[] = [
+		{
+			action: "stash",
+			disabled: selectedCount === 0 || isStashSelectedPending,
+			icon: isStashSelectedPending ? (
+				<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+			) : (
+				<ScrollText className="size-3 text-zinc-400" />
+			),
+			label: "Stash",
+			onSelect: () => {
+				onSelectedAction("stash");
+			},
+		},
+		{
+			action: diffMode === "staged" ? "unstage" : "stage",
+			disabled:
+				selectedCount === 0 ||
+				(diffMode === "staged"
+					? isUnstageSelectedPending
+					: isStageSelectedPending),
+			icon:
+				diffMode === "staged" ? (
+					isUnstageSelectedPending ? (
+						<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+					) : (
+						<Minus className="size-3 text-zinc-400" />
+					)
+				) : isStageSelectedPending ? (
+					<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+				) : (
+					<Plus className="size-3 text-zinc-400" />
+				),
+			label: diffMode === "staged" ? "Unstage" : "Stage",
+			onSelect: () => {
+				onSelectedAction(diffMode === "staged" ? "unstage" : "stage");
+			},
+		},
+	];
+
+	if (diffMode === "unstaged") {
+		selectionMenuActions.push({
+			action: "discard",
+			disabled: selectedCount === 0 || isDiscardSelectedPending,
+			icon: isDiscardSelectedPending ? (
+				<LoaderCircle className="size-3 animate-spin text-red-300/70" />
+			) : (
+				<RotateCcw className="size-3 text-red-300/70" />
+			),
+			label: "Discard",
+			onSelect: () => {
+				onSelectedAction("discard");
+			},
+			tone: "danger",
+		});
+	}
 
 	return (
 		<div className="space-y-1">
@@ -263,99 +386,16 @@ export function ChangeGroup({
 					<div className="flex items-center gap-1">
 						{isSelectionModeActive ? (
 							<>
-								<div className="relative">
-									<button
-										ref={actionMenuTriggerRef}
-										type="button"
-										className="flex size-5 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-white/8 hover:text-foreground"
-										onClick={(event) => {
-											event.stopPropagation();
-											setIsActionMenuOpen((currentOpen) => !currentOpen);
-										}}
-										aria-haspopup="menu"
-										aria-expanded={isActionMenuOpen}
-										title={`Selected ${title.toLowerCase()} actions`}
-									>
-										<Ellipsis className="size-2.5" />
-									</button>
-									{isActionMenuOpen ? (
-										<div
-											ref={actionMenuRef}
-											role="menu"
-											aria-label={`Selected ${title.toLowerCase()} actions`}
-											className="absolute top-full right-0 z-20 mt-1 min-w-[148px] overflow-hidden rounded-lg border border-white/8 bg-[#0e0e10] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
-										>
-											<button
-												type="button"
-												role="menuitem"
-												className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-												onClick={(event) => {
-													handleSelectionMenuAction(event, "stash");
-												}}
-												disabled={selectedCount === 0 || isStashSelectedPending}
-											>
-												{isStashSelectedPending ? (
-													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
-												) : (
-													<ScrollText className="size-3 text-zinc-400" />
-												)}
-												<span>Stash</span>
-											</button>
-											<button
-												type="button"
-												role="menuitem"
-												className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-zinc-200 transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-												onClick={(event) => {
-													handleSelectionMenuAction(
-														event,
-														diffMode === "staged" ? "unstage" : "stage",
-													);
-												}}
-												disabled={
-													selectedCount === 0 ||
-													(diffMode === "staged"
-														? isUnstageSelectedPending
-														: isStageSelectedPending)
-												}
-											>
-												{diffMode === "staged" ? (
-													isUnstageSelectedPending ? (
-														<LoaderCircle className="size-3 animate-spin text-zinc-400" />
-													) : (
-														<Minus className="size-3 text-zinc-400" />
-													)
-												) : isStageSelectedPending ? (
-													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
-												) : (
-													<Plus className="size-3 text-zinc-400" />
-												)}
-												<span>
-													{diffMode === "staged" ? "Unstage" : "Stage"}
-												</span>
-											</button>
-											{diffMode === "unstaged" ? (
-												<button
-													type="button"
-													role="menuitem"
-													className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-													onClick={(event) => {
-														handleSelectionMenuAction(event, "discard");
-													}}
-													disabled={
-														selectedCount === 0 || isDiscardSelectedPending
-													}
-												>
-													{isDiscardSelectedPending ? (
-														<LoaderCircle className="size-3 animate-spin text-red-300/70" />
-													) : (
-														<RotateCcw className="size-3 text-red-300/70" />
-													)}
-													<span>Discard</span>
-												</button>
-											) : null}
-										</div>
-									) : null}
-								</div>
+								<ChangeActionMenu
+									actions={selectionMenuActions}
+									ariaLabel={`Selected ${title.toLowerCase()} actions`}
+									containerRef={isSelectionMenuOpen ? activeMenuRef : undefined}
+									isOpen={isSelectionMenuOpen}
+									onOpenChange={(open) => {
+										setOpenMenuKey(open ? selectionMenuKey : null);
+									}}
+									triggerTitle={`Selected ${title.toLowerCase()} actions`}
+								/>
 								<Button
 									type="button"
 									variant="ghost"
@@ -389,8 +429,8 @@ export function ChangeGroup({
 									variant="ghost"
 									size="icon-xs"
 									className="h-4.5 w-4.5 text-muted-foreground/40 hover:text-foreground"
-									onClick={(e) => {
-										e.stopPropagation();
+									onClick={(event) => {
+										event.stopPropagation();
 										const action =
 											diffMode === "staged" ? "unstage-all" : "stage-all";
 										void onGroupAction(action);
@@ -435,6 +475,70 @@ export function ChangeGroup({
 							pendingMutationKey === actionMutationKey ||
 							pendingMutationKey === discardMutationKey ||
 							pendingMutationKey === stashMutationKey;
+						const rowMenuKey = `${diffMode}:${change.code}:${change.path}`;
+						const isRowMenuOpen = openMenuKey === rowMenuKey;
+						const rowMenuActions: ChangeMenuAction[] = [
+							{
+								action: "open-file",
+								disabled: isMutating,
+								icon: <FileText className="size-3 text-zinc-400" />,
+								label: "Open file",
+								onSelect: () => {
+									void onOpenFile(change.path);
+								},
+							},
+							{
+								action: "stash",
+								disabled: isMutating,
+								icon:
+									pendingMutationKey === stashMutationKey ? (
+										<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+									) : (
+										<ScrollText className="size-3 text-zinc-400" />
+									),
+								label: "Stash",
+								onSelect: () => {
+									void onAction(change, "stash");
+								},
+							},
+							{
+								action: diffMode === "staged" ? "unstage" : "stage",
+								disabled: isMutating,
+								icon:
+									pendingMutationKey === actionMutationKey ? (
+										<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+									) : diffMode === "staged" ? (
+										<Minus className="size-3 text-zinc-400" />
+									) : (
+										<Plus className="size-3 text-zinc-400" />
+									),
+								label: diffMode === "staged" ? "Unstage" : "Stage",
+								onSelect: () => {
+									void onAction(
+										change,
+										diffMode === "staged" ? "unstage" : "stage",
+									);
+								},
+							},
+						];
+
+						if (diffMode === "unstaged") {
+							rowMenuActions.push({
+								action: "discard",
+								disabled: isMutating,
+								icon:
+									pendingMutationKey === discardMutationKey ? (
+										<LoaderCircle className="size-3 animate-spin text-red-300/70" />
+									) : (
+										<RotateCcw className="size-3 text-red-300/70" />
+									),
+								label: "Discard",
+								onSelect: () => {
+									onDiscardRequest(change);
+								},
+								tone: "danger",
+							});
+						}
 
 						return (
 							<div
@@ -524,80 +628,16 @@ export function ChangeGroup({
 									</div>
 								</button>
 								{!isSelectionModeActive ? (
-									<div
-										className={cn(
-											"flex shrink-0 items-center gap-0.5",
-											diffMode === "unstaged" ? "w-[66px]" : "w-[44px]",
-										)}
-									>
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-											onClick={(e) => {
-												e.stopPropagation();
-												void onAction(change, "stash");
-											}}
-											disabled={isMutating}
-											aria-label="Stash file"
-											title="Stash file"
-										>
-											{pendingMutationKey === stashMutationKey ? (
-												<LoaderCircle className="size-2.5 animate-spin" />
-											) : (
-												<ScrollText className="size-2.5" />
-											)}
-										</Button>
-										{diffMode === "unstaged" ? (
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-red-400"
-												onClick={(e) => {
-													e.stopPropagation();
-													onDiscardRequest(change);
-												}}
-												disabled={isMutating}
-												aria-label="Discard changes"
-												title="Discard changes"
-											>
-												{isMutating ? (
-													<LoaderCircle className="size-2.5 animate-spin" />
-												) : (
-													<RotateCcw className="size-2.5" />
-												)}
-											</Button>
-										) : null}
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon-xs"
-											className="size-5 rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
-											onClick={(e) => {
-												e.stopPropagation();
-												const action =
-													diffMode === "staged" ? "unstage" : "stage";
-												void onAction(change, action);
-											}}
-											disabled={isMutating}
-											aria-label={
-												diffMode === "staged" ? "Unstage file" : "Stage file"
-											}
-											title={
-												diffMode === "staged" ? "Unstage file" : "Stage file"
-											}
-										>
-											{isMutating ? (
-												<LoaderCircle className="size-2.5 animate-spin" />
-											) : diffMode === "staged" ? (
-												<Minus className="size-2.5" />
-											) : (
-												<Plus className="size-2.5" />
-											)}
-										</Button>
-									</div>
+									<ChangeActionMenu
+										actions={rowMenuActions}
+										ariaLabel={`${change.path} actions`}
+										containerRef={isRowMenuOpen ? activeMenuRef : undefined}
+										isOpen={isRowMenuOpen}
+										onOpenChange={(open) => {
+											setOpenMenuKey(open ? rowMenuKey : null);
+										}}
+										triggerTitle={`${change.path} actions`}
+									/>
 								) : null}
 							</div>
 						);

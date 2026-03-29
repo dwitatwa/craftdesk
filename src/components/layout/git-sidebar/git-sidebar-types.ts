@@ -8,6 +8,7 @@ export interface ActiveProjectContext {
 
 export interface GitSidebarProps {
 	activeProject: ActiveProjectContext | null;
+	onOpenProjectFile: (relativePath: string) => Promise<void> | void;
 	selectedChange: GitSelectedChange | null;
 	onSelectChange: (change: GitSelectedChange | null) => void;
 	onDiffRefresh?: () => void;

@@ -25,6 +25,7 @@ interface SidebarProps {
 	activeSidebarView: SidebarView;
 	onSidebarViewChange: (view: SidebarView) => void;
 	onProjectFileSelectionChange: (selection: ProjectFileSelectionState) => void;
+	onOpenProjectFile: (relativePath: string) => Promise<void> | void;
 	onOpenProjectPicker: () => void;
 }
 
@@ -39,6 +40,7 @@ export function Sidebar({
 	activeSidebarView,
 	onSidebarViewChange,
 	onProjectFileSelectionChange,
+	onOpenProjectFile,
 	onOpenProjectPicker,
 }: SidebarProps) {
 	return (
@@ -123,6 +125,7 @@ export function Sidebar({
 							<GitSidebar
 								key={activeProject.id}
 								activeProject={activeProject}
+								onOpenProjectFile={onOpenProjectFile}
 								selectedChange={selectedGitChange}
 								onSelectChange={onSelectGitChange}
 								onDiffRefresh={onGitDiffRefresh}

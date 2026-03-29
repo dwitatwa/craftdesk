@@ -1,7 +1,14 @@
 import { ClientOnly, Link } from "@tanstack/react-router";
 import { Folder, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import type React from "react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -23,6 +30,7 @@ import type {
 } from "#/lib/craftdesk";
 import type { GitSelectedChange } from "#/lib/git";
 import { cn } from "#/lib/utils";
+import { readProjectFile } from "#/server/craftdesk";
 import { Sidebar } from "./sidebar";
 
 export interface ActiveProjectContext {
@@ -235,6 +243,7 @@ function ProjectWorkspaceShell({
 	const selectedGitChangeRef = useRef(selectedGitChange);
 	const selectedProjectFileRef = useRef(selectedProjectFile);
 	const isProjectFileDirtyRef = useRef(isProjectFileDirty);
+	const openProjectFileRequestIdRef = useRef(0);
 	const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
 	const [isResizingSidebar, setIsResizingSidebar] = useState(false);
 	selectedGitChangeRef.current = selectedGitChange;
@@ -373,6 +382,69 @@ function ProjectWorkspaceShell({
 			});
 		},
 		[],
+	);
+
+	const handleOpenProjectFile = useCallback(
+		async (relativePath: string) => {
+			if (!activeProject) {
+				return;
+			}
+
+			const nextRelativePath = relativePath.replace(/\\/g, "/");
+			const currentRelativePath = selectedProjectFileRef.current.relativePath;
+			const shouldContinue =
+				!currentRelativePath ||
+				!isProjectFileDirtyRef.current ||
+				confirmDiscardProjectFileChanges();
+
+			if (!shouldContinue) {
+				return;
+			}
+
+			const requestId = openProjectFileRequestIdRef.current + 1;
+			openProjectFileRequestIdRef.current = requestId;
+
+			setSelectedProjectFile({
+				file: null,
+				relativePath: nextRelativePath,
+				isLoading: true,
+				error: "",
+			});
+			setActiveWorkspacePane("file");
+
+			try {
+				const file = await readProjectFile({
+					data: {
+						projectId: activeProject.id,
+						relativePath: nextRelativePath,
+					},
+				});
+
+				if (openProjectFileRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setSelectedProjectFile({
+					file,
+					relativePath: nextRelativePath,
+					isLoading: false,
+					error: "",
+				});
+			} catch (error) {
+				if (openProjectFileRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setSelectedProjectFile({
+					file: null,
+					relativePath: nextRelativePath,
+					isLoading: false,
+					error:
+						error instanceof Error ? error.message : "Failed to open file.",
+				});
+			}
+		},
+		[activeProject, confirmDiscardProjectFileChanges],
 	);
 
 	const handleCloseGitDiff = useCallback(() => {
@@ -571,6 +643,7 @@ function ProjectWorkspaceShell({
 						activeSidebarView={activeSidebarView}
 						onSidebarViewChange={setActiveSidebarView}
 						onProjectFileSelectionChange={handleProjectFileSelectionChange}
+						onOpenProjectFile={handleOpenProjectFile}
 						onOpenProjectPicker={onOpenProjectPicker}
 					/>
 					<div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-px translate-x-1/2 bg-border/80" />
