@@ -28,7 +28,7 @@ import type {
 	ProjectSummary,
 	TextProjectFileContent,
 } from "#/lib/craftdesk";
-import type { GitSelectedChange } from "#/lib/git";
+import type { GitExplorerHighlights, GitSelectedChange } from "#/lib/git";
 import { cn } from "#/lib/utils";
 import { readProjectFile } from "#/server/craftdesk";
 import { Sidebar } from "./sidebar";
@@ -57,6 +57,13 @@ function createEmptyProjectFileSelection(): ProjectFileSelectionState {
 		relativePath: "",
 		isLoading: false,
 		error: "",
+	};
+}
+
+function createEmptyGitExplorerHighlights(): GitExplorerHighlights {
+	return {
+		directories: [],
+		files: [],
 	};
 }
 
@@ -227,6 +234,8 @@ function ProjectWorkspaceShell({
 }) {
 	const [selectedGitChange, setSelectedGitChange] =
 		useState<GitSelectedChange | null>(null);
+	const [gitExplorerHighlights, setGitExplorerHighlights] =
+		useState<GitExplorerHighlights>(createEmptyGitExplorerHighlights);
 	const [gitRefreshVersion, setGitRefreshVersion] = useState(0);
 	const [activeSidebarView, setActiveSidebarView] =
 		useState<SidebarView>("explorer");
@@ -492,6 +501,13 @@ function ProjectWorkspaceShell({
 		setIsProjectFileDirty(false);
 	}, []);
 
+	const handleGitExplorerHighlightsChange = useCallback(
+		(highlights: GitExplorerHighlights) => {
+			setGitExplorerHighlights(highlights);
+		},
+		[],
+	);
+
 	useEffect(() => {
 		const handlePaneCloseShortcut = (event: KeyboardEvent) => {
 			if (
@@ -633,8 +649,10 @@ function ProjectWorkspaceShell({
 					<Sidebar
 						activeProject={activeProject}
 						className="h-full"
+						gitExplorerHighlights={gitExplorerHighlights}
 						style={{ width: "100%" }}
 						onBeforeProjectFileOpen={handleBeforeProjectFileOpen}
+						onGitExplorerHighlightsChange={handleGitExplorerHighlightsChange}
 						selectedGitChange={selectedGitChange}
 						onSelectGitChange={handleGitChangeSelection}
 						onGitDiffRefresh={() =>

@@ -316,19 +316,6 @@ export function ChangeGroup({
 
 	const selectionMenuActions: ChangeMenuAction[] = [
 		{
-			action: "stash",
-			disabled: selectedCount === 0 || isStashSelectedPending,
-			icon: isStashSelectedPending ? (
-				<LoaderCircle className="size-3 animate-spin text-zinc-400" />
-			) : (
-				<ScrollText className="size-3 text-zinc-400" />
-			),
-			label: "Stash",
-			onSelect: () => {
-				onSelectedAction("stash");
-			},
-		},
-		{
 			action: diffMode === "staged" ? "unstage" : "stage",
 			disabled:
 				selectedCount === 0 ||
@@ -350,6 +337,19 @@ export function ChangeGroup({
 			label: diffMode === "staged" ? "Unstage" : "Stage",
 			onSelect: () => {
 				onSelectedAction(diffMode === "staged" ? "unstage" : "stage");
+			},
+		},
+		{
+			action: "stash",
+			disabled: selectedCount === 0 || isStashSelectedPending,
+			icon: isStashSelectedPending ? (
+				<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+			) : (
+				<ScrollText className="size-3 text-zinc-400" />
+			),
+			label: "Stash",
+			onSelect: () => {
+				onSelectedAction("stash");
 			},
 		},
 	];
@@ -477,50 +477,86 @@ export function ChangeGroup({
 							pendingMutationKey === stashMutationKey;
 						const rowMenuKey = `${diffMode}:${change.code}:${change.path}`;
 						const isRowMenuOpen = openMenuKey === rowMenuKey;
-						const rowMenuActions: ChangeMenuAction[] = [
-							{
-								action: "open-file",
-								disabled: isMutating,
-								icon: <FileText className="size-3 text-zinc-400" />,
-								label: "Open file",
-								onSelect: () => {
-									void onOpenFile(change.path);
-								},
-							},
-							{
-								action: "stash",
-								disabled: isMutating,
-								icon:
-									pendingMutationKey === stashMutationKey ? (
-										<LoaderCircle className="size-3 animate-spin text-zinc-400" />
-									) : (
-										<ScrollText className="size-3 text-zinc-400" />
-									),
-								label: "Stash",
-								onSelect: () => {
-									void onAction(change, "stash");
-								},
-							},
-							{
-								action: diffMode === "staged" ? "unstage" : "stage",
-								disabled: isMutating,
-								icon:
-									pendingMutationKey === actionMutationKey ? (
-										<LoaderCircle className="size-3 animate-spin text-zinc-400" />
-									) : diffMode === "staged" ? (
-										<Minus className="size-3 text-zinc-400" />
-									) : (
-										<Plus className="size-3 text-zinc-400" />
-									),
-								label: diffMode === "staged" ? "Unstage" : "Stage",
-								onSelect: () => {
-									void onAction(
-										change,
-										diffMode === "staged" ? "unstage" : "stage",
-									);
-								},
-							},
-						];
+						const rowMenuActions: ChangeMenuAction[] =
+							diffMode === "unstaged"
+								? [
+										{
+											action: "stage",
+											disabled: isMutating,
+											icon:
+												pendingMutationKey === actionMutationKey ? (
+													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+												) : (
+													<Plus className="size-3 text-zinc-400" />
+												),
+											label: "Stage",
+											onSelect: () => {
+												void onAction(change, "stage");
+											},
+										},
+										{
+											action: "open-file",
+											disabled: isMutating,
+											icon: <FileText className="size-3 text-zinc-400" />,
+											label: "Open file",
+											onSelect: () => {
+												void onOpenFile(change.path);
+											},
+										},
+										{
+											action: "stash",
+											disabled: isMutating,
+											icon:
+												pendingMutationKey === stashMutationKey ? (
+													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+												) : (
+													<ScrollText className="size-3 text-zinc-400" />
+												),
+											label: "Stash",
+											onSelect: () => {
+												void onAction(change, "stash");
+											},
+										},
+									]
+								: [
+										{
+											action: "open-file",
+											disabled: isMutating,
+											icon: <FileText className="size-3 text-zinc-400" />,
+											label: "Open file",
+											onSelect: () => {
+												void onOpenFile(change.path);
+											},
+										},
+										{
+											action: "unstage",
+											disabled: isMutating,
+											icon:
+												pendingMutationKey === actionMutationKey ? (
+													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+												) : (
+													<Minus className="size-3 text-zinc-400" />
+												),
+											label: "Unstage",
+											onSelect: () => {
+												void onAction(change, "unstage");
+											},
+										},
+										{
+											action: "stash",
+											disabled: isMutating,
+											icon:
+												pendingMutationKey === stashMutationKey ? (
+													<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+												) : (
+													<ScrollText className="size-3 text-zinc-400" />
+												),
+											label: "Stash",
+											onSelect: () => {
+												void onAction(change, "stash");
+											},
+										},
+									];
 
 						if (diffMode === "unstaged") {
 							rowMenuActions.push({

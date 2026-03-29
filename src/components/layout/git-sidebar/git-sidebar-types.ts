@@ -1,4 +1,9 @@
-import type { GitChange, GitDiffMode, GitSelectedChange } from "#/lib/git";
+import type {
+	GitChange,
+	GitDiffMode,
+	GitExplorerHighlights,
+	GitSelectedChange,
+} from "#/lib/git";
 
 export interface ActiveProjectContext {
 	id: string;
@@ -8,6 +13,7 @@ export interface ActiveProjectContext {
 
 export interface GitSidebarProps {
 	activeProject: ActiveProjectContext | null;
+	onExplorerHighlightsChange?: (highlights: GitExplorerHighlights) => void;
 	onOpenProjectFile: (relativePath: string) => Promise<void> | void;
 	selectedChange: GitSelectedChange | null;
 	onSelectChange: (change: GitSelectedChange | null) => void;

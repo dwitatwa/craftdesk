@@ -4,7 +4,7 @@ import type React from "react";
 import { Button } from "#/components/ui/button";
 import { FileExplorer } from "#/components/workspace/file-explorer";
 import type { ProjectFileSelectionState } from "#/lib/craftdesk";
-import type { GitSelectedChange } from "#/lib/git";
+import type { GitExplorerHighlights, GitSelectedChange } from "#/lib/git";
 import { cn } from "#/lib/utils";
 import type { ActiveProjectContext } from "./app-shell";
 import { GitSidebar } from "./git-sidebar";
@@ -15,8 +15,10 @@ interface SidebarProps {
 	className?: string;
 	activeProject?: ActiveProjectContext | null;
 	style?: React.CSSProperties;
+	gitExplorerHighlights: GitExplorerHighlights | null;
 	selectedGitChange: GitSelectedChange | null;
 	onSelectGitChange: (change: GitSelectedChange | null) => void;
+	onGitExplorerHighlightsChange: (highlights: GitExplorerHighlights) => void;
 	onGitDiffRefresh?: () => void;
 	onBeforeProjectFileOpen: (
 		currentRelativePath: string,
@@ -33,8 +35,10 @@ export function Sidebar({
 	className,
 	activeProject = null,
 	style,
+	gitExplorerHighlights,
 	selectedGitChange,
 	onSelectGitChange,
+	onGitExplorerHighlightsChange,
 	onGitDiffRefresh,
 	onBeforeProjectFileOpen,
 	activeSidebarView,
@@ -112,6 +116,7 @@ export function Sidebar({
 							<FileExplorer
 								key={activeProject.id}
 								activeProject={activeProject}
+								gitExplorerHighlights={gitExplorerHighlights}
 								onBeforeFileOpen={onBeforeProjectFileOpen}
 								onSelectionChange={onProjectFileSelectionChange}
 							/>
@@ -125,6 +130,7 @@ export function Sidebar({
 							<GitSidebar
 								key={activeProject.id}
 								activeProject={activeProject}
+								onExplorerHighlightsChange={onGitExplorerHighlightsChange}
 								onOpenProjectFile={onOpenProjectFile}
 								selectedChange={selectedGitChange}
 								onSelectChange={onSelectGitChange}

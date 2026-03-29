@@ -22,6 +22,7 @@ import type {
 	GitChange,
 	GitCommitPreview,
 	GitDiffMode,
+	GitExplorerHighlights,
 	GitRemote,
 } from "#/lib/git";
 import { getGitBranchCommits } from "#/server/git";
@@ -53,6 +54,7 @@ import { useGitSidebarState } from "./use-git-sidebar-state";
 
 export function GitSidebar({
 	activeProject,
+	onExplorerHighlightsChange,
 	onOpenProjectFile,
 	selectedChange,
 	onSelectChange,
@@ -124,6 +126,14 @@ export function GitSidebar({
 		branchCommitsTarget?.projectPath === activeProjectPath
 			? branchCommitsTarget.branchName
 			: "";
+
+	useEffect(() => {
+		onExplorerHighlightsChange?.(
+			createGitExplorerHighlights(
+				overview ? [...overview.staged, ...overview.unstaged] : [],
+			),
+		);
+	}, [onExplorerHighlightsChange, overview]);
 
 	useEffect(() => {
 		if (!overview) {
@@ -1020,4 +1030,51 @@ function normalizeRemoteWebUrl(remoteUrl: string | null): URL | null {
 	} catch {
 		return null;
 	}
+}
+
+function createGitExplorerHighlights(
+	changes: GitChange[],
+): GitExplorerHighlights {
+	const filePaths = new Set<string>();
+	const directoryPaths = new Set<string>();
+
+	for (const change of changes) {
+		addChangedPath(change.path, filePaths, directoryPaths);
+
+		if (change.originalPath) {
+			addChangedPath(change.originalPath, filePaths, directoryPaths);
+		}
+	}
+
+	return {
+		directories: [...directoryPaths],
+		files: [...filePaths],
+	};
+}
+
+function addChangedPath(
+	value: string,
+	filePaths: Set<string>,
+	directoryPaths: Set<string>,
+) {
+	const normalizedPath = value.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+
+	if (!normalizedPath) {
+		return;
+	}
+
+	filePaths.add(normalizedPath);
+
+	let directoryPath = getParentDirectoryPath(normalizedPath);
+
+	while (directoryPath) {
+		directoryPaths.add(directoryPath);
+		directoryPath = getParentDirectoryPath(directoryPath);
+	}
+}
+
+function getParentDirectoryPath(relativePath: string) {
+	const lastSlashIndex = relativePath.lastIndexOf("/");
+
+	return lastSlashIndex === -1 ? "" : relativePath.slice(0, lastSlashIndex);
 }

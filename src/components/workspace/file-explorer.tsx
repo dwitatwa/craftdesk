@@ -42,6 +42,7 @@ import type {
 	ProjectFileSelectionState,
 } from "#/lib/craftdesk";
 import { getProjectFileExtension, isMarkdownFilePath } from "#/lib/craftdesk";
+import type { GitExplorerHighlights } from "#/lib/git";
 import { cn } from "#/lib/utils";
 import {
 	createProjectFile,
@@ -54,6 +55,7 @@ import type { ActiveProjectContext } from "../layout/app-shell";
 
 interface FileExplorerProps {
 	activeProject: ActiveProjectContext;
+	gitExplorerHighlights?: GitExplorerHighlights | null;
 	onBeforeFileOpen?: (
 		currentRelativePath: string,
 		nextRelativePath: string,
@@ -188,6 +190,7 @@ function isImageFilePath(relativePath: string) {
 
 export function FileExplorer({
 	activeProject,
+	gitExplorerHighlights = null,
 	onBeforeFileOpen,
 	onSelectionChange,
 }: FileExplorerProps) {
@@ -235,6 +238,7 @@ export function FileExplorer({
 	);
 	const [searchError, setSearchError] = useState("");
 	const [isSearching, setIsSearching] = useState(false);
+	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [contextMenuState, setContextMenuState] = useState<
 		| {
 				kind: "explorer";
@@ -256,6 +260,8 @@ export function FileExplorer({
 	const isSearchMode = trimmedSearchQuery.length > 0;
 	const isSearchPending =
 		isSearchMode && trimmedSearchQuery !== debouncedSearchQuery;
+	const changedDirectoryPaths = new Set(gitExplorerHighlights?.directories ?? []);
+	const changedFilePaths = new Set(gitExplorerHighlights?.files ?? []);
 
 	useEffect(() => {
 		if (!contextMenuState) {
@@ -545,20 +551,26 @@ export function FileExplorer({
 	};
 
 	const handleRefresh = async () => {
-		const expandedPaths = Object.entries(expandedDirectories)
-			.filter(([, isExpanded]) => isExpanded)
-			.map(([relativePath]) => relativePath);
+		setIsRefreshing(true);
 
-		await Promise.all(
-			expandedPaths.map((relativePath) => loadDirectory(relativePath, true)),
-		);
+		try {
+			const expandedPaths = Object.entries(expandedDirectories)
+				.filter(([, isExpanded]) => isExpanded)
+				.map(([relativePath]) => relativePath);
 
-		if (selectedFilePath) {
-			await loadFile(selectedFilePath);
-		}
+			await Promise.all(
+				expandedPaths.map((relativePath) => loadDirectory(relativePath, true)),
+			);
 
-		if (trimmedSearchQuery) {
-			await runSearch(trimmedSearchQuery);
+			if (selectedFilePath) {
+				await loadFile(selectedFilePath);
+			}
+
+			if (trimmedSearchQuery) {
+				await runSearch(trimmedSearchQuery);
+			}
+		} finally {
+			setIsRefreshing(false);
 		}
 	};
 
@@ -684,16 +696,44 @@ export function FileExplorer({
 		}
 	};
 
-	const renderFileIcon = (relativePath: string) => {
+	const renderFileIcon = (
+		relativePath: string,
+		options?: {
+			isGitChanged?: boolean;
+		},
+	) => {
+		const isGitChanged = options?.isGitChanged ?? false;
+
 		if (isImageFilePath(relativePath)) {
-			return <ImageIcon className="size-3 shrink-0 text-sky-400/70" />;
+			return (
+				<ImageIcon
+					className={cn(
+						"size-3 shrink-0 text-sky-400/70",
+						isGitChanged && "text-amber-300",
+					)}
+				/>
+			);
 		}
 
 		if (isMarkdownFilePath(relativePath)) {
-			return <NotebookText className="size-3 shrink-0 text-emerald-400/70" />;
+			return (
+				<NotebookText
+					className={cn(
+						"size-3 shrink-0 text-emerald-400/70",
+						isGitChanged && "text-amber-300",
+					)}
+				/>
+			);
 		}
 
-		return <FileText className="size-3 shrink-0 text-muted-foreground/60" />;
+		return (
+			<FileText
+				className={cn(
+					"size-3 shrink-0 text-muted-foreground/60",
+					isGitChanged && "text-amber-300",
+				)}
+			/>
+		);
 	};
 
 	const renderFileButton = ({
@@ -708,6 +748,7 @@ export function FileExplorer({
 		style?: React.CSSProperties;
 	}) => {
 		const isSelected = selectedFilePath === relativePath;
+		const isGitChanged = changedFilePaths.has(relativePath);
 
 		return (
 			<button
@@ -715,6 +756,7 @@ export function FileExplorer({
 				type="button"
 				className={cn(
 					"flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
+					isGitChanged && "text-amber-200 hover:text-amber-100",
 					isSelected && "bg-primary/10 text-foreground",
 					className,
 				)}
@@ -736,7 +778,7 @@ export function FileExplorer({
 					});
 				}}
 			>
-				{renderFileIcon(relativePath)}
+				{renderFileIcon(relativePath, { isGitChanged })}
 				<div className="min-w-0 flex-1">
 					<div className="truncate">
 						{relativePath.split("/").pop() ?? relativePath}
@@ -754,6 +796,7 @@ export function FileExplorer({
 		entries.map((entry) => {
 			const directoryState = directories[entry.relativePath];
 			const isExpanded = expandedDirectories[entry.relativePath];
+			const isGitChanged = changedDirectoryPaths.has(entry.relativePath);
 			const paddingLeft = 10 + depth * 12;
 
 			if (entry.kind === "directory") {
@@ -764,6 +807,7 @@ export function FileExplorer({
 							className={cn(
 								"flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[12px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground",
 								isExpanded && "text-foreground",
+								isGitChanged && "text-amber-200 hover:text-amber-100",
 							)}
 							style={{ paddingLeft }}
 							onClick={() => {
@@ -777,9 +821,19 @@ export function FileExplorer({
 								)}
 							/>
 							{isExpanded ? (
-								<FolderOpen className="size-3 shrink-0 text-primary/90" />
+								<FolderOpen
+									className={cn(
+										"size-3 shrink-0 text-primary/90",
+										isGitChanged && "text-amber-300",
+									)}
+								/>
 							) : (
-								<Folder className="size-3 shrink-0 text-primary/70" />
+								<Folder
+									className={cn(
+										"size-3 shrink-0 text-primary/70",
+										isGitChanged && "text-amber-300",
+									)}
+								/>
 							)}
 							<span className="truncate">{entry.name}</span>
 							{directoryState?.isLoading ? (
@@ -822,33 +876,50 @@ export function FileExplorer({
 
 	return (
 		<>
-			<div className="flex h-full min-h-0 flex-col bg-sidebar/80">
-				<div className="border-b border-white/6 px-2 py-2">
-					<div className="relative">
-						<Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/45" />
-						<Input
-							aria-label="Search files"
-							placeholder="Search files..."
-							className="h-8 border-white/8 bg-white/[0.03] pl-8 pr-8 text-xs placeholder:text-muted-foreground/40"
-							value={searchQuery}
-							onChange={(event) => {
-								setSearchQuery(event.target.value);
-							}}
-						/>
-						{searchQuery ? (
-							<button
-								type="button"
-								aria-label="Clear file search"
-								className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground"
-								onClick={() => {
-									setSearchQuery("");
+				<div className="flex h-full min-h-0 flex-col bg-sidebar/80">
+					<div className="border-b border-white/6 px-2 py-2">
+						<div className="relative">
+							<Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/45" />
+							<Input
+								aria-label="Search files"
+								placeholder="Search files..."
+								className="h-8 border-white/8 bg-white/[0.03] pl-8 pr-15 text-xs placeholder:text-muted-foreground/40"
+								value={searchQuery}
+								onChange={(event) => {
+									setSearchQuery(event.target.value);
 								}}
-							>
-								<X className="size-3.5" />
-							</button>
-						) : null}
+							/>
+							<div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+								<button
+									type="button"
+									aria-label="Refresh files"
+									className="rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-50"
+									onClick={() => {
+										void handleRefresh();
+									}}
+									disabled={isRefreshing}
+								>
+									{isRefreshing ? (
+										<LoaderCircle className="size-3.5 animate-spin" />
+									) : (
+										<RefreshCcw className="size-3.5" />
+									)}
+								</button>
+								{searchQuery ? (
+									<button
+										type="button"
+										aria-label="Clear file search"
+										className="rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground"
+										onClick={() => {
+											setSearchQuery("");
+										}}
+									>
+										<X className="size-3.5" />
+									</button>
+								) : null}
+							</div>
+						</div>
 					</div>
-				</div>
 				<div
 					role="tree"
 					aria-label="File explorer"

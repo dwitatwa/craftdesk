@@ -90,6 +90,11 @@ export interface GitSelectedChange extends GitChange {
 	diffMode: GitDiffMode;
 }
 
+export interface GitExplorerHighlights {
+	directories: string[];
+	files: string[];
+}
+
 export interface GitBranchSummary {
 	name: string;
 	upstream: string | null;
