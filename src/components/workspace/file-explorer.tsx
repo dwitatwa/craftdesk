@@ -197,6 +197,7 @@ export function FileExplorer({
 	const projectId = activeProject.id;
 	const activeProjectIdRef = useRef(projectId);
 	const contextMenuRef = useRef<HTMLDivElement | null>(null);
+	const inlineCreateInputRef = useRef<HTMLInputElement | null>(null);
 	const searchRequestIdRef = useRef(0);
 	activeProjectIdRef.current = projectId;
 	const [directories, setDirectories] = useState<
@@ -227,6 +228,12 @@ export function FileExplorer({
 	const [newFilePath, setNewFilePath] = useState("");
 	const [createError, setCreateError] = useState("");
 	const [isCreatingFile, setIsCreatingFile] = useState(false);
+	const [isInlineCreateOpen, setIsInlineCreateOpen] = useState(false);
+	const [inlineCreateDirectoryPath, setInlineCreateDirectoryPath] =
+		useState(ROOT_PATH);
+	const [inlineCreatePath, setInlineCreatePath] = useState("");
+	const [inlineCreateError, setInlineCreateError] = useState("");
+	const [isInlineCreating, setIsInlineCreating] = useState(false);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isDeletingFile, setIsDeletingFile] = useState(false);
 	const [isImportingFile, setIsImportingFile] = useState(false);
@@ -246,6 +253,15 @@ export function FileExplorer({
 				y: number;
 		  }
 		| {
+				kind: "directory";
+				x: number;
+				y: number;
+				directory: {
+					name: string;
+					relativePath: string;
+				};
+		  }
+		| {
 				kind: "file";
 				x: number;
 				y: number;
@@ -260,7 +276,9 @@ export function FileExplorer({
 	const isSearchMode = trimmedSearchQuery.length > 0;
 	const isSearchPending =
 		isSearchMode && trimmedSearchQuery !== debouncedSearchQuery;
-	const changedDirectoryPaths = new Set(gitExplorerHighlights?.directories ?? []);
+	const changedDirectoryPaths = new Set(
+		gitExplorerHighlights?.directories ?? [],
+	);
 	const changedFilePaths = new Set(gitExplorerHighlights?.files ?? []);
 
 	useEffect(() => {
@@ -300,6 +318,21 @@ export function FileExplorer({
 			window.removeEventListener("scroll", handleViewportChange, true);
 		};
 	}, [contextMenuState]);
+
+	useEffect(() => {
+		if (!isInlineCreateOpen) {
+			return;
+		}
+
+		const frameId = window.requestAnimationFrame(() => {
+			inlineCreateInputRef.current?.focus();
+			inlineCreateInputRef.current?.select();
+		});
+
+		return () => {
+			window.cancelAnimationFrame(frameId);
+		};
+	}, [isInlineCreateOpen]);
 
 	useEffect(() => {
 		const timeoutId = window.setTimeout(() => {
@@ -601,6 +634,119 @@ export function FileExplorer({
 		}
 	};
 
+	const resetInlineCreate = () => {
+		setIsInlineCreateOpen(false);
+		setInlineCreateDirectoryPath(ROOT_PATH);
+		setInlineCreatePath("");
+		setInlineCreateError("");
+		setIsInlineCreating(false);
+	};
+
+	const createFileAtPath = async ({
+		base64Content,
+		content,
+		relativePath,
+	}: {
+		base64Content?: string;
+		content?: string;
+		relativePath: string;
+	}) => {
+		await createProjectFile({
+			data: {
+				projectId,
+				base64Content,
+				content,
+				relativePath,
+			},
+		});
+
+		const directoryChain = getDirectoryChain(relativePath);
+
+		setExpandedDirectories((currentDirectories) => ({
+			...currentDirectories,
+			...Object.fromEntries(directoryChain.map((path) => [path, true])),
+		}));
+
+		for (const directoryPath of directoryChain) {
+			await loadDirectory(directoryPath, true);
+		}
+
+		if (trimmedSearchQuery) {
+			await runSearch(trimmedSearchQuery);
+		}
+
+		await loadFile(relativePath);
+	};
+
+	const handleStartInlineCreate = async (targetDirectoryPath = ROOT_PATH) => {
+		const normalizedTargetDirectoryPath =
+			normalizeRelativePath(targetDirectoryPath);
+
+		setContextMenuState(null);
+
+		if (
+			isInlineCreateOpen &&
+			inlineCreateDirectoryPath === normalizedTargetDirectoryPath
+		) {
+			inlineCreateInputRef.current?.focus();
+			inlineCreateInputRef.current?.select();
+			return;
+		}
+
+		if (normalizedTargetDirectoryPath) {
+			setExpandedDirectories((currentDirectories) => ({
+				...currentDirectories,
+				[normalizedTargetDirectoryPath]: true,
+			}));
+			void loadDirectory(normalizedTargetDirectoryPath);
+		}
+
+		setSearchQuery("");
+		setDebouncedSearchQuery("");
+		setInlineCreateDirectoryPath(normalizedTargetDirectoryPath);
+		setInlineCreatePath("");
+		setInlineCreateError("");
+		setIsInlineCreateOpen(true);
+
+		window.requestAnimationFrame(() => {
+			inlineCreateInputRef.current?.focus();
+			inlineCreateInputRef.current?.select();
+		});
+	};
+
+	const handleInlineCreate = async () => {
+		const normalizedFileName = normalizeRelativePath(inlineCreatePath.trim());
+
+		if (!normalizedFileName) {
+			setInlineCreateError("File name is required.");
+			return;
+		}
+
+		if (inlineCreateDirectoryPath && normalizedFileName.includes("/")) {
+			setInlineCreateError("Type a file name only.");
+			return;
+		}
+
+		const normalizedPath = normalizeRelativePath(
+			[inlineCreateDirectoryPath, normalizedFileName].filter(Boolean).join("/"),
+		);
+
+		setIsInlineCreating(true);
+		setInlineCreateError("");
+
+		try {
+			await createFileAtPath({
+				content: "",
+				relativePath: normalizedPath,
+			});
+			resetInlineCreate();
+		} catch (error) {
+			setInlineCreateError(getErrorMessage(error, "Failed to create file."));
+		} finally {
+			setIsInlineCreating(false);
+		}
+	};
+
 	const handleCreateFile = async () => {
 		const normalizedPath = normalizeRelativePath(newFilePath.trim());
 
@@ -618,32 +764,14 @@ export function FileExplorer({
 		setCreateError("");
 
 		try {
-			await createProjectFile({
-				data: {
-					projectId,
-					base64Content: importedFile.base64Content,
-					relativePath: normalizedPath,
-				},
+			await createFileAtPath({
+				base64Content: importedFile.base64Content,
+				relativePath: normalizedPath,
 			});
-
-			const directoryChain = getDirectoryChain(normalizedPath);
-
-			setExpandedDirectories((currentDirectories) => ({
-				...currentDirectories,
-				...Object.fromEntries(directoryChain.map((path) => [path, true])),
-			}));
-
-			for (const directoryPath of directoryChain) {
-				await loadDirectory(directoryPath, true);
-			}
 
 			setIsCreateFormOpen(false);
 			setImportedFile(null);
 			setNewFilePath("");
-			if (trimmedSearchQuery) {
-				await runSearch(trimmedSearchQuery);
-			}
-			await loadFile(normalizedPath);
 		} catch (error) {
 			setCreateError(getErrorMessage(error, "Failed to create file."));
 		} finally {
@@ -800,6 +928,11 @@ export function FileExplorer({
 			const paddingLeft = 10 + depth * 12;
 
 			if (entry.kind === "directory") {
+				const childPaddingLeft = 28 + (depth + 1) * 12;
+				const isInlineCreateTarget =
+					isInlineCreateOpen &&
+					inlineCreateDirectoryPath === entry.relativePath;
+
 				return (
 					<div key={entry.relativePath}>
 						<button
@@ -812,6 +945,19 @@ export function FileExplorer({
 							style={{ paddingLeft }}
 							onClick={() => {
 								void handleToggleDirectory(entry.relativePath);
+							}}
+							onContextMenu={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								setContextMenuState({
+									kind: "directory",
+									x: event.clientX,
+									y: event.clientY,
+									directory: {
+										name: entry.name,
+										relativePath: entry.relativePath,
+									},
+								});
 							}}
 						>
 							<ChevronRight
@@ -850,15 +996,20 @@ export function FileExplorer({
 										{directoryState.error}
 									</p>
 								) : null}
+								{isInlineCreateTarget
+									? renderInlineCreateRow(entry.relativePath, childPaddingLeft)
+									: null}
 								{directoryState?.entries?.length ? (
 									renderDirectoryEntries(directoryState.entries, depth + 1)
 								) : directoryState?.isLoaded && !directoryState.isLoading ? (
-									<p
-										className="px-3 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/30"
-										style={{ paddingLeft: paddingLeft + 18 }}
-									>
-										Empty
-									</p>
+									isInlineCreateTarget ? null : (
+										<p
+											className="px-3 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/30"
+											style={{ paddingLeft: paddingLeft + 18 }}
+										>
+											Empty
+										</p>
+									)
 								) : null}
 							</div>
 						) : null}
@@ -872,54 +1023,137 @@ export function FileExplorer({
 			});
 		});
 
+	const renderInlineCreateRow = (
+		targetDirectoryPath: string,
+		paddingLeft: number,
+	) => {
+		if (!isInlineCreateOpen) {
+			return null;
+		}
+
+		if (
+			inlineCreateDirectoryPath !== normalizeRelativePath(targetDirectoryPath)
+		) {
+			return null;
+		}
+
+		const isRootCreate = inlineCreateDirectoryPath === ROOT_PATH;
+
+		return (
+			<div className="space-y-1">
+				<div
+					className="flex items-center gap-1.5 rounded-md bg-white/[0.04] py-1 pr-2 text-[12px] text-foreground"
+					style={{ paddingLeft }}
+				>
+					{isInlineCreating ? (
+						<LoaderCircle className="size-3 shrink-0 animate-spin text-muted-foreground/60" />
+					) : (
+						<FilePlus2 className="size-3 shrink-0 text-primary/80" />
+					)}
+					<input
+						ref={inlineCreateInputRef}
+						aria-label="New file path"
+						className="h-6 min-w-0 flex-1 border-0 bg-transparent px-0 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/35"
+						disabled={isInlineCreating}
+						placeholder={
+							isRootCreate ? "Type a file name or path" : "Type a file name"
+						}
+						spellCheck={false}
+						value={inlineCreatePath}
+						onBlur={() => {
+							if (!inlineCreatePath.trim() && !isInlineCreating) {
+								resetInlineCreate();
+							}
+						}}
+						onChange={(event) => {
+							setInlineCreatePath(event.target.value);
+							if (inlineCreateError) {
+								setInlineCreateError("");
+							}
+						}}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								event.preventDefault();
+								void handleInlineCreate();
+								return;
+							}
+
+							if (event.key === "Escape") {
+								event.preventDefault();
+								resetInlineCreate();
+							}
+						}}
+					/>
+				</div>
+				{inlineCreateError ? (
+					<p
+						className="px-2 text-[10px] text-destructive/80"
+						style={{ paddingLeft: paddingLeft + 18 }}
+					>
+						{inlineCreateError}
+					</p>
+				) : null}
+			</div>
+		);
+	};
+
 	const rootDirectory = directories[ROOT_PATH];
 
 	return (
 		<>
-				<div className="flex h-full min-h-0 flex-col bg-sidebar/80">
-					<div className="border-b border-white/6 px-2 py-2">
-						<div className="relative">
-							<Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/45" />
-							<Input
-								aria-label="Search files"
-								placeholder="Search files..."
-								className="h-8 border-white/8 bg-white/[0.03] pl-8 pr-15 text-xs placeholder:text-muted-foreground/40"
-								value={searchQuery}
-								onChange={(event) => {
-									setSearchQuery(event.target.value);
+			<div className="flex h-full min-h-0 flex-col bg-sidebar/80">
+				<div className="border-b border-white/6 px-2 py-2">
+					<div className="relative">
+						<Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/45" />
+						<Input
+							aria-label="Search files"
+							placeholder="Search files..."
+							className="h-8 border-white/8 bg-white/[0.03] pl-8 pr-20 text-xs placeholder:text-muted-foreground/40"
+							value={searchQuery}
+							onChange={(event) => {
+								setSearchQuery(event.target.value);
+							}}
+						/>
+						<div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+							<button
+								type="button"
+								aria-label="New file"
+								className="rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-50"
+								onClick={handleStartInlineCreate}
+								disabled={isInlineCreating}
+							>
+								<FilePlus2 className="size-3.5" />
+							</button>
+							<button
+								type="button"
+								aria-label="Refresh files"
+								className="rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-50"
+								onClick={() => {
+									void handleRefresh();
 								}}
-							/>
-							<div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+								disabled={isRefreshing}
+							>
+								{isRefreshing ? (
+									<LoaderCircle className="size-3.5 animate-spin" />
+								) : (
+									<RefreshCcw className="size-3.5" />
+								)}
+							</button>
+							{searchQuery ? (
 								<button
 									type="button"
-									aria-label="Refresh files"
-									className="rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-50"
+									aria-label="Clear file search"
+									className="rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground"
 									onClick={() => {
-										void handleRefresh();
+										setSearchQuery("");
 									}}
-									disabled={isRefreshing}
 								>
-									{isRefreshing ? (
-										<LoaderCircle className="size-3.5 animate-spin" />
-									) : (
-										<RefreshCcw className="size-3.5" />
-									)}
+									<X className="size-3.5" />
 								</button>
-								{searchQuery ? (
-									<button
-										type="button"
-										aria-label="Clear file search"
-										className="rounded-sm p-0.5 text-muted-foreground/55 transition-colors hover:text-foreground"
-										onClick={() => {
-											setSearchQuery("");
-										}}
-									>
-										<X className="size-3.5" />
-									</button>
-								) : null}
-							</div>
+							) : null}
 						</div>
 					</div>
+				</div>
 				<div
 					role="tree"
 					aria-label="File explorer"
@@ -974,8 +1208,13 @@ export function FileExplorer({
 						<div className="px-3 py-4 text-[12px] text-destructive/80">
 							{rootDirectory.error}
 						</div>
-					) : rootDirectory?.entries.length ? (
-						renderDirectoryEntries(rootDirectory.entries)
+					) : rootDirectory?.entries.length || isInlineCreateOpen ? (
+						<div className="space-y-0.5">
+							{renderInlineCreateRow(ROOT_PATH, 28)}
+							{rootDirectory?.entries.length
+								? renderDirectoryEntries(rootDirectory.entries)
+								: null}
+						</div>
 					) : (
 						<div className="flex h-full items-center justify-center px-4 text-center text-[12px] text-muted-foreground/40">
 							Select this workspace to start creating files.
@@ -999,6 +1238,16 @@ export function FileExplorer({
 								type="button"
 								className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5"
 								onClick={() => {
+									void handleStartInlineCreate();
+								}}
+							>
+								<FilePlus2 className="size-3 text-zinc-400" />
+								<span>New File</span>
+							</button>
+							<button
+								type="button"
+								className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5"
+								onClick={() => {
 									setContextMenuState(null);
 									void handleRefresh();
 								}}
@@ -1016,9 +1265,22 @@ export function FileExplorer({
 								}}
 							>
 								<FilePlus2 className="size-3 text-zinc-400" />
-								<span>Add File</span>
+								<span>Import File</span>
 							</button>
 						</>
+					) : contextMenuState.kind === "directory" ? (
+						<button
+							type="button"
+							className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-zinc-200 transition-colors hover:bg-white/5"
+							onClick={() => {
+								void handleStartInlineCreate(
+									contextMenuState.directory.relativePath,
+								);
+							}}
+						>
+							<FilePlus2 className="size-3 text-zinc-400" />
+							<span>New File</span>
+						</button>
 					) : (
 						<button
 							type="button"
@@ -1062,7 +1324,7 @@ export function FileExplorer({
 					}}
 				>
 					<DialogHeader>
-						<DialogTitle>Add File</DialogTitle>
+						<DialogTitle>Import File</DialogTitle>
 						<DialogDescription>
 							Drop a file or paste one from your clipboard.
 						</DialogDescription>

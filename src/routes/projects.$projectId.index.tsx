@@ -10,7 +10,12 @@ import {
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { Button } from "#/components/ui/button";
-import { Dialog, DialogContent } from "#/components/ui/dialog";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { Terminal } from "#/components/workspace/terminal";
@@ -592,6 +597,10 @@ function ProjectDetailView() {
 					hideClose
 					className="flex h-[min(78vh,760px)] max-w-[min(92vw,1180px)] flex-col gap-0 overflow-hidden border border-white/10 bg-[#09090B] p-0 shadow-[0_28px_90px_rgba(0,0,0,0.62)]"
 				>
+					<DialogTitle className="sr-only">Project Terminal</DialogTitle>
+					<DialogDescription className="sr-only">
+						View and manage terminal tabs for the current project workspace.
+					</DialogDescription>
 					{workspace && activeProjectTerminalTab ? (
 						<>
 							<div className="flex items-center justify-between border-b border-white/6 bg-[#101012] px-4 py-3">

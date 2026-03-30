@@ -20,7 +20,12 @@ import {
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog";
 import { Button } from "#/components/ui/button";
-import { Dialog, DialogContent } from "#/components/ui/dialog";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { FilePreviewView } from "#/components/workspace/file-preview-view";
 import type {
@@ -133,6 +138,10 @@ export function AppShell({
 					hideClose
 					className="max-w-xl gap-0 overflow-hidden border border-white/10 bg-card/95 p-0 shadow-[0_28px_90px_rgba(0,0,0,0.58)] ring-1 ring-white/8 backdrop-blur-sm"
 				>
+					<DialogTitle className="sr-only">Project Picker</DialogTitle>
+					<DialogDescription className="sr-only">
+						Search, select, and manage your saved workspaces.
+					</DialogDescription>
 					{/* Search Header */}
 					<div className="relative flex h-12 items-center border-b border-white/8 bg-white/[0.03] px-4">
 						<Search className="size-4 text-muted-foreground/50 mr-3" />
