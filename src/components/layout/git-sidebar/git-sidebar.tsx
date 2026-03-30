@@ -102,6 +102,7 @@ export function GitSidebar({
 		handleGitAction,
 		handleGitCommit,
 		handleGitGroupAction,
+		handleIgnoreSelectedChanges,
 		handleApplyStash,
 		handlePullCurrentBranch,
 		handleUpdateBranchFromUpstream,
@@ -334,7 +335,7 @@ export function GitSidebar({
 
 	const handleSelectedAction = async (
 		diffMode: GitDiffMode,
-		action: "stage" | "unstage" | "discard" | "stash",
+		action: "stage" | "unstage" | "discard" | "stash" | "ignore",
 	) => {
 		if (!overview || activeSelectionMode !== diffMode) {
 			return;
@@ -363,7 +364,9 @@ export function GitSidebar({
 				? await handleStageSelectedChanges(selectedChanges)
 				: action === "unstage"
 					? await handleUnstageSelectedChanges(selectedChanges)
-					: await handleStashChanges(selectedChanges, diffMode);
+					: action === "ignore"
+						? await handleIgnoreSelectedChanges(selectedChanges)
+						: await handleStashChanges(selectedChanges, diffMode);
 
 		if (!didApply) {
 			return;

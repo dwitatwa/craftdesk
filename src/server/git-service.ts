@@ -1,7 +1,7 @@
 import { isUtf8 } from "node:buffer";
 import { execFile } from "node:child_process";
 import { existsSync, type FSWatcher, statSync, watch } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -72,6 +72,11 @@ interface GitRepositoryWatchState {
 	watchers: FSWatcher[];
 	waiters: GitRepositoryWatcherWaiter[];
 	debounceTimer: ReturnType<typeof setTimeout> | null;
+}
+
+interface GitIgnoreMutationTarget {
+	ignoreEntry: string;
+	stopTracking: boolean;
 }
 
 const repositoryWatchStates = new Map<string, GitRepositoryWatchState>();
@@ -393,6 +398,16 @@ export async function applyGitChangeMutation(input: GitChangeMutationInput) {
 		}
 	} else if (input.action === "unstage-all") {
 		await runGit(["restore", "--staged", "."], repoRoot);
+	} else if (input.action === "ignore") {
+		await appendPathsToGitIgnore(repoRoot, [input.path]);
+	} else if (input.action === "ignore-selected") {
+		const ignorePaths = [...new Set(input.paths?.filter(Boolean) ?? [])];
+
+		if (ignorePaths.length === 0) {
+			throw new Error("No selected changes were provided.");
+		}
+
+		await appendPathsToGitIgnore(repoRoot, ignorePaths);
 	} else if (input.action === "commit") {
 		if (!input.commitMessage) {
 			throw new Error("Commit message is required.");
@@ -425,6 +440,59 @@ export async function applyGitChangeMutation(input: GitChangeMutationInput) {
 	};
 }
 
+async function appendPathsToGitIgnore(repoRoot: string, inputPaths: string[]) {
+	const ignoreFilePath = path.join(repoRoot, ".gitignore");
+	const gitIgnoreContent = await readFile(ignoreFilePath, "utf8").catch(
+		(error: NodeJS.ErrnoException) => {
+			if (error.code === "ENOENT") {
+				return "";
+			}
+
+			throw error;
+		},
+	);
+	const targetsByEntry = new Map<string, GitIgnoreMutationTarget>();
+	const existingEntries = new Set(
+		gitIgnoreContent
+			.split(/\r?\n/u)
+			.map((line) => line.trim())
+			.filter(Boolean),
+	);
+
+	for (const inputPath of inputPaths) {
+		const target = await resolveGitIgnoreTarget(repoRoot, inputPath);
+		const existingTarget = targetsByEntry.get(target.ignoreEntry);
+
+		if (existingTarget) {
+			existingTarget.stopTracking =
+				existingTarget.stopTracking || target.stopTracking;
+			continue;
+		}
+
+		targetsByEntry.set(target.ignoreEntry, target);
+	}
+
+	const nextEntries = [...targetsByEntry.keys()].filter(
+		(ignoreEntry) => !existingEntries.has(ignoreEntry),
+	);
+
+	if (nextEntries.length > 0) {
+		const nextContent = gitIgnoreContent.length
+			? `${gitIgnoreContent}${gitIgnoreContent.endsWith("\n") ? "" : "\n"}${nextEntries.join("\n")}\n`
+			: `${nextEntries.join("\n")}\n`;
+
+		await writeFile(ignoreFilePath, nextContent, "utf8");
+	}
+
+	for (const target of targetsByEntry.values()) {
+		if (!target.stopTracking) {
+			continue;
+		}
+
+		await runGit(["rm", "--cached", "--", target.ignoreEntry], repoRoot);
+	}
+}
+
 async function discardGitPath(repoRoot: string, discardPath: string) {
 	const statusOutput = await runGit(
 		["status", "--short", "--", discardPath],
@@ -443,6 +511,49 @@ async function discardGitPath(repoRoot: string, discardPath: string) {
 	await runGit(["restore", "--", discardPath], repoRoot);
 }
 
+async function resolveGitIgnoreTarget(
+	repoRoot: string,
+	targetPath: string,
+): Promise<GitIgnoreMutationTarget> {
+	const safePath = resolveRepositoryRelativePath(repoRoot, targetPath);
+
+	if (safePath.includes("\n") || safePath.includes("\r")) {
+		throw new Error("Invalid path for .gitignore entry.");
+	}
+
+	const statusOutput = await runGit(
+		["status", "--short", "--untracked-files=all", "--", safePath],
+		repoRoot,
+	);
+	const { staged, unstaged } = parseGitStatusOutput(statusOutput.stdout);
+	const matchingChange =
+		[...staged, ...unstaged].find((change) => change.path === safePath) ?? null;
+
+	if (!matchingChange) {
+		throw new Error("Path is no longer available to ignore.");
+	}
+
+	if (matchingChange.kind === "untracked") {
+		return {
+			ignoreEntry: safePath,
+			stopTracking: false,
+		};
+	}
+
+	if (
+		matchingChange.kind === "deleted" ||
+		matchingChange.kind === "unmerged" ||
+		!existsSync(resolveRepositoryPath(repoRoot, safePath))
+	) {
+		throw new Error("This change cannot be ignored from the sidebar.");
+	}
+
+	return {
+		ignoreEntry: safePath,
+		stopTracking: true,
+	};
+}
+
 function resolveRepositoryPath(repoRoot: string, targetPath: string) {
 	const resolvedPath = path.resolve(repoRoot, targetPath);
 	const relativePath = path.relative(repoRoot, resolvedPath);
@@ -457,6 +568,11 @@ function resolveRepositoryPath(repoRoot: string, targetPath: string) {
 	}
 
 	throw new Error("Refusing to discard a path outside the repository.");
+}
+
+function resolveRepositoryRelativePath(repoRoot: string, targetPath: string) {
+	const resolvedPath = resolveRepositoryPath(repoRoot, targetPath);
+	return path.relative(repoRoot, resolvedPath).replace(/\\/g, "/");
 }
 
 export async function applyGitBranchMutation(input: GitBranchMutationInput) {

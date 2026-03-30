@@ -44,6 +44,8 @@ export interface GitChangeMutationInput {
 		| "stage-selected"
 		| "unstage"
 		| "unstage-selected"
+		| "ignore"
+		| "ignore-selected"
 		| "discard"
 		| "discard-selected"
 		| "stage-all"

@@ -7,8 +7,10 @@ import {
 	Terminal as TerminalIcon,
 	X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
+
 import { Button } from "#/components/ui/button";
+import { Dialog, DialogContent } from "#/components/ui/dialog";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
 import { Terminal } from "#/components/workspace/terminal";
@@ -40,10 +42,6 @@ export const Route = createFileRoute("/projects/$projectId/")({
 	},
 	component: ProjectDetailView,
 });
-
-const COLLAPSED_TERMINAL_HEIGHT = 56;
-const DEFAULT_TERMINAL_HEIGHT = 280;
-const MIN_EXPANDED_TERMINAL_HEIGHT = 180;
 
 interface ProjectTerminalTab {
 	id: string;
@@ -113,21 +111,24 @@ function getStoredProjectTerminalWorkspaceState(projectId: string) {
 	return initialState;
 }
 
+function isToggleProjectTerminalShortcut(event: KeyboardEvent) {
+	return (
+		event.ctrlKey &&
+		!event.metaKey &&
+		!event.altKey &&
+		!event.shiftKey &&
+		event.code === "Backslash"
+	);
+}
+
 function ProjectDetailView() {
 	const { workspace } = Route.useLoaderData();
 	const router = useRouter();
-	const layoutRef = useRef<HTMLDivElement | null>(null);
-	const workspaceAreaRef = useRef<HTMLDivElement | null>(null);
-	const resizeStateRef = useRef<{
-		containerBottom: number;
-		containerHeight: number;
-	} | null>(null);
 	const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
 	const [isUpdatingDoneVisibility, setIsUpdatingDoneVisibility] =
 		useState(false);
-	const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(true);
-	const [terminalHeight, setTerminalHeight] = useState(DEFAULT_TERMINAL_HEIGHT);
-	const [isResizingTerminal, setIsResizingTerminal] = useState(false);
+	const [isProjectTerminalModalOpen, setIsProjectTerminalModalOpen] =
+		useState(false);
 	const [projectTerminalState, setProjectTerminalState] =
 		useState<ProjectTerminalWorkspaceState>(() =>
 			workspace
@@ -176,6 +177,7 @@ function ProjectDetailView() {
 		setProjectTerminalState(
 			getStoredProjectTerminalWorkspaceState(workspaceProjectId),
 		);
+		setIsProjectTerminalModalOpen(false);
 	}, [workspaceProjectId]);
 
 	const handleHideCurrentDoneTask = async () => {
@@ -297,159 +299,6 @@ function ProjectDetailView() {
 		await refreshData();
 	};
 
-	useEffect(() => {
-		const container = workspaceAreaRef.current;
-
-		if (!container || typeof ResizeObserver === "undefined") {
-			return;
-		}
-
-		const syncHeight = (containerHeight: number) => {
-			setTerminalHeight((currentHeight) =>
-				clampProjectTerminalHeight(currentHeight, containerHeight),
-			);
-		};
-
-		syncHeight(container.getBoundingClientRect().height);
-
-		const resizeObserver = new ResizeObserver(([entry]) => {
-			syncHeight(entry.contentRect.height);
-		});
-
-		resizeObserver.observe(container);
-
-		return () => {
-			resizeObserver.disconnect();
-		};
-	}, []);
-
-	useEffect(() => {
-		if (!isResizingTerminal) {
-			return;
-		}
-
-		const handlePointerMove = (event: PointerEvent) => {
-			const resizeState = resizeStateRef.current;
-
-			if (!resizeState) {
-				return;
-			}
-
-			setTerminalHeight(
-				clampProjectTerminalHeight(
-					resizeState.containerBottom - event.clientY,
-					resizeState.containerHeight,
-				),
-			);
-		};
-
-		const stopResizing = () => {
-			resizeStateRef.current = null;
-			setIsResizingTerminal(false);
-			document.body.style.cursor = "";
-			document.body.style.userSelect = "";
-		};
-
-		window.addEventListener("pointermove", handlePointerMove);
-		window.addEventListener("pointerup", stopResizing);
-		window.addEventListener("pointercancel", stopResizing);
-
-		return () => {
-			window.removeEventListener("pointermove", handlePointerMove);
-			window.removeEventListener("pointerup", stopResizing);
-			window.removeEventListener("pointercancel", stopResizing);
-			document.body.style.cursor = "";
-			document.body.style.userSelect = "";
-		};
-	}, [isResizingTerminal]);
-
-	const handleTerminalResizeStart = (
-		event: React.PointerEvent<HTMLButtonElement>,
-	) => {
-		if (event.button !== 0) {
-			return;
-		}
-
-		const container = workspaceAreaRef.current;
-
-		if (!container) {
-			return;
-		}
-
-		const rect = container.getBoundingClientRect();
-
-		resizeStateRef.current = {
-			containerBottom: rect.bottom,
-			containerHeight: rect.height,
-		};
-
-		if (isTerminalCollapsed) {
-			setIsTerminalCollapsed(false);
-		}
-
-		setTerminalHeight((currentHeight) =>
-			clampProjectTerminalHeight(currentHeight, rect.height),
-		);
-		setIsResizingTerminal(true);
-		document.body.style.cursor = "row-resize";
-		document.body.style.userSelect = "none";
-		event.currentTarget.setPointerCapture(event.pointerId);
-		event.preventDefault();
-	};
-
-	const handleTerminalResizeKeyDown = (
-		event: React.KeyboardEvent<HTMLButtonElement>,
-	) => {
-		const container = workspaceAreaRef.current;
-
-		if (!container) {
-			return;
-		}
-
-		const containerHeight = container.getBoundingClientRect().height;
-		const step = event.shiftKey ? 56 : 28;
-
-		if (event.key === "ArrowUp") {
-			event.preventDefault();
-			if (isTerminalCollapsed) {
-				setIsTerminalCollapsed(false);
-			}
-			setTerminalHeight((currentHeight) =>
-				clampProjectTerminalHeight(currentHeight + step, containerHeight),
-			);
-		}
-
-		if (event.key === "ArrowDown") {
-			event.preventDefault();
-			if (isTerminalCollapsed) {
-				setIsTerminalCollapsed(false);
-			}
-			setTerminalHeight((currentHeight) =>
-				clampProjectTerminalHeight(currentHeight - step, containerHeight),
-			);
-		}
-	};
-
-	const handleTerminalResizeDoubleClick = () => {
-		const container = workspaceAreaRef.current;
-
-		if (!container) {
-			return;
-		}
-
-		setIsTerminalCollapsed(false);
-		setTerminalHeight(
-			clampProjectTerminalHeight(
-				DEFAULT_TERMINAL_HEIGHT,
-				container.getBoundingClientRect().height,
-			),
-		);
-	};
-
-	const renderedTerminalHeight = isTerminalCollapsed
-		? COLLAPSED_TERMINAL_HEIGHT
-		: terminalHeight;
-
 	const handleCreateProjectTerminalTab = (options?: {
 		autoStart?: boolean;
 	}) => {
@@ -457,7 +306,7 @@ function ProjectDetailView() {
 			return;
 		}
 
-		setIsTerminalCollapsed(false);
+		setIsProjectTerminalModalOpen(true);
 		updateProjectTerminalState((currentState) => {
 			const terminalNumber = currentState.nextTabNumber;
 			const nextTab = createProjectTerminalTab(terminalNumber, options);
@@ -470,23 +319,22 @@ function ProjectDetailView() {
 		});
 	};
 
-	const handleOpenProjectTerminal = () => {
+	const handleToggleProjectTerminalModal = () => {
 		if (!workspace) {
 			return;
 		}
 
-		if (hasProjectTerminalTabs && isTerminalCollapsed) {
-			setIsTerminalCollapsed(false);
-			return;
-		}
-
 		if (hasProjectTerminalTabs) {
-			setIsTerminalCollapsed(true);
+			setIsProjectTerminalModalOpen((currentOpen) => !currentOpen);
 			return;
 		}
 
 		handleCreateProjectTerminalTab({ autoStart: true });
 	};
+
+	const handleProjectTerminalShortcutToggle = useEffectEvent(() => {
+		handleToggleProjectTerminalModal();
+	});
 
 	const handleSelectProjectTerminalTab = (tabId: string) => {
 		updateProjectTerminalState((currentState) => ({
@@ -496,7 +344,7 @@ function ProjectDetailView() {
 	};
 
 	const handleStartProjectTerminalTab = (tabId: string) => {
-		setIsTerminalCollapsed(false);
+		setIsProjectTerminalModalOpen(true);
 		updateProjectTerminalState((currentState) => ({
 			...currentState,
 			activeTabId: tabId,
@@ -524,7 +372,10 @@ function ProjectDetailView() {
 			return;
 		}
 
-		if (projectTerminalState.activeTabId === tabId && !isTerminalCollapsed) {
+		if (
+			projectTerminalState.activeTabId === tabId &&
+			isProjectTerminalModalOpen
+		) {
 			updateProjectTerminalState((currentState) => ({
 				...currentState,
 				tabs: currentState.tabs.map((tab) =>
@@ -614,7 +465,7 @@ function ProjectDetailView() {
 		});
 
 		if (isClosingLastTab) {
-			setIsTerminalCollapsed(true);
+			setIsProjectTerminalModalOpen(false);
 		}
 
 		await disposePersistentTerminalController(
@@ -629,11 +480,31 @@ function ProjectDetailView() {
 		);
 	};
 
+	useEffect(() => {
+		const handleProjectTerminalShortcut = (event: KeyboardEvent) => {
+			if (
+				event.defaultPrevented ||
+				event.isComposing ||
+				!isToggleProjectTerminalShortcut(event)
+			) {
+				return;
+			}
+
+			event.preventDefault();
+			handleProjectTerminalShortcutToggle();
+		};
+
+		window.addEventListener("keydown", handleProjectTerminalShortcut);
+
+		return () => {
+			window.removeEventListener("keydown", handleProjectTerminalShortcut);
+		};
+	}, []);
+
 	return (
-		<div ref={layoutRef} className="flex-1 flex flex-col min-h-0">
+		<div className="flex-1 flex flex-col min-h-0">
 			{workspace ? (
 				<>
-					{/* Workspace Header Info */}
 					<div className="h-20 px-6 flex items-center justify-between border-b bg-background/30 backdrop-blur-sm">
 						<div className="flex flex-col justify-center">
 							<h1 className="text-xl font-bold tracking-tight">
@@ -651,13 +522,11 @@ function ProjectDetailView() {
 									"h-8 gap-2 text-xs font-medium",
 									"text-muted-foreground hover:text-foreground",
 								)}
-								onClick={handleOpenProjectTerminal}
+								onClick={handleToggleProjectTerminalModal}
 							>
 								<TerminalIcon className="size-3.5" />
-								{hasProjectTerminalTabs
-									? isTerminalCollapsed
-										? "Show Terminal"
-										: "Hide Terminal"
+								{hasProjectTerminalTabs && isProjectTerminalModalOpen
+									? "Close Terminal"
 									: "Open Terminal"}
 							</Button>
 							<Button
@@ -685,17 +554,8 @@ function ProjectDetailView() {
 						</div>
 					</div>
 
-					<div
-						ref={workspaceAreaRef}
-						className="relative flex-1 min-h-0 overflow-hidden"
-					>
-						{/* Board Area */}
-						<div
-							className={cn(
-								"relative z-0 flex h-full min-h-0 flex-col overflow-hidden",
-								hasProjectTerminalTabs && "pb-14",
-							)}
-						>
+					<div className="relative flex-1 min-h-0 overflow-hidden">
+						<div className="relative z-0 flex h-full min-h-0 flex-col overflow-hidden">
 							<KanbanBoard
 								columns={workspace.columns}
 								onCreateTask={handleCreateTask}
@@ -706,98 +566,6 @@ function ProjectDetailView() {
 								onMoveTask={handleMoveTask}
 							/>
 						</div>
-
-						{/* Project Terminal */}
-						{hasProjectTerminalTabs && activeProjectTerminalTab && (
-							<div
-								className={cn(
-									"absolute inset-x-0 bottom-0 z-20 overflow-hidden border-t border-white/5 bg-[#09090B] shadow-[0_-12px_36px_rgba(0,0,0,0.42)]",
-									isResizingTerminal
-										? "transition-none"
-										: "transition-[height] duration-300 ease-in-out",
-								)}
-								style={{ height: renderedTerminalHeight }}
-							>
-								<button
-									type="button"
-									className="absolute inset-x-0 top-0 z-10 h-3 cursor-row-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-									onPointerDown={handleTerminalResizeStart}
-									onKeyDown={handleTerminalResizeKeyDown}
-									onDoubleClick={handleTerminalResizeDoubleClick}
-									aria-label="Resize terminal height"
-								/>
-								<div className="flex h-full min-h-0 flex-col pt-3">
-									<div className="flex items-center gap-2 border-b border-white/5 bg-[#111111] px-2 pt-1.5">
-										<div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-											{projectTerminalState.tabs.map((tab) => {
-												return (
-													<ProjectTerminalTabButton
-														key={tab.id}
-														tab={tab}
-														isActive={tab.id === activeProjectTerminalTab.id}
-														onSelect={handleSelectProjectTerminalTab}
-														onStart={handleStartProjectTerminalTab}
-														onStop={handleStopProjectTerminalTab}
-														onClose={handleCloseProjectTerminalTab}
-													/>
-												);
-											})}
-										</div>
-										<div className="flex shrink-0 items-center gap-1 pb-1.5">
-											<Button
-												variant="ghost"
-												size="icon-xs"
-												className="text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
-												onClick={() =>
-													handleCreateProjectTerminalTab({ autoStart: false })
-												}
-												aria-label="Add terminal"
-											>
-												<Plus className="size-3.5" />
-											</Button>
-										</div>
-									</div>
-									{!isTerminalCollapsed && (
-										<Terminal
-											key={activeProjectTerminalTab.id}
-											actionRequest={activeProjectTerminalTab.actionRequest}
-											autoStart={activeProjectTerminalTab.autoStart}
-											className="min-h-0 flex-1"
-											onViewStateChange={(viewState) => {
-												updateProjectTerminalState((currentState) => ({
-													...currentState,
-													tabs: currentState.tabs.map((tab) =>
-														tab.id === activeProjectTerminalTab.id
-															? {
-																	...tab,
-																	status:
-																		viewState.session?.status ??
-																		(tab.status === "idle"
-																			? "idle"
-																			: tab.status),
-																	isConnecting: viewState.isConnecting,
-																	actionRequest: null,
-																}
-															: tab,
-													),
-												}));
-											}}
-											showHeader={false}
-											showStartAction={false}
-											showRestartAction={false}
-											showStopAction={false}
-											scope={{
-												scopeType: "project",
-												scopeId: workspace.project.id,
-												projectId: workspace.project.id,
-												cwd: workspace.project.path,
-												terminalKey: activeProjectTerminalTab.terminalKey,
-											}}
-										/>
-									)}
-								</div>
-							</div>
-						)}
 					</div>
 				</>
 			) : (
@@ -812,6 +580,113 @@ function ProjectDetailView() {
 				</div>
 			)}
 
+			<Dialog
+				open={
+					isProjectTerminalModalOpen &&
+					hasProjectTerminalTabs &&
+					Boolean(activeProjectTerminalTab)
+				}
+				onOpenChange={setIsProjectTerminalModalOpen}
+			>
+				<DialogContent
+					hideClose
+					className="flex h-[min(78vh,760px)] max-w-[min(92vw,1180px)] flex-col gap-0 overflow-hidden border border-white/10 bg-[#09090B] p-0 shadow-[0_28px_90px_rgba(0,0,0,0.62)]"
+				>
+					{workspace && activeProjectTerminalTab ? (
+						<>
+							<div className="flex items-center justify-between border-b border-white/6 bg-[#101012] px-4 py-3">
+								<div className="flex min-w-0 items-center gap-3">
+									<TerminalIcon className="size-4 shrink-0 text-zinc-200" />
+									<div className="min-w-0">
+										<div className="truncate text-[12px] font-semibold text-zinc-100">
+											Project Terminal
+										</div>
+										<div className="truncate text-[10px] font-mono text-zinc-500">
+											Ctrl+\
+										</div>
+									</div>
+								</div>
+								<Button
+									variant="ghost"
+									size="icon-xs"
+									className="text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+									onClick={() => setIsProjectTerminalModalOpen(false)}
+									aria-label="Close terminal modal"
+								>
+									<X className="size-3.5" />
+								</Button>
+							</div>
+							<div className="flex min-h-0 flex-1 flex-col">
+								<div className="flex items-center gap-2 border-b border-white/5 bg-[#111111] px-2 pt-1.5">
+									<div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+										{projectTerminalState.tabs.map((tab) => {
+											return (
+												<ProjectTerminalTabButton
+													key={tab.id}
+													tab={tab}
+													isActive={tab.id === activeProjectTerminalTab.id}
+													onSelect={handleSelectProjectTerminalTab}
+													onStart={handleStartProjectTerminalTab}
+													onStop={handleStopProjectTerminalTab}
+													onClose={handleCloseProjectTerminalTab}
+												/>
+											);
+										})}
+									</div>
+									<div className="flex shrink-0 items-center gap-1 pb-1.5">
+										<Button
+											variant="ghost"
+											size="icon-xs"
+											className="text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+											onClick={() =>
+												handleCreateProjectTerminalTab({ autoStart: false })
+											}
+											aria-label="Add terminal"
+										>
+											<Plus className="size-3.5" />
+										</Button>
+									</div>
+								</div>
+								<Terminal
+									key={activeProjectTerminalTab.id}
+									actionRequest={activeProjectTerminalTab.actionRequest}
+									autoStart={activeProjectTerminalTab.autoStart}
+									className="min-h-0 flex-1"
+									onViewStateChange={(viewState) => {
+										updateProjectTerminalState((currentState) => ({
+											...currentState,
+											tabs: currentState.tabs.map((tab) =>
+												tab.id === activeProjectTerminalTab.id
+													? {
+															...tab,
+															status:
+																viewState.session?.status ??
+																(tab.status === "idle" ? "idle" : tab.status),
+															isConnecting: viewState.isConnecting,
+															actionRequest: null,
+														}
+													: tab,
+											),
+										}));
+									}}
+									showHeader={false}
+									showStartAction={false}
+									showRestartAction={false}
+									showStopAction={false}
+									scope={{
+										scopeType: "project",
+										scopeId: workspace.project.id,
+										projectId: workspace.project.id,
+										cwd: workspace.project.path,
+										terminalKey: activeProjectTerminalTab.terminalKey,
+									}}
+								/>
+							</div>
+						</>
+					) : null}
+				</DialogContent>
+			</Dialog>
+
 			<CreateColumnModal
 				isOpen={isCreateColumnModalOpen}
 				onOpenChange={setIsCreateColumnModalOpen}
@@ -819,12 +694,6 @@ function ProjectDetailView() {
 			/>
 		</div>
 	);
-}
-
-function clampProjectTerminalHeight(height: number, containerHeight: number) {
-	const maxHeight = Math.max(MIN_EXPANDED_TERMINAL_HEIGHT, containerHeight);
-
-	return Math.min(Math.max(height, MIN_EXPANDED_TERMINAL_HEIGHT), maxHeight);
 }
 
 function ProjectTerminalTabButton({

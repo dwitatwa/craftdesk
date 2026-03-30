@@ -336,7 +336,10 @@ export function useGitSidebarState({
 	}, [activeProjectPath]);
 
 	const handleGitAction = useCallback(
-		async (change: GitChange, action: "stage" | "unstage" | "discard") => {
+		async (
+			change: GitChange,
+			action: "stage" | "unstage" | "discard" | "ignore",
+		) => {
 			if (!activeProjectPath) {
 				return false;
 			}
@@ -369,7 +372,10 @@ export function useGitSidebarState({
 	);
 
 	const handleSelectedGitAction = useCallback(
-		async (changes: GitChange[], action: "stage" | "unstage" | "discard") => {
+		async (
+			changes: GitChange[],
+			action: "stage" | "unstage" | "discard" | "ignore",
+		) => {
 			if (!activeProjectPath || changes.length === 0) {
 				return false;
 			}
@@ -382,7 +388,9 @@ export function useGitSidebarState({
 					? "stage-selected"
 					: action === "unstage"
 						? "unstage-selected"
-						: "discard-selected";
+						: action === "ignore"
+							? "ignore-selected"
+							: "discard-selected";
 			const mutationKey = isSingleChange
 				? `${action}:${primaryChange.path}:${primaryChange.code}`
 				: `${action}:selected`;
@@ -422,6 +430,11 @@ export function useGitSidebarState({
 
 	const handleStageSelectedChanges = useCallback(
 		async (changes: GitChange[]) => handleSelectedGitAction(changes, "stage"),
+		[handleSelectedGitAction],
+	);
+
+	const handleIgnoreSelectedChanges = useCallback(
+		async (changes: GitChange[]) => handleSelectedGitAction(changes, "ignore"),
 		[handleSelectedGitAction],
 	);
 
@@ -747,6 +760,7 @@ export function useGitSidebarState({
 		handlePushCurrentBranch,
 		handleGitCommit,
 		handleGitGroupAction,
+		handleIgnoreSelectedChanges,
 		handleRefresh,
 		handleRefreshRemotes,
 		handleStashChanges,

@@ -3,6 +3,7 @@ import {
 	Check,
 	ChevronDown,
 	Ellipsis,
+	EyeOff,
 	FileText,
 	GitBranch,
 	GitCommitHorizontal,
@@ -48,13 +49,37 @@ const GIT_SECTION_HEADER_CLASS =
 const GIT_SECTION_BODY_CLASS = "pl-3.5 pt-1.5 pb-1";
 
 type ChangeMenuAction = {
-	action: "open-file" | "stage" | "unstage" | "discard" | "stash";
+	action: "open-file" | "stage" | "unstage" | "ignore" | "discard" | "stash";
 	disabled?: boolean;
 	icon: ReactNode;
 	label: string;
 	onSelect: (event: MouseEvent<HTMLButtonElement>) => void;
 	tone?: "default" | "danger";
 };
+
+function canIgnoreGitChange(change: GitChange) {
+	return change.kind !== "deleted" && change.kind !== "unmerged";
+}
+
+function getIgnoreActionLabel(changes: GitChange[]) {
+	if (changes.length === 0) {
+		return null;
+	}
+
+	if (changes.every((change) => change.kind === "untracked")) {
+		return "Add to .gitignore";
+	}
+
+	if (
+		changes.every(
+			(change) => change.kind !== "untracked" && canIgnoreGitChange(change),
+		)
+	) {
+		return "Stop Tracking & Ignore";
+	}
+
+	return null;
+}
 
 function ChangeActionMenu({
 	actions,
@@ -251,7 +276,7 @@ export function ChangeGroup({
 	diffMode: GitDiffMode;
 	onAction: (
 		change: GitChange,
-		action: "stage" | "unstage" | "discard" | "stash",
+		action: "stage" | "unstage" | "ignore" | "discard" | "stash",
 	) => Promise<boolean>;
 	onDiscardRequest: (change: GitChange) => void;
 	onGroupAction: (action: "stage-all" | "unstage-all") => Promise<void>;
@@ -261,7 +286,9 @@ export function ChangeGroup({
 	onStartSelectionMode: (diffMode: GitDiffMode) => void;
 	onCancelSelectionMode: () => void;
 	onToggleSelection: (change: GitChange) => void;
-	onSelectedAction: (action: "stage" | "unstage" | "discard" | "stash") => void;
+	onSelectedAction: (
+		action: "stage" | "unstage" | "ignore" | "discard" | "stash",
+	) => void;
 }) {
 	const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
 	const activeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -271,10 +298,15 @@ export function ChangeGroup({
 	const selectedCount = selectedPaths.length;
 	const isStageSelectedPending = pendingMutationKey === "stage:selected";
 	const isUnstageSelectedPending = pendingMutationKey === "unstage:selected";
+	const isIgnoreSelectedPending = pendingMutationKey === "ignore:selected";
 	const isDiscardSelectedPending = pendingMutationKey === "discard:selected";
 	const isStashSelectedPending =
 		pendingMutationKey === `stash:${diffMode}:selected`;
 	const isSelectionMenuOpen = openMenuKey === selectionMenuKey;
+	const selectedChanges = isSelectionModeActive
+		? changes.filter((change) => selectedPaths.includes(change.path))
+		: [];
+	const ignoreSelectedActionLabel = getIgnoreActionLabel(selectedChanges);
 
 	useEffect(() => {
 		if (!isSelectionModeActive && isSelectionMenuOpen) {
@@ -353,6 +385,22 @@ export function ChangeGroup({
 			},
 		},
 	];
+
+	if (ignoreSelectedActionLabel) {
+		selectionMenuActions.push({
+			action: "ignore",
+			disabled: isIgnoreSelectedPending,
+			icon: isIgnoreSelectedPending ? (
+				<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+			) : (
+				<EyeOff className="size-3 text-zinc-400" />
+			),
+			label: ignoreSelectedActionLabel,
+			onSelect: () => {
+				onSelectedAction("ignore");
+			},
+		});
+	}
 
 	if (diffMode === "unstaged") {
 		selectionMenuActions.push({
@@ -470,13 +518,16 @@ export function ChangeGroup({
 								? `unstage:${change.path}:${change.code}`
 								: `stage:${change.path}:${change.code}`;
 						const discardMutationKey = `discard:${change.path}:${change.code}`;
+						const ignoreMutationKey = `ignore:${change.path}:${change.code}`;
 						const stashMutationKey = `stash:${diffMode}:${change.path}:${change.code}`;
 						const isMutating =
 							pendingMutationKey === actionMutationKey ||
+							pendingMutationKey === ignoreMutationKey ||
 							pendingMutationKey === discardMutationKey ||
 							pendingMutationKey === stashMutationKey;
 						const rowMenuKey = `${diffMode}:${change.code}:${change.path}`;
 						const isRowMenuOpen = openMenuKey === rowMenuKey;
+						const ignoreActionLabel = getIgnoreActionLabel([change]);
 						const rowMenuActions: ChangeMenuAction[] =
 							diffMode === "unstaged"
 								? [
@@ -557,6 +608,23 @@ export function ChangeGroup({
 											},
 										},
 									];
+
+						if (ignoreActionLabel) {
+							rowMenuActions.push({
+								action: "ignore",
+								disabled: isMutating,
+								icon:
+									pendingMutationKey === ignoreMutationKey ? (
+										<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+									) : (
+										<EyeOff className="size-3 text-zinc-400" />
+									),
+								label: ignoreActionLabel,
+								onSelect: () => {
+									void onAction(change, "ignore");
+								},
+							});
+						}
 
 						if (diffMode === "unstaged") {
 							rowMenuActions.push({
