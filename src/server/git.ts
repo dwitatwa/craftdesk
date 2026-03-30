@@ -3,6 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import type {
 	GitBranchCommitPreviewInput,
 	GitBranchMutationInput,
+	GitChangeMarkerListInput,
+	GitChangeMarkerMutationInput,
 	GitChangeMutationInput,
 	GitDiffInput,
 	GitRepositoryChangeWaitInput,
@@ -29,6 +31,20 @@ export const getGitBranchCommits = createServerFn({ method: "GET" })
 	.handler(async ({ data }) => {
 		const { loadGitBranchCommits } = await import("#/server/git-service");
 		return loadGitBranchCommits(data);
+	});
+
+export const getGitChangeMarkers = createServerFn({ method: "GET" })
+	.inputValidator((input: GitChangeMarkerListInput) => input)
+	.handler(async ({ data }) => {
+		const { listGitChangeMarkers } = await import("#/server/db");
+		return listGitChangeMarkers(data);
+	});
+
+export const mutateGitChangeMarker = createServerFn({ method: "POST" })
+	.inputValidator((input: GitChangeMarkerMutationInput) => input)
+	.handler(async ({ data }) => {
+		const { setGitChangeMarker } = await import("#/server/db");
+		return setGitChangeMarker(data);
 	});
 
 export const getGitDiff = createServerFn({ method: "GET" })

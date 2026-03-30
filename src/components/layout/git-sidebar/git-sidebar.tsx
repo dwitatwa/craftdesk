@@ -25,7 +25,11 @@ import type {
 	GitExplorerHighlights,
 	GitRemote,
 } from "#/lib/git";
-import { getGitBranchCommits } from "#/server/git";
+import {
+	getGitBranchCommits,
+	getGitChangeMarkers,
+	mutateGitChangeMarker,
+} from "#/server/git";
 import {
 	GitSidebarBranchActionDialog,
 	GitSidebarBranchCommitsDialog,
@@ -60,6 +64,7 @@ export function GitSidebar({
 	onSelectChange,
 	onDiffRefresh,
 }: GitSidebarProps) {
+	const activeProjectId = activeProject?.id ?? "";
 	const activeProjectPath = activeProject?.path ?? "";
 	const [sectionOpenState, setSectionOpenState] = useState(
 		createInitialSectionState,
@@ -86,10 +91,14 @@ export function GitSidebar({
 	const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 	const [discardTarget, setDiscardTarget] =
 		useState<GitSidebarDiscardTarget | null>(null);
+	const [isMarkersLoading, setIsMarkersLoading] = useState(false);
+	const [markedPaths, setMarkedPaths] = useState<Set<string>>(() => new Set());
+	const [pendingMarkerPaths, setPendingMarkerPaths] = useState<string[]>([]);
 	const [remoteOpenState, setRemoteOpenState] = useState<
 		Record<string, boolean>
 	>({});
 	const branchCommitsRequestIdRef = useRef(0);
+	const markerRequestIdRef = useRef(0);
 	const branchContextMenuRef = useRef<HTMLDivElement | null>(null);
 	const {
 		error,
@@ -127,6 +136,52 @@ export function GitSidebar({
 		branchCommitsTarget?.projectPath === activeProjectPath
 			? branchCommitsTarget.branchName
 			: "";
+
+	useEffect(() => {
+		if (!activeProjectId) {
+			setIsMarkersLoading(false);
+			setMarkedPaths(new Set());
+			setPendingMarkerPaths([]);
+			return;
+		}
+
+		let isCancelled = false;
+		const requestId = markerRequestIdRef.current + 1;
+		markerRequestIdRef.current = requestId;
+		setIsMarkersLoading(true);
+
+		void getGitChangeMarkers({
+			data: {
+				projectId: activeProjectId,
+			},
+		})
+			.then((nextPaths) => {
+				if (isCancelled || markerRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setMarkedPaths(new Set(nextPaths));
+			})
+			.catch(() => {
+				if (isCancelled || markerRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setMarkedPaths(new Set());
+			})
+			.finally(() => {
+				if (isCancelled || markerRequestIdRef.current !== requestId) {
+					return;
+				}
+
+				setIsMarkersLoading(false);
+				setPendingMarkerPaths([]);
+			});
+
+		return () => {
+			isCancelled = true;
+		};
+	}, [activeProjectId]);
 
 	useEffect(() => {
 		onExplorerHighlightsChange?.(
@@ -309,6 +364,56 @@ export function GitSidebar({
 			changes: [change],
 			source: "single",
 		});
+	};
+
+	const handleToggleMarker = async (change: GitChange) => {
+		if (
+			!activeProjectId ||
+			isMarkersLoading ||
+			pendingMarkerPaths.includes(change.path)
+		) {
+			return;
+		}
+
+		const nextMarked = !markedPaths.has(change.path);
+		setPendingMarkerPaths((currentPaths) => [...currentPaths, change.path]);
+		setMarkedPaths((currentPaths) => {
+			const nextPaths = new Set(currentPaths);
+
+			if (nextMarked) {
+				nextPaths.add(change.path);
+			} else {
+				nextPaths.delete(change.path);
+			}
+
+			return nextPaths;
+		});
+
+		try {
+			await mutateGitChangeMarker({
+				data: {
+					projectId: activeProjectId,
+					filePath: change.path,
+					marked: nextMarked,
+				},
+			});
+		} catch {
+			setMarkedPaths((currentPaths) => {
+				const nextPaths = new Set(currentPaths);
+
+				if (nextMarked) {
+					nextPaths.delete(change.path);
+				} else {
+					nextPaths.add(change.path);
+				}
+
+				return nextPaths;
+			});
+		} finally {
+			setPendingMarkerPaths((currentPaths) =>
+				currentPaths.filter((path) => path !== change.path),
+			);
+		}
 	};
 
 	const handleDiscardDialogConfirm = async () => {
@@ -595,11 +700,15 @@ export function GitSidebar({
 										onGroupAction={handleGitGroupAction}
 										pendingMutationKey={pendingMutationKey}
 										activeSelectionMode={activeSelectionMode}
+										isMarkersLoading={isMarkersLoading}
+										markedPaths={markedPaths}
+										pendingMarkerPaths={pendingMarkerPaths}
 										selectedPaths={
 											activeSelectionMode === "staged" ? selectedPaths : []
 										}
 										onStartSelectionMode={setSelectionMode}
 										onCancelSelectionMode={clearSelectionMode}
+										onToggleMarker={handleToggleMarker}
 										onToggleSelection={toggleSelection}
 										onSelectedAction={(action) => {
 											void handleSelectedAction("staged", action);
@@ -625,11 +734,15 @@ export function GitSidebar({
 										onGroupAction={handleGitGroupAction}
 										pendingMutationKey={pendingMutationKey}
 										activeSelectionMode={activeSelectionMode}
+										isMarkersLoading={isMarkersLoading}
+										markedPaths={markedPaths}
+										pendingMarkerPaths={pendingMarkerPaths}
 										selectedPaths={
 											activeSelectionMode === "unstaged" ? selectedPaths : []
 										}
 										onStartSelectionMode={setSelectionMode}
 										onCancelSelectionMode={clearSelectionMode}
+										onToggleMarker={handleToggleMarker}
 										onToggleSelection={toggleSelection}
 										onSelectedAction={(action) => {
 											void handleSelectedAction("unstaged", action);

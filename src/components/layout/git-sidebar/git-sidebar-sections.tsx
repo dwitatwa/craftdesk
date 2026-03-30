@@ -5,6 +5,7 @@ import {
 	Ellipsis,
 	EyeOff,
 	FileText,
+	Flag,
 	GitBranch,
 	GitCommitHorizontal,
 	GitFork,
@@ -49,7 +50,14 @@ const GIT_SECTION_HEADER_CLASS =
 const GIT_SECTION_BODY_CLASS = "pl-3.5 pt-1.5 pb-1";
 
 type ChangeMenuAction = {
-	action: "open-file" | "stage" | "unstage" | "ignore" | "discard" | "stash";
+	action:
+		| "open-file"
+		| "stage"
+		| "unstage"
+		| "ignore"
+		| "discard"
+		| "stash"
+		| "mark";
 	disabled?: boolean;
 	icon: ReactNode;
 	label: string;
@@ -262,9 +270,13 @@ export function ChangeGroup({
 	onGroupAction,
 	pendingMutationKey,
 	activeSelectionMode,
+	isMarkersLoading = false,
+	markedPaths,
+	pendingMarkerPaths = [],
 	selectedPaths = [],
 	onStartSelectionMode,
 	onCancelSelectionMode,
+	onToggleMarker,
 	onToggleSelection,
 	onSelectedAction,
 }: {
@@ -282,9 +294,13 @@ export function ChangeGroup({
 	onGroupAction: (action: "stage-all" | "unstage-all") => Promise<void>;
 	pendingMutationKey: string;
 	activeSelectionMode: GitDiffMode | null;
+	isMarkersLoading?: boolean;
+	markedPaths: Set<string>;
+	pendingMarkerPaths?: string[];
 	selectedPaths?: string[];
 	onStartSelectionMode: (diffMode: GitDiffMode) => void;
 	onCancelSelectionMode: () => void;
+	onToggleMarker: (change: GitChange) => void;
 	onToggleSelection: (change: GitChange) => void;
 	onSelectedAction: (
 		action: "stage" | "unstage" | "ignore" | "discard" | "stash",
@@ -528,6 +544,27 @@ export function ChangeGroup({
 						const rowMenuKey = `${diffMode}:${change.code}:${change.path}`;
 						const isRowMenuOpen = openMenuKey === rowMenuKey;
 						const ignoreActionLabel = getIgnoreActionLabel([change]);
+						const isMarked = markedPaths.has(change.path);
+						const isMarkerPending =
+							isMarkersLoading || pendingMarkerPaths.includes(change.path);
+						const markerMenuAction: ChangeMenuAction = {
+							action: "mark",
+							disabled: isMarkerPending,
+							icon: isMarkerPending ? (
+								<LoaderCircle className="size-3 animate-spin text-zinc-400" />
+							) : (
+								<Flag
+									className={cn(
+										"size-3 text-zinc-400",
+										isMarked ? "fill-current text-amber-300" : undefined,
+									)}
+								/>
+							),
+							label: isMarked ? "Unmark" : "Mark",
+							onSelect: () => {
+								onToggleMarker(change);
+							},
+						};
 						const rowMenuActions: ChangeMenuAction[] =
 							diffMode === "unstaged"
 								? [
@@ -554,6 +591,7 @@ export function ChangeGroup({
 												void onOpenFile(change.path);
 											},
 										},
+										markerMenuAction,
 										{
 											action: "stash",
 											disabled: isMutating,
@@ -579,6 +617,7 @@ export function ChangeGroup({
 												void onOpenFile(change.path);
 											},
 										},
+										markerMenuAction,
 										{
 											action: "unstage",
 											disabled: isMutating,
@@ -698,6 +737,15 @@ export function ChangeGroup({
 											diffMode,
 										});
 									}}
+									onContextMenu={(event) => {
+										if (isSelectionModeActive) {
+											return;
+										}
+
+										event.preventDefault();
+										event.stopPropagation();
+										setOpenMenuKey(rowMenuKey);
+									}}
 									title={change.path}
 								>
 									<span
@@ -714,7 +762,9 @@ export function ChangeGroup({
 												"truncate text-[12px] font-medium leading-tight shrink-0 max-w-[140px]",
 												isSelected
 													? "text-sidebar-accent-foreground"
-													: "text-foreground",
+													: isMarked
+														? "text-amber-300"
+														: "text-foreground",
 											)}
 										>
 											{change.path.split("/").pop()}

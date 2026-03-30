@@ -27,6 +27,16 @@ export interface GitRepositoryChangeWaitInput {
 	timeoutMs?: number;
 }
 
+export interface GitChangeMarkerListInput {
+	projectId: string;
+}
+
+export interface GitChangeMarkerMutationInput {
+	projectId: string;
+	filePath: string;
+	marked: boolean;
+}
+
 export interface GitDiffInput {
 	cwd: string;
 	path: string;

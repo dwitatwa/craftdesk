@@ -23,6 +23,10 @@ import {
 	type TaskDetail,
 	type UpdateTaskInput,
 } from "#/lib/craftdesk";
+import type {
+	GitChangeMarkerListInput,
+	GitChangeMarkerMutationInput,
+} from "#/lib/git";
 import { isScopeRunning } from "#/server/terminal-manager";
 
 const DATA_DIR = resolveDataDirectory();
@@ -197,6 +201,18 @@ function initializeSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_board_columns_project_position ON board_columns(project_id, position);
     CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_column_id ON tasks(column_id);
+
+    CREATE TABLE IF NOT EXISTS git_change_markers (
+      project_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, file_path),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_git_change_markers_project_updated_at
+      ON git_change_markers(project_id, updated_at DESC);
   `);
 }
 
@@ -871,6 +887,70 @@ export function getProjectSummary(projectId: string): ProjectSummary | null {
 	const row = toProjectSummaryRow(projectId);
 
 	return row ? mapProjectSummary(row) : null;
+}
+
+function ensureProjectExists(db: DatabaseSync, projectId: string) {
+	const project = db
+		.prepare("SELECT id FROM projects WHERE id = ?")
+		.get(projectId) as { id: string } | undefined;
+
+	if (!project) {
+		throw new Error("Project not found.");
+	}
+}
+
+export function listGitChangeMarkers(
+	input: GitChangeMarkerListInput,
+): string[] {
+	const db = getDb();
+	ensureProjectExists(db, input.projectId);
+
+	const rows = db
+		.prepare(`
+      SELECT file_path
+      FROM git_change_markers
+      WHERE project_id = ?
+      ORDER BY updated_at DESC, file_path ASC
+    `)
+		.all(input.projectId) as Array<{ file_path: string }>;
+
+	return rows.map((row) => row.file_path);
+}
+
+export function setGitChangeMarker(input: GitChangeMarkerMutationInput) {
+	const db = getDb();
+	const projectId = input.projectId.trim();
+	const filePath = input.filePath.trim();
+
+	if (!projectId) {
+		throw new Error("Project ID is required.");
+	}
+
+	if (!filePath) {
+		throw new Error("File path is required.");
+	}
+
+	ensureProjectExists(db, projectId);
+
+	if (!input.marked) {
+		db.prepare(`
+      DELETE FROM git_change_markers
+      WHERE project_id = ? AND file_path = ?
+    `).run(projectId, filePath);
+		return;
+	}
+
+	const timestamp = nowIso();
+	db.prepare(`
+    INSERT INTO git_change_markers (
+      project_id,
+      file_path,
+      created_at,
+      updated_at
+    ) VALUES (?, ?, ?, ?)
+    ON CONFLICT(project_id, file_path)
+    DO UPDATE SET updated_at = excluded.updated_at
+  `).run(projectId, filePath, timestamp, timestamp);
 }
 
 export function createColumn(input: CreateColumnInput) {

@@ -5,4 +5,8 @@
   - Identify ambiguities or missing details in the request and list all clarifying questions explicitly.
   - Avoid assuming any requirements beyond what the user has explicitly described.
   - Pick the best option to be implemented for all clarifying questions.
+- After every question has been answered and no ambiguities remain, produce plan that:
+  - Lists concise, minimal steps to implement the feature.
+  - Stays within the exact clarified scope without adding extra complexity.
+- Tell the behavior if the plan is implemented in straightforward sentence.
 - When implementing, always use the skills related to the changes.
