@@ -1152,54 +1152,63 @@ export function StashRow({
 	isApplying?: boolean;
 	isDeleting?: boolean;
 }) {
+	const normalizedMessage = stash.message.trim();
+	const displayMessage = normalizedMessage
+		.replace(/^(?:WIP on|On)\s+[^:]+:\s*/i, "")
+		.trim();
+	const primaryLabel = displayMessage || normalizedMessage || "Saved stash";
+	const rowTitle = normalizedMessage
+		? `${normalizedMessage} (${stash.name})`
+		: stash.name;
+
 	return (
-		<div className="rounded-md py-1.5 px-1 transition-colors hover:bg-white/[0.04]">
-			<div className="flex items-center justify-between gap-2.5">
-				<div className="min-w-0">
-					<div className="truncate text-[12px] font-bold text-foreground/90">
-						{stash.name}
+		<div
+			className="group rounded-md px-1.5 py-1.5 transition-colors hover:bg-white/[0.04]"
+			title={rowTitle}
+		>
+			<div className="flex items-start gap-2">
+				<div className="min-w-0 flex-1">
+					<div className="truncate text-[11px] font-medium leading-4 text-foreground/92">
+						{primaryLabel}
 					</div>
-					<div className="truncate text-[10px] text-muted-foreground/50">
-						{stash.message}
+					<div className="mt-0.5 text-[10px] text-muted-foreground/40">
+						{stash.relativeDate}
 					</div>
 				</div>
-				<div className="shrink-0 text-[10px] text-muted-foreground/35">
-					{stash.relativeDate}
+				<div className="flex shrink-0 items-center gap-1">
+					<Button
+						type="button"
+						variant="ghost"
+						size="xs"
+						className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground/55 hover:text-foreground"
+						onClick={onApply}
+						disabled={isApplying || isDeleting}
+						title={`Apply ${primaryLabel}`}
+					>
+						{isApplying ? (
+							<LoaderCircle className="size-2.5 animate-spin" />
+						) : (
+							<ArrowRightLeft className="size-2.5" />
+						)}
+						<span>Apply</span>
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="xs"
+						className="h-5 px-1.5 text-[10px] font-medium text-muted-foreground/55 hover:text-red-300"
+						onClick={onDelete}
+						disabled={isApplying || isDeleting}
+						title={`Delete ${primaryLabel}`}
+					>
+						{isDeleting ? (
+							<LoaderCircle className="size-2.5 animate-spin" />
+						) : (
+							<Trash2 className="size-2.5" />
+						)}
+						<span>Delete</span>
+					</Button>
 				</div>
-			</div>
-			<div className="mt-1.5 flex items-center justify-end gap-1">
-				<Button
-					type="button"
-					variant="ghost"
-					size="xs"
-					className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/55 hover:text-foreground"
-					onClick={onApply}
-					disabled={isApplying || isDeleting}
-					title={`Apply ${stash.name}`}
-				>
-					{isApplying ? (
-						<LoaderCircle className="size-2.5 animate-spin" />
-					) : (
-						<ArrowRightLeft className="size-2.5" />
-					)}
-					<span>Apply</span>
-				</Button>
-				<Button
-					type="button"
-					variant="ghost"
-					size="xs"
-					className="h-5 px-1.5 text-[10px] font-bold text-muted-foreground/55 hover:text-red-300"
-					onClick={onDelete}
-					disabled={isApplying || isDeleting}
-					title={`Delete ${stash.name}`}
-				>
-					{isDeleting ? (
-						<LoaderCircle className="size-2.5 animate-spin" />
-					) : (
-						<Trash2 className="size-2.5" />
-					)}
-					<span>Delete</span>
-				</Button>
 			</div>
 		</div>
 	);
