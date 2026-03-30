@@ -75,7 +75,7 @@ function getIgnoreActionLabel(changes: GitChange[]) {
 	}
 
 	if (changes.every((change) => change.kind === "untracked")) {
-		return "Add to .gitignore";
+		return "Ignore";
 	}
 
 	if (
@@ -83,7 +83,7 @@ function getIgnoreActionLabel(changes: GitChange[]) {
 			(change) => change.kind !== "untracked" && canIgnoreGitChange(change),
 		)
 	) {
-		return "Stop Tracking & Ignore";
+		return "Untrack";
 	}
 
 	return null;
