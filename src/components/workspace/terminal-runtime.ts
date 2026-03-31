@@ -123,6 +123,7 @@ class TerminalController {
 	private setupPromise: Promise<void> | null = null;
 	private resumePromise: Promise<void> | null = null;
 	private sessionId: string | null = null;
+	private suppressedInputDepth = 0;
 	private isDisposed = false;
 	private hasCheckedExistingSession = false;
 
@@ -482,6 +483,10 @@ class TerminalController {
 		terminal.loadAddon(new WebLinksAddon());
 		terminal.open(hostElement);
 		terminal.onData((data) => {
+			if (this.suppressedInputDepth > 0) {
+				return;
+			}
+
 			if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
 				return;
 			}
@@ -615,10 +620,22 @@ class TerminalController {
 		}
 
 		if (options?.reset) {
-			this.terminal.reset();
-			if (nextSnapshot.buffer) {
-				this.terminal.write(nextSnapshot.buffer);
-			}
+			this.withInputSuppressed(() => {
+				this.terminal?.reset();
+				if (nextSnapshot.buffer) {
+					this.terminal?.write(nextSnapshot.buffer);
+				}
+			});
+		}
+	}
+
+	private withInputSuppressed(callback: () => void) {
+		this.suppressedInputDepth += 1;
+
+		try {
+			callback();
+		} finally {
+			this.suppressedInputDepth = Math.max(0, this.suppressedInputDepth - 1);
 		}
 	}
 
