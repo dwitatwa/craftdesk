@@ -46,6 +46,7 @@ function CraftdeskApp() {
 		await deleteProject({ data: { projectId } });
 		await router.invalidate();
 	};
+	const appVersionLabel = `v${__APP_VERSION__}`;
 
 	return (
 		<AppShell
@@ -60,7 +61,7 @@ function CraftdeskApp() {
 				<div className="text-center space-y-4 mb-12">
 					<div className="inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs font-mono text-primary">
 						<TerminalIcon className="size-3" />
-						v1.0.0-alpha
+						{appVersionLabel}
 					</div>
 					<h1 className="text-5xl font-bold tracking-tight bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent">
 						Craft Your Workspace

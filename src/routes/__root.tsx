@@ -38,7 +38,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 		<html lang="en" className="dark">
 			<head>
 				<HeadContent />
-				<title>Craftdesk</title>
 			</head>
 			<body className="bg-background font-sans text-foreground antialiased selection:bg-primary/20">
 				{children}

@@ -22,6 +22,15 @@ export const Route = createFileRoute("/projects/$projectId")({
 			projects,
 		};
 	},
+	head: ({ loaderData }) => ({
+		meta: [
+			{
+				title: loaderData?.activeProject?.name
+					? `Craftdesk - ${loaderData.activeProject.name}`
+					: "Craftdesk",
+			},
+		],
+	}),
 	component: ProjectLayout,
 });
 
