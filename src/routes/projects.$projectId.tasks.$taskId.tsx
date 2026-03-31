@@ -1,6 +1,10 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, CheckCircle2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	ProjectTerminalDialog,
+	useProjectTerminalDialog,
+} from "#/components/workspace/project-terminal-dialog";
 import { TaskNotesEditor } from "#/components/workspace/task-notes-editor";
 import { Terminal } from "#/components/workspace/terminal";
 import { TASK_CATEGORY_LABELS, type TaskCategory } from "#/lib/craftdesk";
@@ -36,6 +40,14 @@ function TaskDetailView() {
 	} | null>(null);
 	const [detailPanelWidth, setDetailPanelWidth] = useState<number | null>(null);
 	const [isDraggingDivider, setIsDraggingDivider] = useState(false);
+	const projectTerminal = useProjectTerminalDialog(
+		task
+			? {
+					projectId: task.projectId,
+					cwd: task.projectPath,
+				}
+			: null,
+	);
 
 	useEffect(() => {
 		const container = splitContainerRef.current;
@@ -393,6 +405,7 @@ function TaskDetailView() {
 					</div>
 				</div>
 			)}
+			<ProjectTerminalDialog controller={projectTerminal} />
 		</div>
 	);
 }
