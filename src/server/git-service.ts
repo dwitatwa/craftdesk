@@ -489,7 +489,10 @@ async function appendPathsToGitIgnore(repoRoot: string, inputPaths: string[]) {
 			continue;
 		}
 
-		await runGit(["rm", "--cached", "--", target.ignoreEntry], repoRoot);
+		await runGit(
+			["rm", "--cached", "--force", "--", target.ignoreEntry],
+			repoRoot,
+		);
 	}
 }
 

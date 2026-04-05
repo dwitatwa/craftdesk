@@ -629,14 +629,14 @@ export function GitSidebar({
 						</div>
 					) : null}
 
-					{!error && isLoading && !overview ? (
+					{isLoading && !overview ? (
 						<div className="flex items-center gap-1.5 px-2.5 py-3 text-[12px] text-muted-foreground/60">
 							<LoaderCircle className="size-3 animate-spin" />
 							Loading Git state...
 						</div>
 					) : null}
 
-					{!error && overview ? (
+					{overview ? (
 						<div className="divide-y divide-white/4">
 							<CommitSection
 								onCommit={handleGitCommit}
@@ -1098,10 +1098,10 @@ export function GitSidebar({
 }
 
 function buildPullRequestUrl(
-	branch: GitBranchSummary,
+	branch: GitBranchSummary | GitBranchListEntry,
 	remotes: GitRemote[],
 ): string | null {
-	if (branch.detached) {
+	if ("detached" in branch && branch.detached) {
 		return null;
 	}
 
