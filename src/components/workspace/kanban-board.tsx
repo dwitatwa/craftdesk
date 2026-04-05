@@ -97,10 +97,10 @@ function Column({
 		<div className="grid h-full min-h-0 w-72 shrink-0 grid-rows-[auto_minmax(0,1fr)] gap-4">
 			<div className="flex items-center justify-between px-2">
 				<div className="flex items-center gap-2">
-					<h2 className="text-xs font-bold tracking-widest uppercase text-muted-foreground">
+					<h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground/80">
 						{column.title}
 					</h2>
-					<span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+					<span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border">
 						{column.tasks.length}
 					</span>
 				</div>
@@ -118,7 +118,7 @@ function Column({
 
 			<div
 				className={cn(
-					"flex min-h-0 flex-col overflow-hidden rounded-lg border border-transparent transition-colors",
+					"flex min-h-0 flex-col overflow-hidden rounded-xl border border-transparent transition-colors",
 					activeDropTarget?.columnId === column.id &&
 						"border-primary/40 bg-primary/5",
 				)}
@@ -561,10 +561,10 @@ export function KanbanBoard({
 					/>
 				))
 			) : (
-				<div className="flex h-full min-w-full items-center justify-center rounded-lg border border-dashed border-border bg-card p-8 text-center shadow-sm">
-					<div className="space-y-3">
+				<div className="flex h-full min-w-full items-center justify-center rounded-2xl border border-dashed border-border/70 bg-card/40 p-8 text-center">
+					<div className="space-y-2">
 						<h2 className="text-sm font-semibold">No columns yet</h2>
-						<p className="text-xs text-muted-foreground max-w-[240px]">
+						<p className="text-xs text-muted-foreground">
 							Create a column to start organizing work on this board.
 						</p>
 					</div>

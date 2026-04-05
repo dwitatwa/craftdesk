@@ -183,12 +183,12 @@ function ProjectDetailView() {
 		<div className="flex-1 flex flex-col min-h-0">
 			{workspace ? (
 				<>
-					<div className="h-16 px-6 flex items-center justify-between border-b bg-card">
+					<div className="h-20 px-6 flex items-center justify-between border-b bg-background/30 backdrop-blur-sm">
 						<div className="flex flex-col justify-center">
-							<h1 className="text-lg font-bold tracking-tight">
+							<h1 className="text-xl font-bold tracking-tight">
 								{workspace.project.name}
 							</h1>
-							<p className="text-[10px] text-muted-foreground font-mono leading-none mt-1">
+							<p className="text-xs text-muted-foreground font-mono leading-none mt-1">
 								{workspace.project.path}
 							</p>
 						</div>
@@ -197,33 +197,33 @@ function ProjectDetailView() {
 								variant="ghost"
 								size="sm"
 								className={cn(
-									"h-8 gap-2 text-xs font-semibold",
-									"text-muted-foreground hover:text-foreground hover:bg-accent",
+									"h-8 gap-2 text-xs font-medium",
+									"text-muted-foreground hover:text-foreground",
 								)}
 								onClick={projectTerminal.toggle}
 							>
 								<TerminalIcon className="size-3.5" />
 								{projectTerminal.hasTabs && projectTerminal.isOpen
 									? "Close Terminal"
-									: "Terminal"}
+									: "Open Terminal"}
 							</Button>
 							<Button
 								variant="ghost"
 								size="sm"
 								className={cn(
-									"h-8 gap-2 text-xs font-semibold",
-									"text-muted-foreground hover:text-foreground hover:bg-accent",
+									"h-8 gap-2 text-xs font-medium",
+									"text-muted-foreground hover:text-foreground",
 								)}
 								onClick={handleHideCurrentDoneTask}
 								disabled={isUpdatingDoneVisibility || !hasVisibleDoneTask}
 							>
 								<EyeOff className="size-3.5" />
-								Clear Done
+								Hide Current Done Tasks
 							</Button>
 							<Button
-								variant="secondary"
+								variant="ghost"
 								size="sm"
-								className="h-8 gap-2 text-xs font-bold uppercase tracking-wider cursor-pointer shadow-sm"
+								className="h-8 gap-2 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer"
 								onClick={() => setIsCreateColumnModalOpen(true)}
 							>
 								<Plus className="size-3.5" />
@@ -248,8 +248,8 @@ function ProjectDetailView() {
 				</>
 			) : (
 				<div className="flex flex-1 items-center justify-center p-8">
-					<div className="max-w-md rounded-lg border border-dashed border-border bg-card p-8 text-center shadow-sm">
-						<h1 className="text-lg font-bold">Project not found</h1>
+					<div className="max-w-md rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
+						<h1 className="text-lg font-semibold">Project not found</h1>
 						<p className="mt-2 text-sm text-muted-foreground">
 							This workspace is not saved in SQLite yet. Add it from the sidebar
 							to create a board for it.
