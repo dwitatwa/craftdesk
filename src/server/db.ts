@@ -20,6 +20,7 @@ import {
 	type ProjectWorkspace,
 	type SaveProjectInput,
 	slugifyProjectId,
+	type TaskDetail,
 	type UpdateTaskInput,
 } from "#/lib/craftdesk";
 import type {
@@ -897,6 +898,64 @@ export function getProjectWorkspace(
 				.filter((task) => !(column.title === "Done" && task.hideInDoneColumn))
 				.map(({ hideInDoneColumn: _hideInDoneColumn, ...task }) => task),
 		})),
+	};
+}
+
+export function getTaskDetail(taskId: string): TaskDetail | null {
+	const db = getDb();
+	const row = db
+		.prepare(`
+      SELECT
+        t.id,
+        t.title,
+        t.category,
+        t.notes,
+        t.project_id,
+        p.name AS project_name,
+        p.path AS project_path,
+        t.column_id,
+        c.title AS column_title,
+        t.created_at,
+        t.done_at
+      FROM tasks t
+      INNER JOIN projects p ON p.id = t.project_id
+      INNER JOIN board_columns c ON c.id = t.column_id
+      WHERE t.id = ?
+      LIMIT 1
+    `)
+		.get(taskId) as
+		| {
+				id: string;
+				title: string;
+				category: string;
+				notes: string;
+				project_id: string;
+				project_name: string;
+				project_path: string;
+				column_id: string;
+				column_title: string;
+				created_at: string;
+				done_at: string | null;
+		  }
+		| undefined;
+
+	if (!row) {
+		return null;
+	}
+
+	return {
+		id: row.id,
+		title: row.title,
+		category: normalizeTaskCategory(row.category),
+		notes: row.notes,
+		projectId: row.project_id,
+		projectName: row.project_name,
+		projectPath: row.project_path,
+		columnId: row.column_id,
+		columnTitle: row.column_title,
+		createdAt: row.created_at,
+		doneAt: row.done_at,
+		isRunning: isScopeRunning({ scopeType: "task", scopeId: row.id }),
 	};
 }
 
