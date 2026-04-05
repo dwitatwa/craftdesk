@@ -174,3 +174,21 @@ export const getTaskDetail = createServerFn({ method: "GET" })
 		const { getTaskDetail: getTaskDetailFromDb } = await import("#/server/db");
 		return getTaskDetailFromDb(data.taskId);
 	});
+
+export const getDatabaseSize = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const { getDatabaseSize: getDatabaseSizeFromDb } = await import(
+			"#/server/db"
+		);
+		return getDatabaseSizeFromDb();
+	},
+);
+
+export const getGlobalStats = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const { getGlobalStats: getGlobalStatsFromDb } = await import(
+			"#/server/db"
+		);
+		return getGlobalStatsFromDb();
+	},
+);

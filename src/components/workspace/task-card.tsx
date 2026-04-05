@@ -141,7 +141,7 @@ export function TaskCard({
 				onDragOver={onDragOver}
 				onDrop={onDrop}
 				className={cn(
-					"group relative list-none flex w-full shrink-0 overflow-hidden rounded-xl",
+					"group relative list-none flex w-full shrink-0 overflow-hidden rounded-lg",
 					isDragging && "opacity-45",
 					className,
 				)}
@@ -155,8 +155,8 @@ export function TaskCard({
 				<div
 					ref={cardRef}
 					className={cn(
-						"relative isolate flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card bg-clip-padding shadow-sm transition-all duration-150",
-						"hover:border-primary/50 hover:bg-white/[0.02]",
+						"relative isolate flex w-full flex-col overflow-hidden rounded-lg border border-border bg-card bg-clip-padding shadow-sm transition-all duration-150",
+						"hover:border-primary/50",
 					)}
 				>
 					<div className="p-3 space-y-3">
@@ -179,7 +179,7 @@ export function TaskCard({
 								<span
 									className={cn(
 										metaBadgeClassName,
-										"border border-border/70 bg-muted/35 text-muted-foreground/80",
+										"border border-border bg-muted/50 text-muted-foreground",
 									)}
 								>
 									{taskLabel}
@@ -200,21 +200,21 @@ export function TaskCard({
 							onKeyDown={handleCardKeyDown}
 							className="appearance-none border-0 bg-transparent block w-full p-0 space-y-1 text-left cursor-pointer"
 						>
-							<h3 className="text-[12px] font-medium leading-[1.4] text-foreground/90 group-hover:text-foreground transition-colors line-clamp-1">
+							<h3 className="text-xs font-semibold leading-[1.4] text-foreground/90 group-hover:text-foreground transition-colors line-clamp-2">
 								{title}
 							</h3>
 							{notesPreview ? (
-								<p className="text-[10px] text-muted-foreground leading-snug line-clamp-2">
+								<p className="text-[10px] text-muted-foreground/80 leading-snug line-clamp-2">
 									{notesPreview}
 								</p>
 							) : (
-								<p className="text-[10px] text-muted-foreground/60 leading-snug">
+								<p className="text-[10px] text-muted-foreground/50 leading-snug italic">
 									No notes yet.
 								</p>
 							)}
 						</button>
 					</div>
-					<div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2">
+					<div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 bg-muted/10">
 						<div className="min-w-0">
 							{isRunning ? (
 								<button
@@ -225,7 +225,7 @@ export function TaskCard({
 										void handleStopTerminal();
 									}}
 									disabled={isStoppingTerminal}
-									className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-amber-400 transition-colors px-1.5 py-0.5 rounded hover:bg-amber-500/5 cursor-pointer uppercase tracking-tighter disabled:cursor-not-allowed disabled:opacity-60"
+									className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[10px] font-bold text-amber-500/80 hover:text-amber-500 transition-colors px-1.5 py-0.5 rounded hover:bg-amber-500/5 cursor-pointer uppercase tracking-tight disabled:cursor-not-allowed disabled:opacity-60"
 								>
 									<Square className="size-3" />
 									<span>
@@ -242,7 +242,7 @@ export function TaskCard({
 									e.preventDefault();
 									setIsEditModalOpen(true);
 								}}
-								className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-white/5 cursor-pointer uppercase tracking-tighter"
+								className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[10px] font-bold text-muted-foreground/80 hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-accent cursor-pointer uppercase tracking-tight"
 							>
 								<Pencil className="size-3" />
 								<span>Edit</span>
@@ -254,7 +254,7 @@ export function TaskCard({
 									e.preventDefault();
 									setIsDeleteDialogOpen(true);
 								}}
-								className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded hover:border-red-500/20 hover:bg-red-500/5 cursor-pointer uppercase tracking-tighter"
+								className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[10px] font-bold text-muted-foreground/80 hover:text-red-500 transition-colors px-1.5 py-0.5 rounded hover:bg-red-500/5 cursor-pointer uppercase tracking-tight"
 							>
 								<Trash2 className="size-3" />
 								<span>Delete</span>
