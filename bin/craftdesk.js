@@ -153,7 +153,6 @@ async function installCommand(options) {
 	ensureLinux();
 	ensureNodeVersion();
 	ensurePackagedRuntime();
-	ensureRuntimeDependency("node-pty");
 
 	const paths = getInstallPaths();
 	const packageManager = detectLinuxPackageManager();
@@ -236,7 +235,6 @@ async function startCommand(options) {
 	ensureLinux();
 	ensureNodeVersion();
 	ensurePackagedRuntime();
-	ensureRuntimeDependency("node-pty");
 
 	const paths = getInstallPaths();
 	const metadata = readPidMetadata(paths);

@@ -1,14 +1,10 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { EyeOff, Plus, Terminal as TerminalIcon } from "lucide-react";
+import { EyeOff, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "#/components/ui/button";
 import { CreateColumnModal } from "#/components/workspace/create-column-modal";
 import { KanbanBoard } from "#/components/workspace/kanban-board";
-import {
-	ProjectTerminalDialog,
-	useProjectTerminalDialog,
-} from "#/components/workspace/project-terminal-dialog";
 import type { TaskCategory } from "#/lib/craftdesk";
 import { cn } from "#/lib/utils";
 import {
@@ -21,7 +17,6 @@ import {
 	moveTask,
 	updateTask,
 } from "#/server/craftdesk";
-import { stopScopeTerminal } from "#/server/terminal";
 
 export const Route = createFileRoute("/projects/$projectId/")({
 	loader: async ({ params }) => {
@@ -42,14 +37,6 @@ function ProjectDetailView() {
 	const [isCreateColumnModalOpen, setIsCreateColumnModalOpen] = useState(false);
 	const [isUpdatingDoneVisibility, setIsUpdatingDoneVisibility] =
 		useState(false);
-	const projectTerminal = useProjectTerminalDialog(
-		workspace
-			? {
-					projectId: workspace.project.id,
-					cwd: workspace.project.path,
-				}
-			: null,
-	);
 
 	const doneColumn = workspace?.columns.find(
 		(column) => column.title === "Done",
@@ -134,16 +121,6 @@ function ProjectDetailView() {
 		await refreshData();
 	};
 
-	const handleStopTaskTerminal = async (taskId: string) => {
-		await stopScopeTerminal({
-			data: {
-				scopeType: "task",
-				scopeId: taskId,
-			},
-		});
-		await refreshData();
-	};
-
 	const handleUpdateTask = async (
 		taskId: string,
 		input: { title: string; category: TaskCategory; notes: string },
@@ -200,20 +177,6 @@ function ProjectDetailView() {
 									"h-8 gap-2 text-xs font-medium",
 									"text-muted-foreground hover:text-foreground",
 								)}
-								onClick={projectTerminal.toggle}
-							>
-								<TerminalIcon className="size-3.5" />
-								{projectTerminal.hasTabs && projectTerminal.isOpen
-									? "Close Terminal"
-									: "Open Terminal"}
-							</Button>
-							<Button
-								variant="ghost"
-								size="sm"
-								className={cn(
-									"h-8 gap-2 text-xs font-medium",
-									"text-muted-foreground hover:text-foreground",
-								)}
 								onClick={handleHideCurrentDoneTask}
 								disabled={isUpdatingDoneVisibility || !hasVisibleDoneTask}
 							>
@@ -240,7 +203,6 @@ function ProjectDetailView() {
 								onDeleteColumn={handleDeleteColumn}
 								onUpdateTask={handleUpdateTask}
 								onDeleteTask={handleDeleteTask}
-								onStopTaskTerminal={handleStopTaskTerminal}
 								onMoveTask={handleMoveTask}
 							/>
 						</div>
@@ -257,8 +219,6 @@ function ProjectDetailView() {
 					</div>
 				</div>
 			)}
-
-			<ProjectTerminalDialog controller={projectTerminal} />
 
 			<CreateColumnModal
 				isOpen={isCreateColumnModalOpen}

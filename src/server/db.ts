@@ -27,7 +27,7 @@ import type {
 	GitChangeMarkerListInput,
 	GitChangeMarkerMutationInput,
 } from "#/lib/git";
-import { isScopeRunning } from "#/server/terminal-manager";
+
 
 const DATA_DIR = resolveDataDirectory();
 const DB_PATH = path.join(DATA_DIR, "craftdesk.sqlite");
@@ -883,7 +883,7 @@ export function getProjectWorkspace(
 			createdAt: task.created_at,
 			doneAt: task.done_at,
 			hideInDoneColumn: Boolean(task.hide_in_done_column),
-			isRunning: isScopeRunning({ scopeType: "task", scopeId: task.id }),
+			isRunning: false,
 		});
 		tasksByColumnId.set(task.column_id, existingTasks);
 	}
@@ -955,7 +955,7 @@ export function getTaskDetail(taskId: string): TaskDetail | null {
 		columnTitle: row.column_title,
 		createdAt: row.created_at,
 		doneAt: row.done_at,
-		isRunning: isScopeRunning({ scopeType: "task", scopeId: row.id }),
+		isRunning: false,
 	};
 }
 

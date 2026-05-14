@@ -37,7 +37,6 @@ interface ColumnProps {
 		input: { title: string; category: TaskCategory; notes: string },
 	) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
-	onStopTaskTerminal: (taskId: string) => Promise<void> | void;
 	onDragOverColumn: (event: DragEvent<HTMLElement>, columnId: string) => void;
 	onDropOnColumn: (event: DragEvent<HTMLElement>, columnId: string) => void;
 	onDragOverTask: (
@@ -68,7 +67,6 @@ function Column({
 	onDeleteColumn,
 	onUpdateTask,
 	onDeleteTask,
-	onStopTaskTerminal,
 	onDragOverColumn,
 	onDropOnColumn,
 	onDragOverTask,
@@ -162,7 +160,6 @@ function Column({
 								showDropIndicatorBottom={showDropIndicatorBottom}
 								onUpdateTask={onUpdateTask}
 								onDelete={onDeleteTask}
-								onStopTerminal={onStopTaskTerminal}
 							/>
 						);
 					})}
@@ -233,7 +230,6 @@ interface KanbanBoardProps {
 		input: { title: string; category: TaskCategory; notes: string },
 	) => Promise<void> | void;
 	onDeleteTask: (taskId: string) => Promise<void> | void;
-	onStopTaskTerminal: (taskId: string) => Promise<void> | void;
 	onMoveTask: (
 		taskId: string,
 		targetColumnId: string,
@@ -351,7 +347,6 @@ export function KanbanBoard({
 	onDeleteColumn,
 	onUpdateTask,
 	onDeleteTask,
-	onStopTaskTerminal,
 	onMoveTask,
 }: KanbanBoardProps) {
 	const [boardColumns, setBoardColumns] = useState(columns);
@@ -549,7 +544,6 @@ export function KanbanBoard({
 						onDeleteColumn={onDeleteColumn}
 						onUpdateTask={onUpdateTask}
 						onDeleteTask={onDeleteTask}
-						onStopTaskTerminal={onStopTaskTerminal}
 						onDragOverColumn={handleDragOverColumn}
 						onDropOnColumn={handleDropOnColumn}
 						onDragOverTask={handleDragOverTask}

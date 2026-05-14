@@ -1,7 +1,6 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 @import 'tw-animate-css';
-@import '@xterm/xterm/css/xterm.css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -159,20 +158,5 @@
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-  }
-
-  .terminal-surface .xterm {
-    height: 100%;
-    padding: 1rem 1.25rem;
-  }
-
-  .terminal-surface .xterm-viewport {
-    overscroll-behavior: contain;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .terminal-surface .xterm-viewport::-webkit-scrollbar {
-    display: none;
   }
 }

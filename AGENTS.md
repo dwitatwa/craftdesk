@@ -9,4 +9,12 @@
   - Lists concise, minimal steps to implement the feature.
   - Stays within the exact clarified scope without adding extra complexity.
 - Tell the behavior if the plan is implemented in straightforward sentence.
-- When implementing, always use the skills related to the changes.
+- Tell the skills that you will use for the plan.
+- ONLY proceed to implementation once the plan is COMPLETE and CONFIRMED, following the user's subsequent implementation instructions.
+- ALWAYS follow this code readibility rules when implementing :
+  - DO NOT write deeply NESTED TERNARY expressions for business logic, UI labels, status text, or conditional rendering.Ternaries are allowed only when they are simple and easy to read.
+  - When a value depends on more than two conditions, extract the logic into a named helper function.
+  - Use clear if statements, guard clauses, and named boolean variables when logic becomes complex.
+  - Avoid complex nested conditional rendering directly inside JSX.
+  - Keep JSX focused on rendering UI; extract any complex state update, nested object spread, business logic, or multi-line event handler into a clearly named function before using it in JSX.
+- Do not sacrifice performance, but do not optimize at the cost of readability unless there is a proven performance issue.

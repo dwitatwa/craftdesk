@@ -109,8 +109,8 @@ function CraftdeskApp() {
 								</span>
 							</div>
 							<p className="text-sm text-muted-foreground max-w-lg">
-								A local-first engineering workspace for technical boards,
-								integrated terminals, and rapid development runtimes.
+								A local-first engineering workspace for technical boards
+								and rapid development runtimes.
 							</p>
 						</div>
 					</header>

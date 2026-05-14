@@ -1,12 +1,7 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Calendar, CheckCircle2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-	ProjectTerminalDialog,
-	useProjectTerminalDialog,
-} from "#/components/workspace/project-terminal-dialog";
+import { useCallback, useEffect, useRef } from "react";
 import { TaskNotesEditor } from "#/components/workspace/task-notes-editor";
-import { Terminal } from "#/components/workspace/terminal";
 import { TASK_CATEGORY_LABELS, type TaskCategory } from "#/lib/craftdesk";
 import { shouldHandleMiddleClickClose } from "#/lib/utils";
 import { getTaskDetail } from "#/server/craftdesk";
@@ -24,100 +19,11 @@ export const Route = createFileRoute("/projects/$projectId/tasks/$taskId")({
 	component: TaskDetailView,
 });
 
-const DEFAULT_DETAIL_PANEL_RATIO = 0.48;
-const MIN_DETAIL_PANEL_WIDTH = 360;
-const MIN_TERMINAL_PANEL_WIDTH = 420;
-
 function TaskDetailView() {
 	const { projectId } = Route.useParams();
 	const { task } = Route.useLoaderData();
 	const router = useRouter();
-	const splitContainerRef = useRef<HTMLDivElement | null>(null);
 	const headerRef = useRef<HTMLDivElement | null>(null);
-	const dragStateRef = useRef<{
-		containerLeft: number;
-		containerWidth: number;
-	} | null>(null);
-	const [detailPanelWidth, setDetailPanelWidth] = useState<number | null>(null);
-	const [isDraggingDivider, setIsDraggingDivider] = useState(false);
-	const projectTerminal = useProjectTerminalDialog(
-		task
-			? {
-					projectId: task.projectId,
-					cwd: task.projectPath,
-				}
-			: null,
-	);
-
-	useEffect(() => {
-		const container = splitContainerRef.current;
-
-		if (!container || typeof ResizeObserver === "undefined") {
-			return;
-		}
-
-		const syncWidth = (containerWidth: number) => {
-			setDetailPanelWidth((currentWidth) => {
-				const fallbackWidth = containerWidth * DEFAULT_DETAIL_PANEL_RATIO;
-				return clampDetailPanelWidth(
-					currentWidth ?? fallbackWidth,
-					containerWidth,
-				);
-			});
-		};
-
-		syncWidth(container.getBoundingClientRect().width);
-
-		const resizeObserver = new ResizeObserver(([entry]) => {
-			syncWidth(entry.contentRect.width);
-		});
-
-		resizeObserver.observe(container);
-
-		return () => {
-			resizeObserver.disconnect();
-		};
-	}, []);
-
-	useEffect(() => {
-		if (!isDraggingDivider) {
-			return;
-		}
-
-		const handlePointerMove = (event: PointerEvent) => {
-			const dragState = dragStateRef.current;
-
-			if (!dragState) {
-				return;
-			}
-
-			const nextWidth = clampDetailPanelWidth(
-				event.clientX - dragState.containerLeft,
-				dragState.containerWidth,
-			);
-
-			setDetailPanelWidth(nextWidth);
-		};
-
-		const stopDragging = () => {
-			dragStateRef.current = null;
-			setIsDraggingDivider(false);
-			document.body.style.cursor = "";
-			document.body.style.userSelect = "";
-		};
-
-		window.addEventListener("pointermove", handlePointerMove);
-		window.addEventListener("pointerup", stopDragging);
-		window.addEventListener("pointercancel", stopDragging);
-
-		return () => {
-			window.removeEventListener("pointermove", handlePointerMove);
-			window.removeEventListener("pointerup", stopDragging);
-			window.removeEventListener("pointercancel", stopDragging);
-			document.body.style.cursor = "";
-			document.body.style.userSelect = "";
-		};
-	}, [isDraggingDivider]);
 
 	useEffect(() => {
 		const handleCloseTaskDetailShortcut = (event: KeyboardEvent) => {
@@ -177,97 +83,14 @@ function TaskDetailView() {
 		};
 	}, [handleCloseTaskDetail]);
 
-	const handleDividerPointerDown = (
-		event: React.PointerEvent<HTMLButtonElement>,
-	) => {
-		if (event.button !== 0) {
-			return;
-		}
-
-		const container = splitContainerRef.current;
-
-		if (!container) {
-			return;
-		}
-
-		const rect = container.getBoundingClientRect();
-
-		dragStateRef.current = {
-			containerLeft: rect.left,
-			containerWidth: rect.width,
-		};
-
-		setDetailPanelWidth((currentWidth) =>
-			clampDetailPanelWidth(
-				currentWidth ?? rect.width * DEFAULT_DETAIL_PANEL_RATIO,
-				rect.width,
-			),
-		);
-		setIsDraggingDivider(true);
-		document.body.style.cursor = "col-resize";
-		document.body.style.userSelect = "none";
-		event.currentTarget.setPointerCapture(event.pointerId);
-		event.preventDefault();
-	};
-
-	const handleDividerDoubleClick = () => {
-		const container = splitContainerRef.current;
-
-		if (!container) {
-			return;
-		}
-
-		setDetailPanelWidth(
-			clampDetailPanelWidth(
-				container.getBoundingClientRect().width * DEFAULT_DETAIL_PANEL_RATIO,
-				container.getBoundingClientRect().width,
-			),
-		);
-	};
-
-	const handleDividerKeyDown = (
-		event: React.KeyboardEvent<HTMLButtonElement>,
-	) => {
-		const container = splitContainerRef.current;
-
-		if (!container) {
-			return;
-		}
-
-		const containerWidth = container.getBoundingClientRect().width;
-		const step = event.shiftKey ? 48 : 24;
-		const currentWidth = clampDetailPanelWidth(
-			detailPanelWidth ?? containerWidth * DEFAULT_DETAIL_PANEL_RATIO,
-			containerWidth,
-		);
-
-		if (event.key === "ArrowLeft") {
-			event.preventDefault();
-			setDetailPanelWidth(
-				clampDetailPanelWidth(currentWidth - step, containerWidth),
-			);
-		}
-
-		if (event.key === "ArrowRight") {
-			event.preventDefault();
-			setDetailPanelWidth(
-				clampDetailPanelWidth(currentWidth + step, containerWidth),
-			);
-		}
-	};
-
-	const detailWidth = detailPanelWidth ?? getDefaultDetailPanelWidthStyle();
-
 	return (
-		<div ref={splitContainerRef} className="flex h-full flex-1 overflow-hidden">
+		<div className="flex h-full flex-1 overflow-hidden">
 			{task ? (
-				<>
-					{/* Left Side: Details */}
-					<div
-						id="task-detail-panel"
-						className="relative flex min-w-0 flex-col overflow-y-auto bg-background custom-scrollbar"
-						style={{ width: detailWidth }}
-					>
+				<div
+					id="task-detail-panel"
+					className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-background custom-scrollbar"
+					style={{ maxWidth: "900px", margin: "0 auto", width: "100%" }}
+				>
 						{/* Header - Consistent with Sidebar and Terminal */}
 						<div
 							ref={headerRef}
@@ -364,36 +187,8 @@ function TaskDetailView() {
 									}}
 								/>
 							</div>
-						</div>
-						<div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-px translate-x-1/2 bg-border/80" />
-						<button
-							type="button"
-							className="absolute inset-y-0 right-0 z-20 w-3 translate-x-1/2 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-							onPointerDown={handleDividerPointerDown}
-							onDoubleClick={handleDividerDoubleClick}
-							onKeyDown={handleDividerKeyDown}
-							aria-controls="task-detail-panel task-terminal-panel"
-							aria-label="Resize task detail panels"
-							tabIndex={0}
-						/>
 					</div>
-
-					<div id="task-terminal-panel" className="flex min-w-0 flex-1">
-						<Terminal
-							autoStart={false}
-							className="flex-1"
-							headerHeight="h-20"
-							title="Terminal"
-							scope={{
-								scopeType: "task",
-								scopeId: task.id,
-								projectId: task.projectId,
-								cwd: task.projectPath,
-								terminalKey: "detail",
-							}}
-						/>
-					</div>
-				</>
+				</div>
 			) : (
 				<div className="flex flex-1 items-center justify-center p-8">
 					<div className="max-w-md rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center">
@@ -405,22 +200,8 @@ function TaskDetailView() {
 					</div>
 				</div>
 			)}
-			<ProjectTerminalDialog controller={projectTerminal} />
 		</div>
 	);
-}
-
-function clampDetailPanelWidth(width: number, containerWidth: number) {
-	const maxWidth = Math.max(
-		MIN_DETAIL_PANEL_WIDTH,
-		containerWidth - MIN_TERMINAL_PANEL_WIDTH,
-	);
-
-	return Math.min(Math.max(width, MIN_DETAIL_PANEL_WIDTH), maxWidth);
-}
-
-function getDefaultDetailPanelWidthStyle() {
-	return `clamp(${MIN_DETAIL_PANEL_WIDTH}px, ${DEFAULT_DETAIL_PANEL_RATIO * 100}%, max(${MIN_DETAIL_PANEL_WIDTH}px, calc(100% - ${MIN_TERMINAL_PANEL_WIDTH}px)))`;
 }
 
 function getTaskCategoryBadgeClassName(category: TaskCategory) {

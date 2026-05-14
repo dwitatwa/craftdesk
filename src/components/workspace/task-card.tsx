@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Pencil, Square, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { useRef, useState } from "react";
 import {
@@ -26,7 +26,6 @@ interface TaskCardProps {
 	className?: string;
 	draggable?: boolean;
 	isDragging?: boolean;
-	isRunning?: boolean;
 	onDragStart?: (event: DragEvent<HTMLElement>) => void;
 	onDragEnd?: () => void;
 	onDragOver?: (event: DragEvent<HTMLLIElement>) => void;
@@ -38,7 +37,6 @@ interface TaskCardProps {
 		input: { title: string; category: TaskCategory; notes: string },
 	) => Promise<void> | void;
 	onDelete: (taskId: string) => Promise<void> | void;
-	onStopTerminal: (taskId: string) => Promise<void> | void;
 }
 
 export function TaskCard({
@@ -51,7 +49,6 @@ export function TaskCard({
 	className,
 	draggable,
 	isDragging,
-	isRunning,
 	onDragStart,
 	onDragEnd,
 	onDragOver,
@@ -60,14 +57,12 @@ export function TaskCard({
 	showDropIndicatorBottom,
 	onUpdateTask,
 	onDelete,
-	onStopTerminal,
 }: TaskCardProps) {
 	const navigate = useNavigate();
 	const cardRef = useRef<HTMLDivElement>(null);
 	const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
-	const [isStoppingTerminal, setIsStoppingTerminal] = useState(false);
 	const [isClickSuppressed, setIsClickSuppressed] = useState(false);
 	const taskLabel = id.startsWith("TASK-") ? `#${id.slice(5)}` : id.slice(0, 8);
 	const notesPreview = summarizeNotes(notes);
@@ -121,16 +116,6 @@ export function TaskCard({
 		window.setTimeout(() => {
 			setIsClickSuppressed(false);
 		}, 0);
-	};
-
-	const handleStopTerminal = async () => {
-		setIsStoppingTerminal(true);
-
-		try {
-			await onStopTerminal(id);
-		} finally {
-			setIsStoppingTerminal(false);
-		}
 	};
 
 	return (
@@ -215,25 +200,7 @@ export function TaskCard({
 						</button>
 					</div>
 					<div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2">
-						<div className="min-w-0">
-							{isRunning ? (
-								<button
-									type="button"
-									onClick={(event) => {
-										event.stopPropagation();
-										event.preventDefault();
-										void handleStopTerminal();
-									}}
-									disabled={isStoppingTerminal}
-									className="appearance-none border-0 bg-transparent flex items-center gap-1 text-[8px] font-bold text-muted-foreground/60 hover:text-amber-400 transition-colors px-1.5 py-0.5 rounded hover:bg-amber-500/5 cursor-pointer uppercase tracking-tighter disabled:cursor-not-allowed disabled:opacity-60"
-								>
-									<Square className="size-3" />
-									<span>
-										{isStoppingTerminal ? "Stopping..." : "Stop Terminal"}
-									</span>
-								</button>
-							) : null}
-						</div>
+						<div className="min-w-0" />
 						<div className="flex items-center justify-end gap-1">
 							<button
 								type="button"
